@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test";
+import { emptyDocument, SWITCHES } from "../src/model";
 import type { SpindleAPI } from "lumiverse-spindle-types";
 
 test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and explicit Helper AI", async () => {
   let processor: Parameters<SpindleAPI["registerMessageContentProcessor"]>[0] | undefined;
   let interceptor: Parameters<SpindleAPI["registerInterceptor"]>[0] | undefined;
+  let macroInterceptor: Parameters<SpindleAPI["registerMacroInterceptor"]>[0] | undefined;
   const capabilities: string[] = []; const events: string[] = [];
   const handlers=new Map<string,(payload:unknown,userId?:string)=>void>();const generations:Record<string,unknown>[]=[];
   const persisted = new Map<string, unknown>();
@@ -28,13 +30,14 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     frontendCapabilities: { declare: (name: string) => { capabilities.push(name); return () => {}; } },
     permissions: { has: () => true, onChanged: () => () => {} },
     registerMessageContentProcessor: (handler: typeof processor) => { processor = handler; },
+    registerMacroInterceptor: (handler: typeof macroInterceptor) => { macroInterceptor=handler; },
     registerInterceptor: (handler: typeof interceptor, options: unknown) => { interceptor = handler; registrationOptions = options; },
     onFrontendMessage: (fn: typeof receive) => { receive = fn; return () => {}; },
     on: (event: string,fn:(payload:unknown,userId?:string)=>void) => { events.push(event);handlers.set(event,fn); return () => {}; },
     connections:{list:async(user:string)=>{scoped(user,"connections.list");return [{id:"small",name:"Existing profile",model:"Test model"}];}},
     generate:{raw:async(input:Record<string,unknown>)=>{scoped(input.userId,"generate.raw");generations.push(input);return {content:"{}",finish_reason:"stop"};}},
-    chats: { get: async (id: string, user: string) => {scoped(user,"chats.get");return user === "u" ? { id } : null;}, getActive: async (user:string) => {scoped(user,"chats.getActive");return { id: "a" };} },
-    chat: { getMessages: async (chat: string) => [{ id: "m1", chat_id: chat, index_in_chat: 0, role: "assistant", content: `<phone-state>location="${chat}"</phone-state><phone-text from="Ada">Actual saved test text</phone-text>`, swipe_id: 0 }] },
+    chats: { get: async (id: string, user: string) => {scoped(user,"chats.get");return (user === "u" && id !== "c") || (user === "v" && id === "c") ? { id } : null;}, getActive: async (user:string) => {scoped(user,"chats.getActive");return { id: "a" };} },
+    chat: { getMessages: async (chat: string) => chat === "empty" ? [] : [{ id: "m1", chat_id: chat, index_in_chat: 0, role: "assistant", content: `<phone-state>location="${chat}"</phone-state><phone-text from="Ada">Actual saved test text</phone-text>`, swipe_id: 0 }] },
     userStorage: {
       exists: async (path: string, user: string) => {scoped(user,"userStorage.exists");return persisted.has(`${user}/${path}`);},
       read: async (path: string, user: string) => {scoped(user,"userStorage.read");return JSON.stringify(persisted.get(`${user}/${path}`));},
@@ -52,6 +55,7 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     expect(() => scoped(undefined,"mock self-check")).toThrow("userId is required for operator-scoped extensions");
     expect(events).toContain("GENERATION_ENDED");
     expect(registrationOptions).toBe(1000);
+    expect(macroInterceptor).toBeDefined();
     expect(processor).toBeDefined(); expect(interceptor).toBeDefined();
     const base = { chatId: "a", content: 'Story<phone-state>location="Hidden"', isUser: false, userId: "u" };
     for (const origin of ["create", "update", "swipe_add", "swipe_update"] as const) {
@@ -70,6 +74,29 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     }
     expect(calls.length).toBe(beforeReads);
     expect(await interceptor!(input,{chatId:"a",userId:"other-user"} as never)).toBe(input);
+    // Realistic pull RPC: no top-level user identity. No guessed chat or unscoped call.
+    const missingPull=await macros.get("phone_format")!({commit:false,env:{chat:{id:"a"}}});
+    expect(missingPull).toBe("");expect(warnings.at(-1)).toBe("Lumi Phone Tracker: phone_format empty: no userId.");
+    expect(await macros.get("phone_format")!({commit:false,userId:"u"})).toBe("");
+    expect(warnings.at(-1)).toBe("Lumi Phone Tracker: phone_format empty: no chat.");
+    const templateContext=(chat:string,user="u",commit=false)=>({template:"{{phone_format}}",userId:user,commit,phase:"prompt",env:{chat:{id:chat},dynamicMacros:{}}} as never);
+    const renderTemplate=async(chat:string,user="u",commit=false)=>{
+      const result=await macroInterceptor!(templateContext(chat,user,commit));
+      return typeof result==="string"?result:result?.text??"";
+    };
+    // Same macro evaluator hook in preview and committing generation, no saved tracker required.
+    const beforeEmpty=[...persisted.entries()];
+    expect(await renderTemplate("empty")).toContain("End each reply with <phone-state>");
+    expect(await renderTemplate("empty","u",true)).toContain("End each reply with <phone-state>");
+    expect([...persisted.entries()]).toEqual(beforeEmpty);
+    const empty=emptyDocument("empty");for(const key of SWITCHES)empty.settings.enabled[key]=false;empty.settings.enabled.weather=true;
+    persisted.set("empty/lpt_phone_v2",JSON.stringify(empty));
+    const weatherOnly=await renderTemplate("empty");expect(weatherOnly).toContain('Fields: weather="value"');expect(weatherOnly).not.toContain('location={');
+    persisted.delete("empty/lpt_phone_v2");
+    const [a,c]=await Promise.all([renderTemplate("a"),renderTemplate("c","v")]);
+    expect(a).toContain('location: a');expect(a).not.toContain('location: c');expect(c).toContain('location: c');expect(c).not.toContain('location: a');
+    expect(await renderTemplate("a","v")).toBe("");
+    expect(calls).not.toContain("chats.getActive");
     const beforePreview = [...persisted.entries()];
     for (const handler of macros.values()) {
       for (const context of [{},{chatId:"a"},{userId:"u"},{chatId:"a",userId:" "}]) { const count=calls.length; expect(await handler(context)).toBe(""); expect(calls.length).toBe(count); }
@@ -79,6 +106,8 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     expect(await macros.get("phone_scene")!({chatId:"a",userId:"u",commit:false})).toContain("location:");
     expect([...persisted.entries()]).toEqual(beforePreview);
     failReads=true;
+    expect(await renderTemplate("a")).toBe("");
+    expect(warnings.at(-1)).toBe("Lumi Phone Tracker: phone_format empty: extension setting.");
     expect(await interceptor!(input,{chatId:"a",userId:"u"} as never)).toBe(input);
     expect(await macros.get("phone_format")!({chatId:"a",userId:"u"})).toBe("");
     failReads=false;

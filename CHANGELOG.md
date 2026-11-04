@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.3
+
+- Fixed blank phone macros when the legacy pull handler lacks top-level user/chat context. Uses the documented macro interceptor and its per-evaluation identity/environment; adds the macro_interceptor permission.
+- Added fixed, one-line empty-format reasons in the server log. No story text or field values.
+- Confirmed fresh Main AI chats emit enabled writing instructions without stored continuity. No active-chat guessing, cross-user cache, new UI or format changes.
+
 ## 0.6.2
 
 - Fixed the missing user ID in player-name resolution used by tracker reads, including Helper AI and events.

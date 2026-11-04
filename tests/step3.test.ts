@@ -4,7 +4,7 @@ import { parseExpanded, parseExpandedReply, validateExpanded } from "../src/sche
 import { SkipLogger } from "../src/diagnostics";
 import { replay, type StoryRow } from "../src/engine";
 import { PhoneStore, readDocument, type PhoneIO } from "../src/phone-store";
-import { MACRO_NAMES, registerPhoneMacros, renderMacro } from "../src/phone-macros";
+import { MACRO_NAMES, registerPhoneMacros, registerPhoneMacroTemplates, renderMacro } from "../src/phone-macros";
 import { trimPhoneHistory } from "../src/retention";
 import { rebuild } from "../src/history";
 
@@ -239,6 +239,45 @@ describe("macros and persistent isolation", () => {
     expect(await handlers.get("phone_scene")!({ chatId: "a", userId: "owner-a", commit: false })).toBe("time: a");
     expect(await handlers.get("phone_scene")!({ chatId: "b", userId: "owner-b" })).toBe("time: b");
     expect(await handlers.get("phone_scene")!({ chatId: "bad", userId: "owner-bad" })).toBe("");
+  });
+  test("empty Main AI chats emit enabled writing instructions independently of continuity", () => {
+    const doc=emptyDocument("new-chat");
+    expect(renderMacro("phone_scene",doc)).toBe("");
+    expect(renderMacro("phone_weather",doc)).toBe("");
+    expect(renderMacro("phone_notes",doc)).toBe("");
+    expect(renderMacro("phone_messages",doc)).toBe("");
+    expect(renderMacro("phone_format",doc)).toContain("End each reply with <phone-state>");
+    for(const key of SWITCHES)doc.settings.enabled[key]=false;
+    doc.settings.enabled.weather=true;
+    const text=renderMacro("phone_format",doc);
+    expect(text).toContain('Fields: weather="value"');
+    expect(text).not.toContain('location={');expect(text).not.toContain('contacts=[');expect(text).not.toContain('Actual story texts only');
+    doc.settings.source="helper";
+    expect(renderMacro("phone_format",doc)).toContain("Do not write a phone-state block");
+    expect(renderMacro("phone_format",doc)).not.toContain("End each reply with");
+  });
+  test("documented macro template context resolves missing pull chat/user and reports exact empty reasons", async () => {
+    let handler: (ctx:any)=>Promise<any> = async()=>undefined;
+    const warnings:string[]=[];let allowed=true;let loads=0;
+    const doc=emptyDocument("a");
+    const api={registerMacroInterceptor:(fn:typeof handler)=>{handler=fn;},permissions:{has:()=>allowed},log:{warn:(s:string)=>warnings.push(s)}};
+    registerPhoneMacroTemplates(api as never,async(chat,user)=>{loads++;expect(chat).toBe("a");expect(user).toBe("u");return doc;});
+    const ctx={template:"Before {{phone_format}} After {{char}}",commit:false,userId:"u",phase:"prompt",env:{chat:{id:"a"},dynamicMacros:{}}};
+    const result=await handler(ctx);
+    expect(result.text).toContain("End each reply with <phone-state>");expect(result.text).toContain("After {{char}}");expect(result.volatile).toBe(true);
+    expect(loads).toBe(1);expect(warnings).toEqual([]);
+    for(const [bad,reason] of [[{userId:undefined},"no userId"],[{env:{chat:{},dynamicMacros:{}}},"no chat"]] as const) {
+      const prior=loads;const output=await handler({...ctx,...bad});expect(output.text).toBe("Before  After {{char}}");expect(loads).toBe(prior);
+      expect(warnings.at(-1)).toBe(`Lumi Phone Tracker: phone_format empty: ${reason}.`);
+    }
+    allowed=false;await handler(ctx);expect(warnings.at(-1)).toBe("Lumi Phone Tracker: phone_format empty: extension setting.");allowed=true;
+    for(const key of SWITCHES)doc.settings.enabled[key]=false;
+    await handler(ctx);expect(warnings.at(-1)).toBe("Lumi Phone Tracker: phone_format empty: all items off.");
+    doc.settings.source="helper";await handler(ctx);expect(warnings.at(-1)).toBe("Lumi Phone Tracker: phone_format empty: Helper AI mode.");
+    doc.settings.enabled.messages=true;
+    const helper=await handler(ctx);expect(helper.text).toContain("Actual story texts only");expect(helper.text).not.toContain("End each reply with");
+    const count=loads;expect(await handler({...ctx,template:"{{unrelated}}"})).toBeUndefined();
+    expect(await handler({...ctx,env:{...ctx.env,dynamicMacros:{phone_format:"Preset override"}}})).toBeUndefined();expect(loads).toBe(count);
   });
   function fixture() {
     const saved = new Map<string, string>(); const histories = new Map<string, StoryRow[]>();

@@ -1430,12 +1430,36 @@ function renderMacro(name, doc) {
     return messagesMacro(doc);
   return formatMacro(doc);
 }
+function warning(api, name, reason) {
+  try {
+    api.log.warn(`Lumi Phone Tracker: ${name} empty: ${reason}.`);
+  } catch {}
+}
+async function resolvePhoneMacro(api, load, name, userId, chatId) {
+  if (typeof userId !== "string" || !userId.trim()) {
+    warning(api, name, "no userId");
+    return "";
+  }
+  if (typeof chatId !== "string" || !chatId.trim() || chatId.length > 256) {
+    warning(api, name, "no chat");
+    return "";
+  }
+  try {
+    if (api.permissions && (!api.permissions.has("chats") || !api.permissions.has("chat_mutation"))) {
+      warning(api, name, "extension setting");
+      return "";
+    }
+    const doc = await load(chatId, userId);
+    const text = renderMacro(name, doc);
+    if (!text && name === "phone_format")
+      warning(api, name, doc.settings.source === "helper" ? "Helper AI mode" : "all items off");
+    return text;
+  } catch {
+    warning(api, name, "extension setting");
+    return "";
+  }
+}
 function registerPhoneMacros(api, load) {
-  const warn = (text) => {
-    try {
-      api.log.warn(text);
-    } catch {}
-  };
   const register = api.registerMacro.bind(api);
   for (const name of MACRO_NAMES)
     register({
@@ -1444,19 +1468,31 @@ function registerPhoneMacros(api, load) {
       returnType: "string",
       description: `Chat-specific ${name.slice(6)} continuity`,
       volatile: true,
-      handler: async (ctx) => {
-        if (!ctx || typeof ctx.chatId !== "string" || !ctx.chatId || ctx.chatId.length > 256 || typeof ctx.userId !== "string" || !ctx.userId.trim()) {
-          warn(`Lumi Phone Tracker: ${name} context unavailable; returning no data.`);
-          return "";
-        }
-        try {
-          return renderMacro(name, await load(ctx.chatId, ctx.userId));
-        } catch {
-          warn(`Lumi Phone Tracker: ${name} unavailable; returning no data.`);
-          return "";
-        }
-      }
+      handler: (ctx) => resolvePhoneMacro(api, load, name, ctx?.userId, ctx?.chatId)
     });
+}
+function registerPhoneMacroTemplates(api, load) {
+  api.registerMacroInterceptor(async (ctx) => {
+    if (typeof ctx.template !== "string")
+      return;
+    const tokens = [...ctx.template.matchAll(/{{\s*(phone_format|phone_scene|phone_weather|phone_locations|phone_notes|phone_messages)\s*}}/g)];
+    const dynamic = ctx.env?.dynamicMacros ?? {};
+    const names = [...new Set(tokens.map((t) => t[1]))].filter((name) => !Object.keys(dynamic).some((key) => key.toLowerCase() === name));
+    if (!names.length)
+      return;
+    const chatId = ctx.env?.chat?.id;
+    const resolved = new Map;
+    let snapshot;
+    const once = (chat, user) => snapshot ??= load(chat, user);
+    for (const name of names) {
+      if (!api.permissions.has("macro_interceptor")) {
+        warning(api, name, "extension setting");
+        resolved.set(name, "");
+      } else
+        resolved.set(name, await resolvePhoneMacro(api, once, name, ctx.userId, chatId));
+    }
+    return { text: ctx.template.replace(/{{\s*(phone_format|phone_scene|phone_weather|phone_locations|phone_notes|phone_messages)\s*}}/g, (token, name) => resolved.has(name) ? resolved.get(name) : token), volatile: true };
+  }, 100);
 }
 
 // src/retention.ts
@@ -1916,7 +1952,7 @@ var store = new PhoneStore({
     return JSON.parse(await spindle.userStorage.read(path, userId));
   }
 });
-registerPhoneMacros(spindle, async (chatId, userId) => {
+async function loadPhoneDocument(chatId, userId) {
   const doc = await store.preview(chatId, userId);
   if (doc.settings.source === "helper") {
     let usable = false;
@@ -1928,7 +1964,8 @@ registerPhoneMacros(spindle, async (chatId, userId) => {
       doc.settings = { ...doc.settings, source: "main" };
   }
   return doc;
-});
+}
+registerPhoneMacros(spindle, loadPhoneDocument);
 var helper = new HelperAI(store, {
   allowed: () => spindle.permissions.has("generation") && spindle.permissions.has("chats") && spindle.permissions.has("chat_mutation"),
   connections: async (userId) => (await spindle.connections.list(userId)).map((c) => ({ id: c.id, name: c.name, model: c.model })),
@@ -1947,8 +1984,13 @@ else
   warn("Lumi Phone Tracker: host lacks documented cold-load tag hiding; update Lumiverse.");
 var processorRegistered = false;
 var interceptorRegistered = false;
+var macroTemplatesRegistered = false;
 var helperHooks = [];
 function registerHooks() {
+  if (!macroTemplatesRegistered && spindle.permissions.has("macro_interceptor")) {
+    registerPhoneMacroTemplates(spindle, loadPhoneDocument);
+    macroTemplatesRegistered = true;
+  }
   if (spindle.permissions.has("generation") && !helperHooks.length) {
     helperHooks.push(spindle.on("GENERATION_STARTED", (payload, userId) => {
       if (typeof payload.chatId !== "string" || typeof payload.generationId !== "string")

@@ -1,6 +1,6 @@
 {
   "identifier": "lumi_phone_tracker",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "name": "Lumi Phone Tracker",
   "author": "lizardqu33n",
   "github": "https://github.com/lizardqu33n/lumiphonetracker",
@@ -11,7 +11,8 @@
     "chat_mutation",
     "interceptor",
     "ui_panels",
-    "generation"
+    "generation",
+    "macro_interceptor"
   ],
   "entry_backend": "dist/backend.js",
   "entry_frontend": "dist/frontend.js"

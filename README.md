@@ -2,7 +2,7 @@
 
 A small phone for keeping track of story facts. Each chat has its own Scene, Weather, Locations, Notes, Contacts and Messages. Settings controls what is shown and what the AI is asked to track.
 
-**Version 0.6.2: all six build steps are delivered.** Source, manifest, built frontend/backend, tests and guides are included. The new Helper AI has been tested with mocks, not a real paid connection.
+**Version 0.6.3: all six build steps are delivered.** Source, manifest, built frontend/backend, tests and guides are included. The new Helper AI has been tested with mocks, not a real paid connection.
 
 ## Start here
 

@@ -98,21 +98,54 @@ export function renderMacro(name: PhoneMacro, doc: Document): string {
   if (name === "phone_messages") return messagesMacro(doc);
   return formatMacro(doc);
 }
-export function registerPhoneMacros(api: SpindleAPI, load: (chatId: string, userId: string) => Promise<Document>): void {
-  const warn = (text: string): void => { try { api.log.warn(text); } catch { /* Logging cannot block generation. */ } };
+type PhoneLoader = (chatId: string, userId: string) => Promise<Document>;
+type EmptyReason = "no userId" | "no chat" | "extension setting" | "all items off" | "Helper AI mode";
+function warning(api: SpindleAPI, name: PhoneMacro, reason: EmptyReason): void {
+  try { api.log.warn(`Lumi Phone Tracker: ${name} empty: ${reason}.`); } catch { /* Logging cannot block generation. */ }
+}
+async function resolvePhoneMacro(api: SpindleAPI, load: PhoneLoader, name: PhoneMacro, userId: unknown, chatId: unknown): Promise<string> {
+  if (typeof userId !== "string" || !userId.trim()) { warning(api,name,"no userId"); return ""; }
+  if (typeof chatId !== "string" || !chatId.trim() || chatId.length > 256) { warning(api,name,"no chat"); return ""; }
+  try {
+    if (api.permissions && (!api.permissions.has("chats") || !api.permissions.has("chat_mutation"))) {
+      warning(api,name,"extension setting"); return "";
+    }
+    const doc = await load(chatId,userId);
+    const text = renderMacro(name,doc);
+    if (!text && name === "phone_format") warning(api,name,doc.settings.source === "helper" ? "Helper AI mode" : "all items off");
+    return text;
+  } catch { warning(api,name,"extension setting"); return ""; }
+}
+export function registerPhoneMacros(api: SpindleAPI, load: PhoneLoader): void {
   // Published DTO still says string; the docs explicitly require a real function.
   type PullDefinition = Omit<MacroDefinitionDTO, "handler"> & { handler: (ctx: MacroInvocationContextDTO) => Promise<string> };
   const register = api.registerMacro.bind(api) as unknown as (definition: PullDefinition) => void;
   for (const name of MACRO_NAMES) register({ name, category: "extension:lumi_phone_tracker", returnType: "string",
     description: `Chat-specific ${name.slice(6)} continuity`, volatile: true,
-    handler: async ctx => {
-      // The published minimal pull context does not guarantee userId. Never guess it
-      // from a saved helper owner, a foreground chat, or model-controlled arguments.
-      if (!ctx || typeof ctx.chatId !== "string" || !ctx.chatId || ctx.chatId.length > 256 || typeof ctx.userId !== "string" || !ctx.userId.trim()) {
-        warn(`Lumi Phone Tracker: ${name} context unavailable; returning no data.`);
-        return "";
-      }
-      try { return renderMacro(name, await load(ctx.chatId, ctx.userId)); }
-      catch { warn(`Lumi Phone Tracker: ${name} unavailable; returning no data.`); return ""; }
-    } });
+    // Legacy fallback: neither top-level identity nor chat is assumed to exist.
+    handler: ctx => resolvePhoneMacro(api,load,name,ctx?.userId,ctx?.chatId) });
+}
+
+/** Documented macro-time identity and environment, without global active-chat state. */
+export function registerPhoneMacroTemplates(api: SpindleAPI, load: PhoneLoader): void {
+  api.registerMacroInterceptor(async ctx => {
+    if (typeof ctx.template !== "string") return;
+    const tokens = [...ctx.template.matchAll(/{{\s*(phone_format|phone_scene|phone_weather|phone_locations|phone_notes|phone_messages)\s*}}/g)];
+    const dynamic = ctx.env?.dynamicMacros ?? {};
+    const names = [...new Set(tokens.map(t=>t[1] as PhoneMacro))].filter(name=>
+      !Object.keys(dynamic).some(key=>key.toLowerCase()===name));
+    if (!names.length) return; // Includes nested {{user}} resolution: no recursion.
+    // env.chat is the host's snapshot for THIS evaluation, not the user's foreground tab.
+    const chatId = ctx.env?.chat?.id;
+    const resolved = new Map<PhoneMacro,string>();
+    let snapshot: Promise<Document> | undefined;
+    const once: PhoneLoader = (chat,user) => snapshot ??= load(chat,user);
+    for (const name of names) {
+      if (!api.permissions.has("macro_interceptor")) {
+        warning(api,name,"extension setting"); resolved.set(name,"");
+      } else resolved.set(name,await resolvePhoneMacro(api,once,name,ctx.userId,chatId));
+    }
+    return { text: ctx.template.replace(/{{\s*(phone_format|phone_scene|phone_weather|phone_locations|phone_notes|phone_messages)\s*}}/g,
+      (token,name:PhoneMacro)=>resolved.has(name)?resolved.get(name)!:token), volatile:true };
+  },100);
 }

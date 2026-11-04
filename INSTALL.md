@@ -1,12 +1,12 @@
 # Install Lumi Phone Tracker
 
-Version 0.6.2 includes the built files. You do not need to build or upload anything yourself.
+Version 0.6.3 includes the built files. You do not need to build or upload anything yourself.
 
 ## Install or update
 
 1. Open Lumiverse > Extensions > Install.
-2. Paste this repository address: https://github.com/lizardqu33n/lumiphonetracker . For an existing install from this repository, use its update option to get version 0.6.2. Enable the extension.
-3. Allow chat access, message processing, prompt interception and floating panels (chats, chat_mutation, interceptor, ui_panels). The new generation permission enables optional Helper AI: completed-reply tracking and calls through the connection you select. Main AI makes no extra model requests. If generation permission is declined, Main AI still works.
+2. Paste this repository address: https://github.com/lizardqu33n/lumiphonetracker . For an existing install from this repository, use its update option to get version 0.6.3. Enable the extension.
+3. Allow chat access, message processing, prompt interception and floating panels (chats, chat_mutation, interceptor, ui_panels, macro_interceptor). The new generation permission enables optional Helper AI: completed-reply tracking and calls through the connection you select. Main AI makes no extra model requests. If generation permission is declined, Main AI still works.
 4. Open a chat. Tap the floating phone, or use Open phone in the Phone sidebar tab.
 5. Add this exact single line to your active preset and save it:
 
@@ -16,7 +16,7 @@ Version 0.6.2 includes the built files. You do not need to build or upload anyth
 
 Remove older manual tracker-writing instructions or duplicate phone macros if you pasted them. No preset rewrite is required. The format macro changes its instructions with the settings, so this line works in both modes.
 
-Safety fallback: if Lumiverse does not supply a trusted user ID and chat to a phone macro, that macro returns nothing and generation continues. The documented minimal pull-macro context does not guarantee a user ID; whether your install supplies it still needs a live check. See TESTING.md for the limit and the separate documented macro-interceptor option.
+The new **macro_interceptor** permission lets the phone read the current macro evaluation's user and chat during Dry Run and normal generation. Allow it when updating. Keep using just {{phone_format}}; no extra preset entry or API key is needed. If that evaluation truly has no user or chat, the macro stays empty and the server console records the reason. The extension never substitutes another active chat.
 
 
 ## Main AI or Helper AI

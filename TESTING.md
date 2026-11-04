@@ -1,4 +1,4 @@
-# Verification report - 0.6.2
+# Verification report - 0.6.3
 
 Checked November 4, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **This test environment did not have a real Lumiverse install or a real model connection. No paid model request was made.**
 
@@ -6,7 +6,25 @@ Checked November 4, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, o
 
 The supplied stylesheet is copied byte-for-byte into src/styles.css. STYLING.md documents its 62 variables and 107 stable classes. The browser suite also exposed fractional-height rounding that clipped the closed-phone text notice; its measured height now rounds up. No navigation, tracker rules or class names changed.
 
-## User-context fix and call audit (0.6.2)
+## Blank-format fix (0.6.3)
+
+**Cause:** 0.6.2 required top-level userId AND chatId on its pull macro context before it even called formatMacro. Missing either returned empty. The documented minimal pull DTO guarantees only commit and optional chatId, not top-level userId. Current official host source also constructs the pull payload without a top-level userId. That makes the no-userId guard a concrete explanation consistent with the reported multi-user blank; the exact payload of the user's installed version has not been captured. Missing chat is separately reproduced. Main AI, no stored facts and only SOME disabled items do not explain an empty format.
+
+**Fix:** registerMacroInterceptor runs before macro parsing, with its documented userId and env snapshot. It replaces only the six owned phone macro tokens and leaves other macro names and caller dynamic overrides for native evaluation. env.chat.id is used only when it is a non-empty host-supplied value; the official MacroEnv builder confirms that layout, though the minimal type describes chat as a general record. No user ID is read from story/tag attributes, args, preset text, extra fields, saved helperOwner or global current-user state. The same path works with commit:false and commit:true and never saves during resolution. Calls still authorize the exact chat. A volatile result avoids cached values across changed settings; the only shared snapshot is local to one template invocation.
+
+The new macro_interceptor permission is used only to resolve phone tokens using that per-evaluation context. Grant it on update. No UI, format, model calls or other settings were added. The original {{phone_format}} preset entry stays the same.
+
+**Empty chat:** a valid new chat with no saved document and no messages still supplies default enabled writing instructions in Main AI. A saved settings-only document applies its switches with no need for tracked values. Continuity macros are empty until facts/texts exist. Tests also cover weather as the only enabled item. formatMacro's writing branch depends on settings, not on an accepted block or populated field; that behavior was already present and is now reachable via documented context.
+
+**If context is truly absent:** there is no documented way to recover the exact evaluation's user/chat from a context-free pull invocation. The macro interceptor can use env.chat.id when the host supplies it. If it too lacks userId or chat, the result is empty and generation continues. chats.getActive(userId) is documented, but represents a persisted foreground selection; it can differ from a concurrent/background generation. It is deliberately not used as a substitute. A context handler also documents request chat/user on supported hosts, but no global handoff/cache or extra context_handler permission was added.
+
+**One-line console warnings:** `Lumi Phone Tracker: phone_format empty: REASON.` Fixed reasons are `no userId`, `no chat`, `extension setting`, `all items off`, or `Helper AI mode`. Extension setting covers missing read/macro permission or an unavailable/unauthorized tracker read; it is not a new switch. A fully disabled extension cannot run and therefore cannot log. Helper AI alone does NOT blank phone_format: the existing no-state-block rule and enabled text instructions/continuity remain. Helper AI mode is logged only when its complete format result is actually empty (all applicable items also off). No story text, values, names, chat IDs or exception details appear in these warnings.
+
+**Tests:** the old backend failed the new registration regression. The updated strict operator mock invokes the documented macro hook without any top-level pull chatId, checks explicit user IDs on all supported user-scoped calls, and supplies the exact evaluation chat in env. Both normal and dry modes produce writing instructions in an empty chat; no storage writes or provider calls occur. Concurrent users resolve only their own chats; unauthorized cross-user reads return empty. Tests cover absent user, absent chat, failed reads, partial switches, all-off, Helper behavior, permission denial, dynamic override precedence and all five fixed warning reasons. No chats.getActive call is made by macro resolution.
+
+Sources: [macro contexts and dry resolves](https://docs.lumiverse.chat/backend-api/macros/), [documented macro interceptor](https://docs.lumiverse.chat/backend-api/macro-interceptor/), [generation context handlers](https://docs.lumiverse.chat/backend-api/context-handlers/), [active-chat semantics](https://docs.lumiverse.chat/backend-api/chats/), official lumiverse-spindle-types 0.6.77, and corroborating official [MacroEnv builder](https://github.com/prolix-oc/Lumiverse/blob/main/src/macros/MacroEnv.ts) / [pull payload construction](https://github.com/prolix-oc/Lumiverse/blob/main/src/spindle/worker-host.ts). Host source was consulted to confirm the cause/layout, not to introduce a new API.
+
+## User-context fix and call audit (0.6.2, retained history)
 
 The strict operator mock first failed with exactly **userId is required for operator-scoped extensions**, at backend.ts's player-name `macros.resolve` call reached through the prompt interceptor. After the fix, both Dry Run and normal interceptor invocations pass. The interceptor previously requested `required: true`, so the uncaught failure aborted generation. It is now optional, catches read/authorization failures and returns the original prompt unchanged. Missing chat/user does the same. Macro failures return empty. Warnings contain fixed explanations, not story text, field values or raw exceptions; even a logging failure is contained.
 
@@ -26,7 +44,7 @@ The strict operator mock first failed with exactly **userId is required for oper
 | Helper `connections.list` / `generate.raw` | Already pass userId, including the raw request object. The later preview and shared player-resolution path lost it; both are fixed. Macro preview now checks only the invoking user's connection, never another saved helper owner's profile. |
 | Registration, permissions, logging, capability declaration | Extension-local APIs; no userId parameter. Targeted `sendToFrontend` calls use the authenticated user; unscoped frontend requests are ignored. |
 
-**Documented limit:** the official `MacroInvocationContextDTO` guarantees optional chatId and commit, but does not guarantee userId. No documented method was found to derive an authenticated user from a pull macro's chatId alone. A host-supplied `ctx.userId`, when present, is validated and passed through; without it, every phone macro is empty and a fixed warning is logged. This is a safe fallback, not a claim that every Lumiverse version supplies that extra field. No global current-user cache or model-controlled identity is used. The closest documented alternative is a macro interceptor with `ctx.userId`; that needs the separate `macro_interceptor` permission and was not added in this focused fix.
+**Historical 0.6.2 limit, addressed in 0.6.3:** the official minimal pull context does not guarantee userId. Returning empty was safe but left phone_format blank. Version 0.6.3 now uses the documented macro interceptor's userId and env.chat snapshot before native macro parsing. It requires macro_interceptor permission. The legacy pull function is only a fallback, still returning empty rather than inventing identity.
 
 Regression coverage includes all six macro handlers; missing/null/blank context; unauthorized users; failed reads and failed logging; zero preview writes; exact original prompt pass-through; authenticated lifecycle sync; read receipts; appearance save/Reset; missing frontend identity despite a forged payload userId; manual and completion-triggered Helper requests. The mock requires explicit IDs for user-scoped API methods, but correctly does not invent IDs for chat-derived APIs. No model provider was called.
 
@@ -34,7 +52,7 @@ Sources: [macros](https://docs.lumiverse.chat/backend-api/macros/), [interceptor
 
 ## Passed in code
 
-- 110 behavioral tests, 565 assertions, zero failures, across six test files.
+- 112 behavioral tests, 626 assertions, zero failures, across six test files.
 - Typecheck; backend/frontend builds; manifest, entry/export and bundle/source checks; packaged source/built-file matching.
 - Earlier parsing, independent valid-line acceptance, safe warning logs, partial-tag hiding, raw saved-tag retention, chronological replay, user edits, caps, notes, migration, macros, auth checks, chat isolation, swipes/regeneration/deletion and recent-tag/media transformations.
 - Messages grouping, incoming-only unread receipts, recipient-aware outgoing records, read persistence, escaped draft tags, cancellation, exact-chat composer checks and no extension Send call.
@@ -60,7 +78,7 @@ Sources: [macros](https://docs.lumiverse.chat/backend-api/macros/), [interceptor
 
 ## Not verified without a real Lumiverse install and connection
 
-- Repeating the reported failing Dry Run and normal generation on the user's install after updating. Whether that host supplies a trusted userId to pull macros, which exact version does so, and whether all six phone macros therefore return continuity there. Host timeout/process isolation, optional-interceptor fallback and final provider prompt payload need real-host verification. The local strict mock proves the reported missing-ID call is fixed, not that native installation was tested.
+- Repeating the reported failing Dry Run and normal generation on the user's install after updating. Grant/revoke/update handling for macro_interceptor; whether that host supplies userId and env.chat.id on the macro interceptor during the real preset Dry Run and all generation paths; no live payload was captured. Correct native placement of the resolved text, cache invalidation, nested/scoped macro composition and concurrent users need real-server verification. Host timeout/process isolation, optional-interceptor fallback and final provider prompt payload need real-host verification. The local strict mock proves the reported missing-ID call is fixed, not that native installation was tested.
 
 - GitHub install/update/security scanning, native permissions and revocation/regrant, restart/disable/re-enable, real host placement/styles/transforms, desktop pop-outs and actual mobile/iOS WebViews.
 - Native generation event ordering, saved-message timing, authenticated event user IDs, group/concurrent/background swipes, stopped partial replies and startup during an already-running stream. The scheduler uses documented events; it cannot observe a start event the host never delivered. Final content must match the selected saved assistant row or automatic extraction is skipped safely.
@@ -72,6 +90,6 @@ Sources: [macros](https://docs.lumiverse.chat/backend-api/macros/), [interceptor
 - Actual outgoing provider prompt stripping (default recent texts 3, trackers 0), configured retention, source markers and media preservation. Code tests verify transformations, not a final network payload. Helper input is tested separately to strip ALL phone tags.
 - Human first-use clarity: a new person should identify each app within about five seconds. No human usability study was performed. Custom CSS can intentionally make the phone transparent or hide it; native recovery still needs a real-host check.
 
-The earlier real-install v0.4.1 failure was user-reported. Its layout cause was reproduced locally and retained as a regression, but this environment has not validated 0.6.2 in that install. Publishing source to GitHub does not verify native installation or make a model request.
+The earlier real-install v0.4.1 failure was user-reported. Its layout cause was reproduced locally and retained as a regression, but this environment has not validated 0.6.3 in that install. Publishing source to GitHub does not verify native installation or make a model request.
 
 Earlier reports: [Step 5](docs/STEP-5-TESTING.md), [Step 4](docs/STEP-4-TESTING.md), [Step 3](docs/STEP-3-TESTING.md). Previous archives are preserved. All six build steps are delivered; work is paused for review.

@@ -1,4 +1,6 @@
-# Current release: Step 6 / 0.6.2
+# Current release: Step 6 / 0.6.3
+
+Phone macro tokens now resolve through the documented macro interceptor, with its userId and evaluation-scoped env.chat snapshot. The legacy pull handler remains a guarded fallback. No global active-chat lookup or pushed macro cache is used. See [TESTING.md](../TESTING.md) for empty-context behavior.
 
 User-context patch: player-name macro resolution passes an explicit trusted user ID; prompt processing is optional and returns the original prompt on failure. Pull macros return empty when trusted user/chat context is absent. See the call audit and documented pull-context limitation in [TESTING.md](../TESTING.md).
 

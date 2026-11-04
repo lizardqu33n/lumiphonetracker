@@ -3,7 +3,7 @@ import { BUILD_STEP, EXTENSION_NAME, isRecord } from "./shared";
 import { PhoneStore } from "./phone-store";
 import { DOCUMENT_KEY } from "./phone-store";
 import { transformTags } from "./tags";
-import { registerPhoneMacros } from "./phone-macros";
+import { registerPhoneMacros, registerPhoneMacroTemplates } from "./phone-macros";
 import { trimPhoneHistory } from "./retention";
 import { PreferenceStore, defaultPreferences } from "./preferences";
 import { MessageReads, emptyReads } from "./message-reads";
@@ -38,7 +38,7 @@ const store = new PhoneStore({
     return JSON.parse(await spindle.userStorage.read(path, userId));
   },
 });
-registerPhoneMacros(spindle, async (chatId, userId) => {
+async function loadPhoneDocument(chatId: string, userId: string) {
   const doc=await store.preview(chatId, userId);
   if(doc.settings.source==="helper") {
     let usable=false;
@@ -46,7 +46,8 @@ registerPhoneMacros(spindle, async (chatId, userId) => {
     if(!usable)doc.settings={...doc.settings,source:"main"}; // Pull previews stay read-only.
   }
   return doc;
-});
+}
+registerPhoneMacros(spindle,loadPhoneDocument);
 const helper = new HelperAI(store, {
   allowed: () => spindle.permissions.has("generation") && spindle.permissions.has("chats") && spindle.permissions.has("chat_mutation"),
   connections: async userId => (await spindle.connections.list(userId)).map(c => ({ id:c.id, name:c.name, model:c.model })),
@@ -63,8 +64,13 @@ else warn("Lumi Phone Tracker: host lacks documented cold-load tag hiding; updat
 
 let processorRegistered = false;
 let interceptorRegistered = false;
+let macroTemplatesRegistered = false;
 let helperHooks: (()=>void)[] = [];
 function registerHooks(): void {
+  if (!macroTemplatesRegistered && spindle.permissions.has("macro_interceptor")) {
+    registerPhoneMacroTemplates(spindle,loadPhoneDocument);
+    macroTemplatesRegistered = true;
+  }
   if(spindle.permissions.has("generation") && !helperHooks.length) {
     helperHooks.push(spindle.on("GENERATION_STARTED",(payload,userId)=>{
       if(typeof payload.chatId!=="string"||typeof payload.generationId!=="string")return;
