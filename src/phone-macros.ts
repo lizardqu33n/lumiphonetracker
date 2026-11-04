@@ -98,15 +98,21 @@ export function renderMacro(name: PhoneMacro, doc: Document): string {
   if (name === "phone_messages") return messagesMacro(doc);
   return formatMacro(doc);
 }
-export function registerPhoneMacros(api: SpindleAPI, load: (chatId: string) => Promise<Document>): void {
+export function registerPhoneMacros(api: SpindleAPI, load: (chatId: string, userId: string) => Promise<Document>): void {
+  const warn = (text: string): void => { try { api.log.warn(text); } catch { /* Logging cannot block generation. */ } };
   // Published DTO still says string; the docs explicitly require a real function.
   type PullDefinition = Omit<MacroDefinitionDTO, "handler"> & { handler: (ctx: MacroInvocationContextDTO) => Promise<string> };
   const register = api.registerMacro.bind(api) as unknown as (definition: PullDefinition) => void;
   for (const name of MACRO_NAMES) register({ name, category: "extension:lumi_phone_tracker", returnType: "string",
     description: `Chat-specific ${name.slice(6)} continuity`, volatile: true,
     handler: async ctx => {
-      if (typeof ctx.chatId !== "string" || !ctx.chatId || ctx.chatId.length > 256) return "";
-      try { return renderMacro(name, await load(ctx.chatId)); }
-      catch { api.log.warn(`Lumi Phone Tracker: ${name} unavailable; returning no data.`); return ""; }
+      // The published minimal pull context does not guarantee userId. Never guess it
+      // from a saved helper owner, a foreground chat, or model-controlled arguments.
+      if (!ctx || typeof ctx.chatId !== "string" || !ctx.chatId || ctx.chatId.length > 256 || typeof ctx.userId !== "string" || !ctx.userId.trim()) {
+        warn(`Lumi Phone Tracker: ${name} context unavailable; returning no data.`);
+        return "";
+      }
+      try { return renderMacro(name, await load(ctx.chatId, ctx.userId)); }
+      catch { warn(`Lumi Phone Tracker: ${name} unavailable; returning no data.`); return ""; }
     } });
 }

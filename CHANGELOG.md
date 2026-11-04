@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.2
+
+- Fixed the missing user ID in player-name resolution used by tracker reads, including Helper AI and events.
+- Tracker macros return empty when trusted identity/chat is unavailable. Prompt processing failures leave the prompt unchanged; the interceptor is optional.
+- Added a strict operator-scoped mock that reproduces the reported error and checks scoped reads, appearance/Reset, read receipts and Helper AI.
+- No UI, stylesheet, permissions or tracker-format changes.
+
 ## 0.6.1
 
 - Replaced the default stylesheet with the user-supplied CSS: phone notch/home bar, individual app tints, message bubbles and pill switches.

@@ -149,7 +149,7 @@ export class HelperAI {
         await this.store.helperNotice(userId,chatId,"Connection not found",true);this.io.changed(userId,chatId);return;
       }
       const input=helperInput(ticket);
-      const current=await this.store.preview(chatId);
+      const current=await this.store.preview(chatId,userId);
       if(controller.signal.aborted||this.active.get(chatId)?.size||!this.io.allowed()||current.settings.source!=="helper"||current.helperOwner!==userId||current.revision!==ticket.doc.revision)return;
       timer=setTimeout(()=>controller.abort(),90000);
       // Raw bypasses chat assembly/interceptors: only these two bounded messages leave.

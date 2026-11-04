@@ -236,9 +236,9 @@ describe("macros and persistent isolation", () => {
       return replay(emptyDocument(chat), [{ ...row(0, { time: chat }), chat_id: chat }], ["Player"]); });
     expect([...handlers.keys()]).toEqual([...MACRO_NAMES]);
     expect(await handlers.get("phone_scene")!({ commit: false })).toBe(""); expect(loads).toEqual([]);
-    expect(await handlers.get("phone_scene")!({ chatId: "a", commit: false })).toBe("time: a");
-    expect(await handlers.get("phone_scene")!({ chatId: "b" })).toBe("time: b");
-    expect(await handlers.get("phone_scene")!({ chatId: "bad" })).toBe("");
+    expect(await handlers.get("phone_scene")!({ chatId: "a", userId: "owner-a", commit: false })).toBe("time: a");
+    expect(await handlers.get("phone_scene")!({ chatId: "b", userId: "owner-b" })).toBe("time: b");
+    expect(await handlers.get("phone_scene")!({ chatId: "bad", userId: "owner-bad" })).toBe("");
   });
   function fixture() {
     const saved = new Map<string, string>(); const histories = new Map<string, StoryRow[]>();
@@ -250,14 +250,14 @@ describe("macros and persistent isolation", () => {
   }
   test("preview never writes; chats/restart are isolated and stale revisions reject", async () => {
     const f = fixture(); f.histories.set("a", [row(0, { time: "A" })]); f.histories.set("b", [{ ...row(0, { time: "B" }), chat_id: "b" }]);
-    expect(renderMacro("phone_scene", await f.store.preview("a"))).toBe("time: A"); expect(f.writes()).toBe(0);
+    expect(renderMacro("phone_scene", await f.store.preview("a", "owner-a"))).toBe("time: A"); expect(f.writes()).toBe(0);
     const a = await f.store.sync("owner-a", "a"); await f.store.sync("owner-b", "b");
-    expect(renderMacro("phone_scene", await new PhoneStore(f.io).preview("b"))).toBe("time: B");
+    expect(renderMacro("phone_scene", await new PhoneStore(f.io).preview("b", "owner-b"))).toBe("time: B");
     await expect(f.store.sync("owner-b", "a")).rejects.toThrow();
     await expect(f.store.update("owner-a", "a", a.revision - 1, { settings: defaults() })).rejects.toThrow();
     const changed = await f.store.update("owner-a", "a", a.revision, { edit: { target: "scene", field: "time", value: "User time" } });
     expect(changed.state.scene.time?.by).toBe("user");
-    expect((await new PhoneStore(f.io).preview("a")).state.scene.time?.value).toBe("User time");
+    expect((await new PhoneStore(f.io).preview("a", "owner-a")).state.scene.time?.value).toBe("User time");
   });
   test("invalid settings and corrupt stored data retain the original snapshot", async () => {
     const f = fixture(); const a = await f.store.sync("owner-a", "a"); const before = f.saved.get("a");
@@ -270,7 +270,7 @@ describe("macros and persistent isolation", () => {
     const f = fixture(); const logs: string[] = []; f.io.warn = text => logs.push(text);
     f.histories.set("a", [row(0, {}, "", { content: '<phone-state>\ntime="Night"\nweather=private-secret\n</phone-state>' })]);
     const doc = await f.store.sync("owner-a", "a");
-    await f.store.preview("a"); await f.store.sync("owner-a", "a");
+    await f.store.preview("a", "owner-a"); await f.store.sync("owner-a", "a");
     expect(logs.length).toBe(1); expect(logs[0]).toContain("invalid JSON");
     expect(doc.state.notices).toEqual([]); expect(doc.state.scene.time?.value).toBe("Night");
   });
@@ -288,7 +288,7 @@ describe("macros and persistent isolation", () => {
     doc = await f.store.update("owner-a", "a", doc.revision, { edit: { target: "note", section: "people", name: "P0", remove: true } });
     expect(doc.state.notes.people.length).toBe(9); expect(doc.state.notes.people.some(n => n.name === "P10")).toBe(false);
     doc = await f.store.update("owner-a", "a", doc.revision, { dismissNotice: doc.state.notices[0] });
-    expect((await new PhoneStore(f.io).preview("a")).state.notices).toEqual([]);
+    expect((await new PhoneStore(f.io).preview("a", "owner-a")).state.notices).toEqual([]);
   });
   test("turning inference off preserves previously admitted inferred values", async () => {
     const f = fixture(); f.histories.set("a", [row(0, { contacts: [{ name: "Ada", physical: { value: "scarred hand", inferred: true } }] })]);
@@ -315,7 +315,7 @@ describe("macros and persistent isolation", () => {
     expect(doc.legacy).toEqual(old); expect(JSON.stringify(old)).toBe(saved);
     expect((doc.state.scene.location?.value as { name: string }).name).toBe("Home");
     expect(doc.state.notes.misc[0].detail).toBe("Bring the map");
-    expect((await new PhoneStore(f.io).preview("a")).state.notes.misc[0].detail).toBe("Bring the map");
+    expect((await new PhoneStore(f.io).preview("a", "owner-a")).state.notes.misc[0].detail).toBe("Bring the map");
   });
   test("an unrelated quote cannot replace a user-edited field", () => {
     const doc = emptyDocument("a"); doc.edits.push(edit("scene", { field: "location", value: "Home" }));

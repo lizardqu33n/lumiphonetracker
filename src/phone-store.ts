@@ -12,7 +12,7 @@ export interface PhoneIO {
   read(chatId: string): Promise<string>;
   write(chatId: string, data: string): Promise<void>;
   history(chatId: string): Promise<StoryRow[]>;
-  player(chatId: string): Promise<string | null>;
+  player(chatId: string, userId: string): Promise<string | null>;
   legacy?(userId: string, path: string): Promise<unknown>;
   warn?(text: string): void;
 }
@@ -87,7 +87,7 @@ export class PhoneStore {
     const cleanup = () => { if (this.queues.get(chatId) === task) this.queues.delete(chatId); };
     void task.then(cleanup, cleanup); return task;
   }
-  private async build(chatId: string, userId?: string): Promise<{ doc: Document; rows: StoryRow[] }> {
+  private async build(chatId: string, userId: string): Promise<{ doc: Document; rows: StoryRow[] }> {
     if (!chatId || chatId.length > 256) throw new Error("Missing chat");
     const raw = await this.io.read(chatId); let doc = readDocument(raw, chatId);
     // Keep the exact old payload. Migration never deletes or rewrites the old file.
@@ -104,14 +104,17 @@ export class PhoneStore {
       }
     }
     const rows = await this.io.history(chatId);
-    const player = await this.io.player(chatId);
+    const player = await this.io.player(chatId, userId);
     doc = replay(doc, rows, player ? [player] : [], (row, issues) => this.skips.record(chatId, row, issues));
     doc.currentPlayer = player ?? undefined;
     return { doc, rows };
   }
-  /** Called only with the host-trusted chatId from a pull macro. Never writes. */
-  preview(chatId: string): Promise<Document> {
-    return this.serial(chatId, async () => (await this.build(chatId)).doc);
+  /** Read-only preview with a trusted user and an authorized chat. Never writes. */
+  preview(chatId: string, userId: string): Promise<Document> {
+    return this.serial(chatId, async () => {
+      if (!userId || !(await this.io.authorize(chatId, userId))) throw new Error("Chat unavailable");
+      return (await this.build(chatId, userId)).doc;
+    });
   }
   sync(userId: string, chatId: string): Promise<Document> {
     return this.serial(chatId, async () => {

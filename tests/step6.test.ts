@@ -41,20 +41,20 @@ describe("Step 6 Helper AI",()=>{
     const settings=JSON.parse(f.saved.get("a")!).settings;expect(settings.connection_id).toBe("small");expect(JSON.stringify(settings)).not.toContain("chosen-small-model");expect(JSON.stringify(settings)).not.toContain("api_key");
   });
   test("missing connection falls back to Main AI with the exact notice and no paid request",async()=>{
-    const f=fixture();await f.enable();f.profiles([]);await f.helper.updateNow("owner-a","a");const doc=await f.store.preview("a");
+    const f=fixture();await f.enable();f.profiles([]);await f.helper.updateNow("owner-a","a");const doc=await f.store.preview("a", "owner-a");
     expect(doc.settings.source).toBe("main");expect(doc.state.notices).toContain("Connection not found");expect(f.calls.length).toBe(0);expect(formatMacro(doc)).toContain("phone-state");
   });
   test("helper results rebuild across restart and vanish with a deleted, edited or alternate source",async()=>{
-    const f=fixture();await f.enable();await f.helper.updateNow("owner-a","a");expect((await new PhoneStore(f.io).preview("a")).state.weather?.value).toBe("Rain");
-    f.rows.get("a")![0].content+='<phone-text from="Ada">A changed actual text.</phone-text>';expect((await f.store.preview("a")).state.weather?.value).toBe("Rain");
-    f.rows.set("a",[row(0,"A different regenerated scene.")]);expect((await f.store.preview("a")).state.weather).toBeUndefined();
-    f.rows.set("a",[{...row(0),swipe_id:1}]);expect((await f.store.preview("a")).state.weather).toBeUndefined();
-    f.rows.set("a",[]);expect((await f.store.preview("a")).state.weather).toBeUndefined();
+    const f=fixture();await f.enable();await f.helper.updateNow("owner-a","a");expect((await new PhoneStore(f.io).preview("a", "owner-a")).state.weather?.value).toBe("Rain");
+    f.rows.get("a")![0].content+='<phone-text from="Ada">A changed actual text.</phone-text>';expect((await f.store.preview("a", "owner-a")).state.weather?.value).toBe("Rain");
+    f.rows.set("a",[row(0,"A different regenerated scene.")]);expect((await f.store.preview("a", "owner-a")).state.weather).toBeUndefined();
+    f.rows.set("a",[{...row(0),swipe_id:1}]);expect((await f.store.preview("a", "owner-a")).state.weather).toBeUndefined();
+    f.rows.set("a",[]);expect((await f.store.preview("a", "owner-a")).state.weather).toBeUndefined();
   });
   test("the shared schema handles Scene, Contacts, Locations and Notes without creating texts or player thoughts",async()=>{
     const f=fixture();f.rows.set("a",[row(0,"Ada and Player wait at Station, a departure point. Ada is Unhurt and wears a red coat. Player is Healthy. Ada states the firm Gate rule: Keep locked.")]);
     await f.enable();f.output(JSON.stringify({location:"Station",present:["Ada","Player"],weather:null,contacts:[{name:"Ada",physical:"Unhurt",attire:{worn:["red coat"],removed:[]}},{name:"Player",mood:"Happy",thoughts:"Private",physical:"Healthy"}],locations:[{name:"Station",description:"A departure point"}],rules:[{name:"Gate",detail:"Keep locked",context:"Stated by Ada"}]}));
-    await f.helper.updateNow("owner-a","a");const doc=await new PhoneStore(f.io).preview("a");
+    await f.helper.updateNow("owner-a","a");const doc=await new PhoneStore(f.io).preview("a", "owner-a");
     expect(doc.state.scene.location?.value).toEqual({name:"Station",wider:[]});expect(doc.state.contacts.find(c=>c.name==="Ada")?.fields.attire?.value).toEqual({worn:["red coat"],removed:[]});
     expect(doc.state.contacts.find(c=>c.name==="Player")?.fields.mood).toBeUndefined();expect(doc.state.contacts.find(c=>c.name==="Player")?.fields.thoughts).toBeUndefined();
     expect(doc.state.locations[0].name).toBe("Station");expect(doc.state.notes.rules[0].detail).toBe("Keep locked");expect(doc.state.messages).toEqual([]);expect(doc.state.weather).toBeUndefined();
@@ -64,24 +64,24 @@ describe("Step 6 Helper AI",()=>{
     const f=fixture();await f.enable();let finish!:(value:{content:string;finish_reason:string})=>void;
     f.respond(()=>new Promise(resolve=>{finish=resolve;}));const task=f.helper.updateNow("owner-a","a");await dispatched(f);
     await f.store.sync("owner-b","b");finish({content:'{"weather":"Rain"}',finish_reason:"stop"});await task;
-    expect((await f.store.preview("a")).state.weather?.value).toBe("Rain");expect((await f.store.preview("b")).state.weather).toBeUndefined();expect(f.changes.every(c=>c==="a")).toBe(true);
+    expect((await f.store.preview("a", "owner-a")).state.weather?.value).toBe("Rain");expect((await f.store.preview("b", "owner-b")).state.weather).toBeUndefined();expect(f.changes.every(c=>c==="a")).toBe(true);
     const later=f.helper.updateNow("owner-a","a");for(let i=0;i<50&&f.calls.length<2;i++)await Bun.sleep(1);
     const doc=await f.store.sync("owner-a","a");await f.store.update("owner-a","a",doc.revision,{edit:{target:"weather",value:"Snow"}});
-    finish({content:'{"weather":"Old rain"}',finish_reason:"stop"});await later;expect((await f.store.preview("a")).state.weather?.value).toBe("Snow");expect(f.calls.length).toBe(2);
-    expect((await f.store.preview("a")).state.notices).toContain("Tracker update failed");
+    finish({content:'{"weather":"Old rain"}',finish_reason:"stop"});await later;expect((await f.store.preview("a", "owner-a")).state.weather?.value).toBe("Snow");expect(f.calls.length).toBe(2);
+    expect((await f.store.preview("a", "owner-a")).state.notices).toContain("Tracker update failed");
   });
   test("new history during a request and switching Main AI discard late results without retries",async()=>{
     const f=fixture();await f.enable();let finish!:(value:{content:string;finish_reason:string})=>void;f.respond(()=>new Promise(resolve=>{finish=resolve;}));
     const task=f.helper.updateNow("owner-a","a");await dispatched(f);f.rows.get("a")!.push(row(1,"New confirmed sunny scene."));finish({content:'{"weather":"Rain"}',finish_reason:"stop"});await task;
-    expect((await f.store.preview("a")).state.weather).toBeUndefined();expect(f.calls.length).toBe(1);
+    expect((await f.store.preview("a", "owner-a")).state.weather).toBeUndefined();expect(f.calls.length).toBe(1);
     const again=f.helper.updateNow("owner-a","a");for(let i=0;i<50&&f.calls.length<2;i++)await Bun.sleep(1);
     const doc=await f.store.sync("owner-a","a");await f.store.update("owner-a","a",doc.revision,{settings:{source:"main"}});f.helper.cancel("a");
-    expect(f.calls[1].signal?.aborted).toBe(true);finish({content:'{"weather":"Rain"}',finish_reason:"stop"});await again;await f.helper.updateNow("owner-a","a");expect(f.calls.length).toBe(2);expect((await f.store.preview("a")).settings.source).toBe("main");
+    expect(f.calls[1].signal?.aborted).toBe(true);finish({content:'{"weather":"Rain"}',finish_reason:"stop"});await again;await f.helper.updateNow("owner-a","a");expect(f.calls.length).toBe(2);expect((await f.store.preview("a", "owner-a")).settings.source).toBe("main");
   });
   test("invalid JSON, forbidden texts, schema failures and provider errors keep old values and log safely",async()=>{
     for(const output of ['not-json private-secret','{"messages":["private-secret"]}','{"weather":123}','```json\n{}\n```']){
       const f=fixture();f.rows.set("a",[row(0,'<phone-state>weather="Clear"</phone-state>')]);await f.enable();f.output(output);
-      await f.helper.updateNow("owner-a","a");expect((await f.store.preview("a")).state.weather?.value).toBe("Clear");expect((await f.store.preview("a")).state.notices).toContain("Tracker update failed");
+      await f.helper.updateNow("owner-a","a");expect((await f.store.preview("a", "owner-a")).state.weather?.value).toBe("Clear");expect((await f.store.preview("a", "owner-a")).state.notices).toContain("Tracker update failed");
       expect(f.calls.length).toBe(1);expect(f.logs.join()).not.toContain("private-secret");expect(f.logs.join()).not.toContain("Clear");
     }
     const f=fixture();await f.enable();f.respond(async()=>{throw new Error("Private provider secret");});await f.helper.updateNow("owner-a","a");expect(f.calls.length).toBe(1);expect(f.logs.join()).not.toContain("Private provider secret");

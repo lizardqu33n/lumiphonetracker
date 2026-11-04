@@ -2,7 +2,7 @@ import type { LlmMessageDTO, SpindleAPI } from "lumiverse-spindle-types";
 import { BUILD_STEP, EXTENSION_NAME, isRecord } from "./shared";
 import { PhoneStore } from "./phone-store";
 import { DOCUMENT_KEY } from "./phone-store";
-import { stripHistoryTags, transformTags } from "./tags";
+import { transformTags } from "./tags";
 import { registerPhoneMacros } from "./phone-macros";
 import { trimPhoneHistory } from "./retention";
 import { PreferenceStore, defaultPreferences } from "./preferences";
@@ -11,6 +11,7 @@ import { chatPath } from "./store";
 import { HelperAI } from "./helper";
 
 declare const spindle: SpindleAPI;
+const warn = (text: string): void => { try { spindle.log.warn(text); } catch { /* Logging cannot block generation. */ } };
 
 const preferences = new PreferenceStore({
   read: async userId => spindle.userStorage.getJson("appearance.json", { fallback: defaultPreferences(), userId }),
@@ -22,13 +23,13 @@ const messageReads = new MessageReads({
 });
 
 const store = new PhoneStore({
-  warn: text => spindle.log.warn(text),
+  warn: text => warn(text),
   authorize: async (chatId, userId) => (await spindle.chats.get(chatId, userId))?.id === chatId,
   history: async chatId => spindle.chat.getMessages(chatId),
   read: async chatId => spindle.variables.chat.get(chatId, DOCUMENT_KEY),
   write: async (chatId, data) => spindle.variables.chat.set(chatId, DOCUMENT_KEY, data),
-  player: async chatId => {
-    const result = await spindle.macros.resolve("{{user}}", { chatId, commit: false });
+  player: async (chatId, userId) => {
+    const result = await spindle.macros.resolve("{{user}}", { chatId, userId, commit: false });
     const name = result.text.trim();
     return result.diagnostics.length || !name || name.includes("{{") ? null : name;
   },
@@ -37,11 +38,11 @@ const store = new PhoneStore({
     return JSON.parse(await spindle.userStorage.read(path, userId));
   },
 });
-registerPhoneMacros(spindle, async chatId => {
-  const doc=await store.preview(chatId);
+registerPhoneMacros(spindle, async (chatId, userId) => {
+  const doc=await store.preview(chatId, userId);
   if(doc.settings.source==="helper") {
     let usable=false;
-    if(spindle.permissions.has("generation")&&doc.helperOwner)try{usable=(await spindle.connections.list(doc.helperOwner)).some(c=>c.id===doc.settings.connection_id);}catch{/* Fail closed without generating. */}
+    if(spindle.permissions.has("generation")&&doc.helperOwner===userId)try{usable=(await spindle.connections.list(userId)).some(c=>c.id===doc.settings.connection_id);}catch{/* Fail closed without generating. */}
     if(!usable)doc.settings={...doc.settings,source:"main"}; // Pull previews stay read-only.
   }
   return doc;
@@ -55,10 +56,10 @@ const helper = new HelperAI(store, {
     return {content:result.content,finish_reason:typeof result.finish_reason==="string"?result.finish_reason:""};
   },
   changed: (userId,chatId) => spindle.sendToFrontend({type:"phone_helper_changed",chatId},userId),
-  warn: text => spindle.log.warn(text),
+  warn: text => warn(text),
 });
 if (spindle.frontendCapabilities?.declare) spindle.frontendCapabilities.declare("message_tag_interceptor");
-else spindle.log.warn("Lumi Phone Tracker: host lacks documented cold-load tag hiding; update Lumiverse.");
+else warn("Lumi Phone Tracker: host lacks documented cold-load tag hiding; update Lumiverse.");
 
 let processorRegistered = false;
 let interceptorRegistered = false;
@@ -89,16 +90,21 @@ function registerHooks(): void {
     processorRegistered = true;
   }
   if (!interceptorRegistered && spindle.permissions.has("interceptor")) {
-    const handler = async (messages: LlmMessageDTO[], context: { chatId?: string }) => {
-      if (!context.chatId) return stripHistoryTags(messages);
-      const document = await store.preview(context.chatId);
-      return trimPhoneHistory(messages, document.settings, document);
+    const handler = async (messages: LlmMessageDTO[], context: { chatId?: string; userId?: string }) => {
+      try {
+        if (!context || typeof context.chatId !== "string" || !context.chatId || typeof context.userId !== "string" || !context.userId.trim()) {
+          warn("Lumi Phone Tracker: prompt context unavailable; prompt unchanged.");
+          return messages;
+        }
+        const document = await store.preview(context.chatId, context.userId);
+        return trimPhoneHistory(messages, document.settings, document);
+      } catch {
+        warn("Lumi Phone Tracker: prompt processing failed; prompt unchanged.");
+        return messages;
+      }
     };
-    if ((spindle.host?.capabilities?.["required-interceptors-v1"] ?? 0) >= 1) {
-      spindle.registerInterceptor(handler, { priority: 1000, required: true });
-    } else {
-      spindle.registerInterceptor(handler, 1000);
-    }
+    // Optional: even a worker timeout must not stop the user's generation.
+    spindle.registerInterceptor(handler, 1000);
     interceptorRegistered = true;
   }
 }
@@ -109,6 +115,10 @@ function requireReadPermissions(): void {
   if (!spindle.permissions.has("chats") || !spindle.permissions.has("chat_mutation")) throw new Error("Allow chat access in Extensions.");
 }
 spindle.onFrontendMessage((payload, userId) => {
+  if (typeof userId !== "string" || !userId.trim()) {
+    warn("Lumi Phone Tracker: frontend user context unavailable; request ignored.");
+    return; // Never turn a reply into an operator-wide broadcast.
+  }
   if(isRecord(payload) && ["phone_connections","phone_helper_now"].includes(String(payload.type)) && typeof payload.requestId==="string" && payload.requestId.length<=100 && typeof payload.chatId==="string" && payload.chatId.length<=256) {
     void(async()=>{
       requireReadPermissions();
@@ -162,7 +172,7 @@ spindle.onFrontendMessage((payload, userId) => {
     const known = ["The tracker changed.", "The story changed.", "This section is full.", "Contacts is full", "Locations is full", "A contact with that name", "A place with that name", "A note with that name"];
     const message = known.some(s => reason.startsWith(s)) ? reason : "Could not save or open this chat. Check extension permissions and try again.";
     spindle.sendToFrontend({ type: "phone_error", requestId, message }, userId);
-    spindle.log.warn("Lumi Phone Tracker: chat sync failed; saved data retained.");
+    warn("Lumi Phone Tracker: chat sync failed; saved data retained.");
   });
 });
 // Story lifecycle is separate from generation completion; partial text never triggers Helper AI.
@@ -171,7 +181,7 @@ for (const event of ["MESSAGE_SENT", "MESSAGE_EDITED", "MESSAGE_DELETED", "MESSA
     if (!userId || !isRecord(payload) || typeof payload.chatId !== "string") return;
     const chatId = payload.chatId;
     if (!spindle.permissions.has("chats") || !spindle.permissions.has("chat_mutation")) return;
-    void store.sync(userId, chatId).catch(() => spindle.log.warn("Lumi Phone Tracker: history update failed; saved data retained."));
+    void store.sync(userId, chatId).catch(() => warn("Lumi Phone Tracker: history update failed; saved data retained."));
   });
 }
 spindle.log.info(`${EXTENSION_NAME}: Step ${BUILD_STEP} loaded. Helper AI runs only after explicit selection.`);

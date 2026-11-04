@@ -1,4 +1,6 @@
-# Current release: Step 6 / 0.6.1
+# Current release: Step 6 / 0.6.2
+
+User-context patch: player-name macro resolution passes an explicit trusted user ID; prompt processing is optional and returns the original prompt on failure. Pull macros return empty when trusted user/chat context is absent. See the call audit and documented pull-context limitation in [TESTING.md](../TESTING.md).
 
 All six steps are implemented. [Step 6](STEP-6.md) describes optional Helper AI, source journals, pinned requests and safe failure handling. Main AI stays the default. Generation permission is now present, with no extra model requests in Main AI. Earlier architecture notes below describe historical checkpoints.
 

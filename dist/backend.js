@@ -91,31 +91,6 @@ function transformTags(text, mode) {
   }
   return output + text.slice(offset);
 }
-function stripHistoryTags(messages) {
-  return messages.map((message) => {
-    if (message.__isChatHistory !== true)
-      return message;
-    if (typeof message.content === "string")
-      return { ...message, content: transformTags(message.content, "strip") };
-    const parts = [];
-    let pending = "";
-    const flush = () => {
-      if (pending)
-        parts.push({ type: "text", text: transformTags(pending, "strip") });
-      pending = "";
-    };
-    for (const part of message.content) {
-      if (part.type === "text")
-        pending += part.text;
-      else {
-        flush();
-        parts.push(part);
-      }
-    }
-    flush();
-    return { ...message, content: parts };
-  });
-}
 function decodeEntities(text) {
   const entities = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'" };
   let output = "";
@@ -1183,13 +1158,17 @@ class PhoneStore {
       }
     }
     const rows = await this.io.history(chatId);
-    const player = await this.io.player(chatId);
+    const player = await this.io.player(chatId, userId);
     doc = replay(doc, rows, player ? [player] : [], (row, issues) => this.skips.record(chatId, row, issues));
     doc.currentPlayer = player ?? undefined;
     return { doc, rows };
   }
-  preview(chatId) {
-    return this.serial(chatId, async () => (await this.build(chatId)).doc);
+  preview(chatId, userId) {
+    return this.serial(chatId, async () => {
+      if (!userId || !await this.io.authorize(chatId, userId))
+        throw new Error("Chat unavailable");
+      return (await this.build(chatId, userId)).doc;
+    });
   }
   sync(userId, chatId) {
     return this.serial(chatId, async () => {
@@ -1452,6 +1431,11 @@ function renderMacro(name, doc) {
   return formatMacro(doc);
 }
 function registerPhoneMacros(api, load) {
+  const warn = (text) => {
+    try {
+      api.log.warn(text);
+    } catch {}
+  };
   const register = api.registerMacro.bind(api);
   for (const name of MACRO_NAMES)
     register({
@@ -1461,12 +1445,14 @@ function registerPhoneMacros(api, load) {
       description: `Chat-specific ${name.slice(6)} continuity`,
       volatile: true,
       handler: async (ctx) => {
-        if (typeof ctx.chatId !== "string" || !ctx.chatId || ctx.chatId.length > 256)
+        if (!ctx || typeof ctx.chatId !== "string" || !ctx.chatId || ctx.chatId.length > 256 || typeof ctx.userId !== "string" || !ctx.userId.trim()) {
+          warn(`Lumi Phone Tracker: ${name} context unavailable; returning no data.`);
           return "";
+        }
         try {
-          return renderMacro(name, await load(ctx.chatId));
+          return renderMacro(name, await load(ctx.chatId, ctx.userId));
         } catch {
-          api.log.warn(`Lumi Phone Tracker: ${name} unavailable; returning no data.`);
+          warn(`Lumi Phone Tracker: ${name} unavailable; returning no data.`);
           return "";
         }
       }
@@ -1860,7 +1846,7 @@ class HelperAI {
         return;
       }
       const input = helperInput(ticket);
-      const current = await this.store.preview(chatId);
+      const current = await this.store.preview(chatId, userId);
       if (controller.signal.aborted || this.active.get(chatId)?.size || !this.io.allowed() || current.settings.source !== "helper" || current.helperOwner !== userId || current.revision !== ticket.doc.revision)
         return;
       timer = setTimeout(() => controller.abort(), 90000);
@@ -1900,6 +1886,11 @@ class HelperAI {
 }
 
 // src/backend.ts
+var warn = (text) => {
+  try {
+    spindle.log.warn(text);
+  } catch {}
+};
 var preferences = new PreferenceStore({
   read: async (userId) => spindle.userStorage.getJson("appearance.json", { fallback: defaultPreferences(), userId }),
   write: async (userId, value) => spindle.userStorage.setJson("appearance.json", value, { userId })
@@ -1909,13 +1900,13 @@ var messageReads = new MessageReads({
   write: (userId, chatId, value) => spindle.userStorage.setJson(`message-reads/${chatPath(chatId)}`, value, { userId })
 });
 var store = new PhoneStore({
-  warn: (text) => spindle.log.warn(text),
+  warn: (text) => warn(text),
   authorize: async (chatId, userId) => (await spindle.chats.get(chatId, userId))?.id === chatId,
   history: async (chatId) => spindle.chat.getMessages(chatId),
   read: async (chatId) => spindle.variables.chat.get(chatId, DOCUMENT_KEY),
   write: async (chatId, data) => spindle.variables.chat.set(chatId, DOCUMENT_KEY, data),
-  player: async (chatId) => {
-    const result = await spindle.macros.resolve("{{user}}", { chatId, commit: false });
+  player: async (chatId, userId) => {
+    const result = await spindle.macros.resolve("{{user}}", { chatId, userId, commit: false });
     const name = result.text.trim();
     return result.diagnostics.length || !name || name.includes("{{") ? null : name;
   },
@@ -1925,13 +1916,13 @@ var store = new PhoneStore({
     return JSON.parse(await spindle.userStorage.read(path, userId));
   }
 });
-registerPhoneMacros(spindle, async (chatId) => {
-  const doc = await store.preview(chatId);
+registerPhoneMacros(spindle, async (chatId, userId) => {
+  const doc = await store.preview(chatId, userId);
   if (doc.settings.source === "helper") {
     let usable = false;
-    if (spindle.permissions.has("generation") && doc.helperOwner)
+    if (spindle.permissions.has("generation") && doc.helperOwner === userId)
       try {
-        usable = (await spindle.connections.list(doc.helperOwner)).some((c) => c.id === doc.settings.connection_id);
+        usable = (await spindle.connections.list(userId)).some((c) => c.id === doc.settings.connection_id);
       } catch {}
     if (!usable)
       doc.settings = { ...doc.settings, source: "main" };
@@ -1948,12 +1939,12 @@ var helper = new HelperAI(store, {
     return { content: result.content, finish_reason: typeof result.finish_reason === "string" ? result.finish_reason : "" };
   },
   changed: (userId, chatId) => spindle.sendToFrontend({ type: "phone_helper_changed", chatId }, userId),
-  warn: (text) => spindle.log.warn(text)
+  warn: (text) => warn(text)
 });
 if (spindle.frontendCapabilities?.declare)
   spindle.frontendCapabilities.declare("message_tag_interceptor");
 else
-  spindle.log.warn("Lumi Phone Tracker: host lacks documented cold-load tag hiding; update Lumiverse.");
+  warn("Lumi Phone Tracker: host lacks documented cold-load tag hiding; update Lumiverse.");
 var processorRegistered = false;
 var interceptorRegistered = false;
 var helperHooks = [];
@@ -1994,16 +1985,19 @@ function registerHooks() {
   }
   if (!interceptorRegistered && spindle.permissions.has("interceptor")) {
     const handler = async (messages, context) => {
-      if (!context.chatId)
-        return stripHistoryTags(messages);
-      const document = await store.preview(context.chatId);
-      return trimPhoneHistory(messages, document.settings, document);
+      try {
+        if (!context || typeof context.chatId !== "string" || !context.chatId || typeof context.userId !== "string" || !context.userId.trim()) {
+          warn("Lumi Phone Tracker: prompt context unavailable; prompt unchanged.");
+          return messages;
+        }
+        const document = await store.preview(context.chatId, context.userId);
+        return trimPhoneHistory(messages, document.settings, document);
+      } catch {
+        warn("Lumi Phone Tracker: prompt processing failed; prompt unchanged.");
+        return messages;
+      }
     };
-    if ((spindle.host?.capabilities?.["required-interceptors-v1"] ?? 0) >= 1) {
-      spindle.registerInterceptor(handler, { priority: 1000, required: true });
-    } else {
-      spindle.registerInterceptor(handler, 1000);
-    }
+    spindle.registerInterceptor(handler, 1000);
     interceptorRegistered = true;
   }
 }
@@ -2014,6 +2008,10 @@ function requireReadPermissions() {
     throw new Error("Allow chat access in Extensions.");
 }
 spindle.onFrontendMessage((payload, userId) => {
+  if (typeof userId !== "string" || !userId.trim()) {
+    warn("Lumi Phone Tracker: frontend user context unavailable; request ignored.");
+    return;
+  }
   if (isRecord(payload) && ["phone_connections", "phone_helper_now"].includes(String(payload.type)) && typeof payload.requestId === "string" && payload.requestId.length <= 100 && typeof payload.chatId === "string" && payload.chatId.length <= 256) {
     (async () => {
       requireReadPermissions();
@@ -2069,7 +2067,7 @@ spindle.onFrontendMessage((payload, userId) => {
     const known = ["The tracker changed.", "The story changed.", "This section is full.", "Contacts is full", "Locations is full", "A contact with that name", "A place with that name", "A note with that name"];
     const message = known.some((s) => reason.startsWith(s)) ? reason : "Could not save or open this chat. Check extension permissions and try again.";
     spindle.sendToFrontend({ type: "phone_error", requestId, message }, userId);
-    spindle.log.warn("Lumi Phone Tracker: chat sync failed; saved data retained.");
+    warn("Lumi Phone Tracker: chat sync failed; saved data retained.");
   });
 });
 for (const event of ["MESSAGE_SENT", "MESSAGE_EDITED", "MESSAGE_DELETED", "MESSAGE_SWIPED", "SWIPE_EDITED", "CHAT_CHANGED"]) {
@@ -2079,7 +2077,7 @@ for (const event of ["MESSAGE_SENT", "MESSAGE_EDITED", "MESSAGE_DELETED", "MESSA
     const chatId = payload.chatId;
     if (!spindle.permissions.has("chats") || !spindle.permissions.has("chat_mutation"))
       return;
-    store.sync(userId, chatId).catch(() => spindle.log.warn("Lumi Phone Tracker: history update failed; saved data retained."));
+    store.sync(userId, chatId).catch(() => warn("Lumi Phone Tracker: history update failed; saved data retained."));
   });
 }
 spindle.log.info(`${EXTENSION_NAME}: Step ${BUILD_STEP} loaded. Helper AI runs only after explicit selection.`);

@@ -1,4 +1,4 @@
-# Verification report - 0.6.1
+# Verification report - 0.6.2
 
 Checked November 4, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **This test environment did not have a real Lumiverse install or a real model connection. No paid model request was made.**
 
@@ -6,9 +6,35 @@ Checked November 4, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, o
 
 The supplied stylesheet is copied byte-for-byte into src/styles.css. STYLING.md documents its 62 variables and 107 stable classes. The browser suite also exposed fractional-height rounding that clipped the closed-phone text notice; its measured height now rounds up. No navigation, tracker rules or class names changed.
 
+## User-context fix and call audit (0.6.2)
+
+The strict operator mock first failed with exactly **userId is required for operator-scoped extensions**, at backend.ts's player-name `macros.resolve` call reached through the prompt interceptor. After the fix, both Dry Run and normal interceptor invocations pass. The interceptor previously requested `required: true`, so the uncaught failure aborted generation. It is now optional, catches read/authorization failures and returns the original prompt unchanged. Missing chat/user does the same. Macro failures return empty. Warnings contain fixed explanations, not story text, field values or raw exceptions; even a logging failure is contained.
+
+| Handler / call | Audit and fix |
+| --- | --- |
+| Pull macro -> PhoneStore -> `macros.resolve("{{user}}", options)` | Previously missing userId. The read path now takes explicit user context and passes `options.userId` with `commit:false`. Preview also authorizes the chat before reading it. |
+| Prompt interceptor -> same read path | Uses `InterceptorContextDTO.userId` and `.chatId` from the host. Neither current frontend chat nor saved helper owner substitutes for identity. |
+| Backend lifecycle events -> sync -> same read path | The typed optional second callback argument supplies userId; it now survives player resolution. Events without user context cannot start an extraction or sync. Generation started/stopped still maintain streaming state without storage calls. |
+| Frontend tag handlers | Payload documents chatId/isUser/isStreaming but no userId. Handlers call only `ctx.sendToBackend`; the backend receives the authenticated second callback argument. No identity is copied from tag attributes or the payload. |
+| Backend message-content processor | Has `ctx.userId`, but only performs a pure tag-hiding transform. Makes no storage, chat, macro or generation call. |
+| `spindle.chats.get` / `getActive` | Already receive userId. Preview authorization now uses it too. |
+| `spindle.chat.getMessages` | Takes chatId and optional message-read options, with no userId option in the published contract. No invented argument added; authorized chat identifies the read. |
+| `spindle.variables.chat.get` / `set` | No userId parameter. Documentation says these derive the owner from the chat record. No local/global variable APIs are used. |
+| Appearance and Reset: `userStorage.getJson` / `setJson` | Already pass options.userId from the authenticated frontend callback; no missing-ID defect found. Missing callback identity now drops the request without broadcasting. Reset's local same-session recovery is unchanged. |
+| Read receipts: same userStorage calls | Storage was already scoped. Their preceding chat sync was affected by the player-resolution omission and is fixed. |
+| Legacy `userStorage.exists` / `read` | Already pass the user ID positionally. No `spindle.storage` calls are used. |
+| Helper `connections.list` / `generate.raw` | Already pass userId, including the raw request object. The later preview and shared player-resolution path lost it; both are fixed. Macro preview now checks only the invoking user's connection, never another saved helper owner's profile. |
+| Registration, permissions, logging, capability declaration | Extension-local APIs; no userId parameter. Targeted `sendToFrontend` calls use the authenticated user; unscoped frontend requests are ignored. |
+
+**Documented limit:** the official `MacroInvocationContextDTO` guarantees optional chatId and commit, but does not guarantee userId. No documented method was found to derive an authenticated user from a pull macro's chatId alone. A host-supplied `ctx.userId`, when present, is validated and passed through; without it, every phone macro is empty and a fixed warning is logged. This is a safe fallback, not a claim that every Lumiverse version supplies that extra field. No global current-user cache or model-controlled identity is used. The closest documented alternative is a macro interceptor with `ctx.userId`; that needs the separate `macro_interceptor` permission and was not added in this focused fix.
+
+Regression coverage includes all six macro handlers; missing/null/blank context; unauthorized users; failed reads and failed logging; zero preview writes; exact original prompt pass-through; authenticated lifecycle sync; read receipts; appearance save/Reset; missing frontend identity despite a forged payload userId; manual and completion-triggered Helper requests. The mock requires explicit IDs for user-scoped API methods, but correctly does not invent IDs for chat-derived APIs. No model provider was called.
+
+Sources: [macros](https://docs.lumiverse.chat/backend-api/macros/), [interceptors](https://docs.lumiverse.chat/backend-api/interceptors/), [variables](https://docs.lumiverse.chat/backend-api/variables/), [chat mutation](https://docs.lumiverse.chat/backend-api/chat-mutation/), [frontend communication](https://docs.lumiverse.chat/backend-api/frontend-communication/), [message tags](https://docs.lumiverse.chat/frontend-api/message-tags/), [macro interceptor](https://docs.lumiverse.chat/backend-api/macro-interceptor/), and the official lumiverse-spindle-types 0.6.77 API declarations (recommended by the TypeScript setup docs). The prose interceptor/events pages omit some identity details exposed by those declarations. No API signature was widened to invent an argument.
+
 ## Passed in code
 
-- 110 behavioral tests, 449 assertions, zero failures, across six test files.
+- 110 behavioral tests, 565 assertions, zero failures, across six test files.
 - Typecheck; backend/frontend builds; manifest, entry/export and bundle/source checks; packaged source/built-file matching.
 - Earlier parsing, independent valid-line acceptance, safe warning logs, partial-tag hiding, raw saved-tag retention, chronological replay, user edits, caps, notes, migration, macros, auth checks, chat isolation, swipes/regeneration/deletion and recent-tag/media transformations.
 - Messages grouping, incoming-only unread receipts, recipient-aware outgoing records, read persistence, escaped draft tags, cancellation, exact-chat composer checks and no extension Send call.
@@ -19,7 +45,7 @@ The supplied stylesheet is copied byte-for-byte into src/styles.css. STYLING.md 
 - Pinned chat and revision: late results remain in their requesting chat, cannot overwrite later edits/history, and are discarded when Main AI is selected. Cancellation signals are sent. This cannot prove an already-started provider request was free.
 - Separate helper result journal survives restart and rebuilds through the shared Scene/Weather/Contacts/Locations/Notes rules. Story edits/deletion/alternate swipes invalidate the affected result; edits only to stripped phone tags do not discard unrelated extracted story facts. Helper never writes story rows or texts. Player private fields are removed; null preserves old values.
 - User-edited values need a newer exact evidence quote, not a quote from an older row. Literal older facts are prevented from replacing newer confirmed fields. These are conservative text checks, not semantic proof of canon.
-- The actual backend is loaded with a mocked host. It checks user-scoped connections, the raw generation adapter, chat-authorized read receipts, zero default Main calls, explicit Helper Update now, and generation-hook registration. Unknown return data from the published raw API is checked for a content string.
+- The actual backend is loaded with a strict operator-scoped mocked host. It checks user-scoped connections, the raw generation adapter, chat-authorized read receipts, zero default Main calls, explicit Helper Update now, and generation-hook registration. Unknown return data from the published raw API is checked for a content string.
 
 ## Passed in a browser with a mock host
 
@@ -34,6 +60,8 @@ The supplied stylesheet is copied byte-for-byte into src/styles.css. STYLING.md 
 
 ## Not verified without a real Lumiverse install and connection
 
+- Repeating the reported failing Dry Run and normal generation on the user's install after updating. Whether that host supplies a trusted userId to pull macros, which exact version does so, and whether all six phone macros therefore return continuity there. Host timeout/process isolation, optional-interceptor fallback and final provider prompt payload need real-host verification. The local strict mock proves the reported missing-ID call is fixed, not that native installation was tested.
+
 - GitHub install/update/security scanning, native permissions and revocation/regrant, restart/disable/re-enable, real host placement/styles/transforms, desktop pop-outs and actual mobile/iOS WebViews.
 - Native generation event ordering, saved-message timing, authenticated event user IDs, group/concurrent/background swipes, stopped partial replies and startup during an already-running stream. The scheduler uses documented events; it cannot observe a start event the host never delivered. Final content must match the selected saved assistant row or automatic extraction is skipped safely.
 - Real saved connection listing/removal, chosen provider/model routing, cancellation/timeouts, model pricing/usage, real JSON compliance, once-per-reply behavior through the actual host and source-chat persistence after a live chat switch.
@@ -44,6 +72,6 @@ The supplied stylesheet is copied byte-for-byte into src/styles.css. STYLING.md 
 - Actual outgoing provider prompt stripping (default recent texts 3, trackers 0), configured retention, source markers and media preservation. Code tests verify transformations, not a final network payload. Helper input is tested separately to strip ALL phone tags.
 - Human first-use clarity: a new person should identify each app within about five seconds. No human usability study was performed. Custom CSS can intentionally make the phone transparent or hide it; native recovery still needs a real-host check.
 
-The earlier real-install v0.4.1 failure was user-reported. Its layout cause was reproduced locally and retained as a regression, but this environment has not validated 0.6.1 in that install. Publishing source to GitHub does not verify native installation or make a model request.
+The earlier real-install v0.4.1 failure was user-reported. Its layout cause was reproduced locally and retained as a regression, but this environment has not validated 0.6.2 in that install. Publishing source to GitHub does not verify native installation or make a model request.
 
 Earlier reports: [Step 5](docs/STEP-5-TESTING.md), [Step 4](docs/STEP-4-TESTING.md), [Step 3](docs/STEP-3-TESTING.md). Previous archives are preserved. All six build steps are delivered; work is paused for review.
