@@ -1,86 +1,99 @@
 # Style your phone
 
-Open **Settings > Advanced > Custom CSS**, paste a rule, and see it immediately. It saves after a short pause. Your appearance follows your user account across chats. Reset removes styling only; saved story information stays.
+Version 0.6.1 uses the supplied stylesheet as the default look: a notch and home bar, individual app tints, solid cards, message bubbles and pill switches. Class names, navigation and tracker behavior are unchanged.
 
-If your rules hide the phone, use the single **Reset appearance** button next to **Open phone** in the Phone sidebar entry. The **Appearance reset.** confirmation stays in that tab. Reset clears styles and reopens the phone immediately, without refreshing. There is no Reset strip under the floating phone and no extra Reset button in the editor. Sidebar recovery is outside the phone's Shadow DOM and uses Lumiverse's theme directly, so phone rules cannot style it. The protected clipping/layout wrappers below also cannot be restyled from the editor. Every editable color, font, corner, gap and size comes from a --lpt- variable on one .lpt-root.
+Open **Settings > Advanced > Custom CSS** to override the defaults live. Your saved custom CSS still overrides a new default after an update; it is not deleted automatically. To see the new default alone, use **Reset appearance** beside **Open phone** in the Phone sidebar tab.
 
-Use the three examples below without changing anything else. You can combine their properties in one rule. Defaults live in one readable source file: [src/styles.css](src/styles.css). No authored inline styles are used. Outer frame, launcher and app content are independent elements.
+That single Reset and its confirmation stay outside the phone's Shadow DOM. Custom phone CSS cannot style them or escape the protected clipping area. Reset clears only appearance and reopens the phone without a page refresh, even after hostile CSS. It never deletes story data. If saving fails, the current view is restored and the sidebar tells you to try saving again.
+
+All default rules are in [src/styles.css](src/styles.css). All declared --lpt- variables live on the same .lpt-root element. Some small decorative details are fixed CSS values; use the stable class selectors below to change those. There are no inline style attributes, external fonts, icon downloads or CDN requests. The frame, launcher and app content remain separate.
 
 ## Variables
 
-Change these inside `.lpt-root { ... }`. Size values such as 400px include a unit; column counts, weights and opacity do not. Theme-derived defaults automatically follow Lumiverse. Screen bounds still limit preferred sizes.
+Set these inside `.lpt-root { ... }`. Sizes need units such as px; counts, weights and opacity do not. The table lists base defaults. Theme-derived replacements and narrow-screen adjustments are explained below it.
 
-| Variable | Default | What it changes |
+| Variable | Base default | What it changes |
 | --- | --- | --- |
-| `--lpt-phone-bg` | Solid `#19171f`, or opaque theme fill | Outer phone frame background. |
-| `--lpt-screen-bg` | Solid `#19171f`, or opaque theme fill | Home, every app, header and scrolling area behind cards. |
-| `--lpt-card-bg` | Solid `#24212d`, or opaque theme/subtle mix | Slightly different background for cards, sections and text notices. |
-| `--lpt-text` | `var(--lumiverse-text, CanvasText)` | Main text color. |
-| `--lpt-muted` | `var(--lumiverse-text-muted, GrayText)` | Secondary text color. |
-| `--lpt-fill` | `var(--lpt-screen-bg)` | Normal controls/background, following the opaque screen. |
-| `--lpt-subtle` | `var(--lpt-card-bg)` | Buttons and secondary surfaces, following opaque cards. |
-| `--lpt-accent` | `var(--lumiverse-accent, Highlight)` | Highlights and selected controls. |
-| `--lpt-accent-text` | `var(--lumiverse-accent-fg, HighlightText)` | Text on accent-colored buttons. |
-| `--lpt-border` | `var(--lumiverse-border, ButtonBorder)` | Normal border color. |
-| `--lpt-hover-border` | `var(--lumiverse-border-hover, ButtonBorder)` | Hovered button border color. |
-| `--lpt-radius` | `var(--lumiverse-radius, 10px)` | Small corners, following Lumiverse. |
-| `--lpt-frame-radius` | `calc(var(--lpt-radius) * 3)` | Outer phone/window corners. |
+| `--lpt-phone-bg` | `#121017` | Opaque outer phone frame; dark fallback, composited theme fill when supported. |
+| `--lpt-screen-bg` | `#15131c` | Opaque Home/app/header/scroll area behind cards. |
+| `--lpt-card-bg` | `#1f1c29` | Slightly different solid card and section background. |
+| `--lpt-elevated-bg` | `#292536` | Raised surfaces, hover fills and incoming bubbles with theme support. |
+| `--lpt-fill` | `var(--lpt-screen-bg)` | Compatibility background token following the screen color. |
+| `--lpt-subtle` | `var(--lpt-card-bg)` | Compatibility secondary token following the card color. |
+| `--lpt-text` | `var(--lumiverse-text, #f0edf6)` | Main text color. |
+| `--lpt-muted` | `var(--lumiverse-text-muted, #9b95aa)` | Secondary text color. |
+| `--lpt-accent` | `var(--lumiverse-accent, #a485f7)` | Highlights and selected controls. |
+| `--lpt-accent-text` | `var(--lumiverse-accent-fg, #120f1d)` | Text on accent-colored buttons. |
+| `--lpt-border` | `#2d293b` | Normal borders; theme-derived when relative colors are supported. |
+| `--lpt-hover-border` | `#47405c` | Hover borders; theme-derived when relative colors are supported. |
+| `--lpt-frame-edge` | `#353047` | Phone frame edge and inset highlight. |
+| `--lpt-notch-bg` | `#09080c` | Top notch pill background. |
+| `--lpt-notch-width` | `76px` | Top notch pill width. |
+| `--lpt-notch-height` | `18px` | Top notch pill height. |
+| `--lpt-home-bar-width` | `112px` | Bottom decorative home bar width. |
+| `--lpt-home-bar-height` | `4px` | Bottom decorative home bar thickness. |
+| `--lpt-home-bar-color` | `#3f3952` | Bottom decorative home bar color. |
+| `--lpt-tint-scene` | `#b494ff` | Scene Home icon color and tinted tile fill. |
+| `--lpt-tint-weather` | `#72bdf5` | Weather Home icon color and tinted tile fill. |
+| `--lpt-tint-locations` | `#66d4a5` | Locations Home icon color and tinted tile fill. |
+| `--lpt-tint-notes` | `#f0bf6c` | Notes Home icon color and tinted tile fill. |
+| `--lpt-tint-contacts` | `#f08ca6` | Contacts Home icon color and tinted tile fill. |
+| `--lpt-tint-messages` | `#8ea2ff` | Messages Home icon color and tinted tile fill. |
+| `--lpt-tint-settings` | `#b0a9c4` | Settings Home icon color and tinted tile fill. |
+| `--lpt-bubble-in-bg` | `#272333` | Incoming message bubble background. |
+| `--lpt-bubble-out-bg` | `#362859` | Outgoing message bubble background. |
+| `--lpt-bubble-out-border` | `#5a4294` | Outgoing message bubble border. |
+| `--lpt-bubble-radius` | `18px` | Message bubble corner radius; lower sender-side corner is smaller. |
+| `--lpt-toggle-width` | `42px` | Pill switch width. |
+| `--lpt-toggle-height` | `24px` | Pill switch height and thumb size basis. |
+| `--lpt-toggle-thumb` | `#ffffff` | Checked switch thumb color. |
+| `--lpt-radius` | `var(--lumiverse-radius, 12px)` | Small corners, following Lumiverse. |
+| `--lpt-card-radius` | `16px` | Cards, forms, notices and section corners. |
+| `--lpt-icon-radius` | `20px` | Home icon tile corners. |
+| `--lpt-frame-radius` | `40px` | Outer phone/window corners. |
+| `--lpt-space` | `8px` | Base spacing unit; other gaps are multiples. |
 | `--lpt-font` | `inherit` | Font family, inherited from Lumiverse. |
 | `--lpt-font-size` | `14px` | Normal text size. |
 | `--lpt-small-font-size` | `12px` | Labels, descriptions and markers. |
-| `--lpt-title-size` | `21px` | App heading size. |
-| `--lpt-location-size` | `26px` | Large Scene location text. |
+| `--lpt-title-size` | `18px` | App heading size. |
+| `--lpt-location-size` | `24px` | Large Scene location text. |
 | `--lpt-weight` | `450` | Normal text weight. |
 | `--lpt-strong-weight` | `650` | Heading and emphasized text weight. |
-| `--lpt-line-height` | `1.5` | Line spacing multiplier. |
-| `--lpt-space` | `8px` | Base spacing unit; other gaps are multiples. |
-| `--lpt-width` | `350px` | Preferred open-phone width, clamped to screen. |
-| `--lpt-height` | `590px` | Preferred open-phone height, clamped to screen. |
-| `--lpt-launcher-size` | `48px` | Closed floating button size. |
-| `--lpt-icon-size` | `24px` | Icon artwork size. |
+| `--lpt-line-height` | `1.45` | Line spacing multiplier. |
+| `--lpt-width` | `356px` | Preferred open-phone width, clamped to screen. |
+| `--lpt-height` | `620px` | Preferred open-phone height, clamped to screen. |
+| `--lpt-launcher-size` | `50px` | Closed floating button size. |
+| `--lpt-icon-size` | `26px` | Icon artwork size. |
+| `--lpt-app-tile-size` | `64px` | Home icon tile width and height; separate from SVG artwork size. |
 | `--lpt-icon-stroke-size` | `2px` | Icon line thickness. |
 | `--lpt-control-size` | `38px` | Minimum button/input height. |
 | `--lpt-border-size` | `1px` | Normal border thickness. |
-| `--lpt-frame-border-size` | `3px` | Outer frame border thickness. |
-| `--lpt-shadow` | `0 10px 38px color-mix(in srgb, var(--lpt-text) 13%, transparent)` | Frame and launcher shadow. |
-| `--lpt-icon-fill` | `color-mix(in srgb, var(--lpt-accent) 10%, var(--lpt-fill))` | Home icon background. |
+| `--lpt-frame-border-size` | `2px` | Outer frame border thickness. |
 | `--lpt-focus-size` | `2px` | Keyboard focus outline thickness and offset. |
-| `--lpt-opacity-disabled` | `.55` | Disabled control opacity. |
+| `--lpt-opacity-disabled` | `0.5` | Disabled control opacity. |
 | `--lpt-grid-columns` | `3` | Home icon columns. |
-| `--lpt-max-label-width` | `18rem` | Maximum Settings label width. |
+| `--lpt-max-label-width` | `17rem` | Maximum Settings label width. |
+| `--lpt-shadow` | `Three-layer shadow; see styles.css` | Layered outer phone/launcher shadow and inset frame highlight. |
+| `--lpt-icon-fill` | `color-mix(in srgb, var(--lpt-accent) 16%, var(--lpt-card-bg))` | Fallback tile fill; per-app tint rules take priority on Home. |
+| `--lpt-transition` | `150ms cubic-bezier(0.22, 1, 0.36, 1)` | Hover, press and switch animation timing. |
+
+The documented Lumiverse sources are --lumiverse-fill, --lumiverse-fill-subtle, text, muted text, accent, accent foreground and radius. When relative-color calculations are supported, translucent fills are composited over the dark phone/screen/card bases with final alpha 1. Elevated surfaces, borders, frame edge and bubble colors are also derived. Without that browser support, the explicit dark base colors apply. Custom CSS may deliberately override them, including making them transparent.
+
+At screen widths of **420px or less**, defaults change to frame radius 28px, app tile size 58px, title size 17px and location size 21px; content padding and grid gaps also tighten. Preferred phone dimensions still clamp to the screen. The last Settings tile is centered for the default three-column Home grid; override its grid-column rule if making a different grid.
 
 ## Stable classes
 
-These names are styling hooks, not extra settings or screens. App wrappers carry the same names on every visit. `.lpt-root[data-open="true"]` selects the open phone; Notes sections have `data-section="people"`, `items`, `rules`, `plots`, or `misc`. Home buttons have `data-app="Scene"` and the other exact app labels. The usual `[open]` selector targets expanded cards/sections.
+These remain the existing UI hooks, not extra screens or settings. `.lpt-root[data-open="true"]` selects the open phone. Home buttons have `data-app="Scene"` and the other exact app names. Notes sections have `data-section="people"`, `items`, `rules`, `plots` or `misc`. `[open]` selects expanded details. The frame notch and home bar are decorative pseudo-elements, not new controls.
 
 | Class | What it is |
 | --- | --- |
-| `.lpt-helper-settings` | Tracker source group in the existing Settings app. |
-| `.lpt-helper-source` | Main AI / Helper AI selector. |
-| `.lpt-helper-connection` | Saved-connection picker, shown for Helper AI. |
-| `.lpt-update-now` | Explicit Helper AI update button; disabled while busy. |
-| `.lpt-option` | Theme-colored native picker option. |
-| `.lpt-add-draft` | Add to draft button; never sends a message. |
-| `.lpt-conversation` | Expandable sender conversation, with data-conversation holding the normalized recipient/sender key. |
-| `.lpt-incoming` | Incoming text message modifier. |
-| `.lpt-manual-tag` | Read-only escaped tag for manual copy when composer drafting is unsupported. |
-| `.lpt-outgoing` | Outgoing text message modifier; only saved sent texts appear. |
-| `.lpt-reply` | Inline conversation reply form. |
-| `.lpt-reply-input` | Unsent reply text box. |
-| `.lpt-reply-status` | Draft success, unavailable or wrong-chat explanation. |
-| `.lpt-text-body` | Actual plain text content, with line breaks preserved. |
-| `.lpt-text-list` | Chronological messages within a sender conversation. |
-| `.lpt-text-message` | One text with sender, body and optional established time. |
-| `.lpt-text-notice` | Brief new-text notice, including when the phone is closed. |
-| `.lpt-text-sender` | Saved sender name; outgoing texts also say You. |
-| `.lpt-text-time` | Story-supplied text timestamp; absent if unknown. |
-| `.lpt-unread-badge` | Unread number on Messages, each conversation and Contact Open texts. |
 | `.lpt-absent` | Collapsed Not here now contact group. |
 | `.lpt-actions` | Inline row of action buttons. |
 | `.lpt-add` | Add contact, place or note button. |
+| `.lpt-add-draft` | Add to draft button; never sends a message. |
 | `.lpt-advanced` | Collapsed Advanced settings. |
 | `.lpt-app-button` | A labelled Home app button. |
-| `.lpt-app-icon` | Background around a Home icon. |
+| `.lpt-app-icon` | Tinted Home tile with currentColor SVG artwork; each app has its own tint variable. |
 | `.lpt-app-label` | Text below a Home icon. |
 | `.lpt-back` | Back to Home button. |
 | `.lpt-button` | General Edit button. |
@@ -93,6 +106,7 @@ These names are styling hooks, not extra settings or screens. App wrappers carry
 | `.lpt-contact` | One character card. |
 | `.lpt-contacts` | Contacts app content. |
 | `.lpt-content` | Scrollable app area, separate from the outer frame. |
+| `.lpt-conversation` | Expandable sender conversation, with data-conversation holding the normalized recipient/sender key. |
 | `.lpt-counter` | Notes section count and limit. |
 | `.lpt-css-editor` | Live custom CSS text box. |
 | `.lpt-custom-css` | Collapsed Custom CSS section. |
@@ -106,19 +120,24 @@ These names are styling hooks, not extra settings or screens. App wrappers carry
 | `.lpt-field-label` | Short field label. |
 | `.lpt-field-value` | Field contents. |
 | `.lpt-form` | Inline add/edit form. |
-| `.lpt-frame` | Outer phone frame, independent of app content. |
+| `.lpt-frame` | Outer phone frame; ::before draws the notch and ::after draws the home bar. |
 | `.lpt-header` | App heading with back and close buttons. |
 | `.lpt-heading` | Current app title. |
 | `.lpt-help` | Short form/settings help. |
+| `.lpt-helper-connection` | Saved-connection picker, shown for Helper AI. |
+| `.lpt-helper-settings` | Tracker source group in the existing Settings app. |
+| `.lpt-helper-source` | Main AI / Helper AI selector. |
 | `.lpt-home` | Home icon grid. |
 | `.lpt-icon` | SVG icon artwork. |
 | `.lpt-icon-path` | Line shapes within the SVG icon. |
+| `.lpt-incoming` | Left-aligned incoming message bubble. |
 | `.lpt-input` | Single-line text input. |
 | `.lpt-island` | Protected host-side holder of the shadow root (not custom-styled). |
 | `.lpt-label` | Form input label. |
 | `.lpt-launcher` | Closed floating phone button. |
 | `.lpt-location` | Large exact-location field in Scene. |
 | `.lpt-locations` | Locations app content. |
+| `.lpt-manual-tag` | Read-only escaped tag for manual copy when composer drafting is unsupported. |
 | `.lpt-marker` | Edited, inferred, user-added, Updated or Current marker. |
 | `.lpt-messages` | Actual Messages app content. |
 | `.lpt-note` | One expandable Notes card. |
@@ -130,14 +149,19 @@ These names are styling hooks, not extra settings or screens. App wrappers carry
 | `.lpt-notice-text` | Capacity notice contents. |
 | `.lpt-number` | Advanced whole-number input. |
 | `.lpt-open-texts` | Contact button opening that sender in Messages, with its unread badge. |
+| `.lpt-option` | Theme-colored native picker option. |
+| `.lpt-outgoing` | Right-aligned outgoing message bubble. |
 | `.lpt-place` | One saved Location card. |
 | `.lpt-place-description` | Expanded Location description or relation. |
-| `.lpt-present-list` | Names-only Here now list. |
-| `.lpt-present-name` | One Here now name. |
+| `.lpt-present-list` | Names-only Here now list, displayed as small name pills. |
+| `.lpt-present-name` | One name pill in Here now. |
 | `.lpt-recovery-actions` | Protected sidebar row with Open phone and the single Reset appearance button. |
 | `.lpt-recovery-button` | Protected Reset/Open button outside custom styling. |
 | `.lpt-recovery-panel` | Protected Phone sidebar recovery entry. |
 | `.lpt-recovery-status` | Protected reset/load status text. |
+| `.lpt-reply` | Inline conversation reply form. |
+| `.lpt-reply-input` | Unsent reply text box. |
+| `.lpt-reply-status` | Draft success, unavailable or wrong-chat explanation. |
 | `.lpt-resolved` | Collapsed resolved plots group. |
 | `.lpt-root` | Single customizable root containing all --lpt- defaults. |
 | `.lpt-save` | Save edit button. |
@@ -153,26 +177,37 @@ These names are styling hooks, not extra settings or screens. App wrappers carry
 | `.lpt-settings` | Settings app content. |
 | `.lpt-settings-group` | One app's group of switches. |
 | `.lpt-size-probe` | Invisible preferred-size measurement; normally leave alone. |
-| `.lpt-speaker` | Small decorative phone speaker. |
+| `.lpt-speaker` | Original speaker element, kept for compatibility but hidden by this design. |
 | `.lpt-status` | Non-blocking save status. |
 | `.lpt-summary` | Expandable card or section heading. |
+| `.lpt-text-body` | Actual plain text content, with line breaks preserved. |
+| `.lpt-text-list` | Chronological messages within a sender conversation. |
+| `.lpt-text-message` | One text with sender, body and optional established time. |
+| `.lpt-text-notice` | Brief new-text notice, including when the phone is closed. |
+| `.lpt-text-sender` | Saved sender name; outgoing texts also say You. |
+| `.lpt-text-time` | Story-supplied text timestamp; absent if unknown. |
 | `.lpt-textarea` | Multi-line edit field. |
-| `.lpt-toggle` | On/off checkbox. |
+| `.lpt-toggle` | Native checkbox styled as a pill switch; its checked behavior is unchanged. |
 | `.lpt-transport` | Protected host layout wrapper (not custom-styled). |
+| `.lpt-unread-badge` | Unread number on Messages, each conversation and Contact Open texts. |
+| `.lpt-update-now` | Explicit Helper AI update button; disabled while busy. |
 | `.lpt-viewport` | Protected clipping boundary (not custom-styled). |
 | `.lpt-weather` | Weather app content. |
 | `.lpt-wider` | Wider location or removed-attire secondary line. |
 
 ## Copy-paste examples
 
-Change the accent color:
+Change the main accent and the Messages Home tint:
 
 ```css
 .lpt-root {
   --lpt-accent: #78c6b2;
   --lpt-accent-text: #102521;
+  --lpt-tint-messages: #78c6b2;
 }
 ```
+
+App tints are independent. Change their --lpt-tint- variables to recolor other Home icons; --lpt-accent alone controls general accents, buttons and badges. All seven Lucide designs remain bundled inline and use currentColor. [Icon attribution](THIRD-PARTY-NOTICES.md).
 
 Make the phone bigger:
 
@@ -183,7 +218,7 @@ Make the phone bigger:
 }
 ```
 
-Give it a desktop-window look:
+Give it a desktop-window look and hide the decorative hardware:
 
 ```css
 .lpt-root {
@@ -192,21 +227,10 @@ Give it a desktop-window look:
   --lpt-frame-radius: 10px;
   --lpt-frame-border-size: 1px;
 }
-.lpt-speaker { display: none; }
+.lpt-frame::before,
+.lpt-frame::after { display: none; }
 ```
 
-Ordinary rules, @media and @supports are supported. Keep styles local: no imports, linked images, downloaded fonts, CSS escape sequences or other at-rules. Unfinished braces/quotes/comments and unsupported constructs show a short error and leave the last working style in place. Browsers may silently ignore an unknown property; fix or remove that line if it does nothing. Rules can make the phone unusable, but the protected Reset remains available. Reset clears the local view even if saving is temporarily unavailable; try again if it says the reset was not saved.
+Ordinary rules, @media and @supports work. Imports, linked images, font downloads, CSS escape sequences and other at-rules are rejected. An unfinished rule leaves the last working style active and shows a short error. Browsers may silently ignore an unknown property. The protected sidebar Reset stays available if your rules hide the phone.
 
-Messages hooks below are implemented in Step 5. Conversations expand in the same screen; no extra app or nested navigation was added.
-
-The seven Home icons use the requested [Lucide designs](THIRD-PARTY-NOTICES.md), embedded locally. They inherit currentColor through .lpt-icon-path, so --lpt-accent or a .lpt-app-icon color rule recolors them. The launcher, back and close controls remain the original small drawings; only seven Lucide designs are bundled.
-
-The protected phone wrapper receives explicit numeric placement bounds, independent of the host root's height. This prevents a zero-height host mount from hiding the phone. Defaults and visual styling remain in styles.css; only the measured placement dimensions are emitted into an instance-scoped rule. Custom CSS cannot change that wrapper or escape its clipped painting area. Reset is still usable if creating the floating phone fails. See [the v0.4.2 fix report](docs/FIX-0.4.2.md) for tested cases and real-host limits.
-
-## Solid background defaults
-
-The new phone/screen/card variables are colors on the existing .lpt-root. The documented Lumiverse sources are --lumiverse-fill and --lumiverse-fill-subtle. When the browser supports relative colors, translucent theme fills are composited over explicit dark fallbacks and flattened to alpha 1. Without that support, the solid dark defaults apply. Cards and sections use a slightly different opaque shade. This changes colors only; frame shape, sizes, spacing, icon sources and the protected sidebar Reset are unchanged.
-
-You can set --lpt-phone-bg, --lpt-screen-bg and --lpt-card-bg to your own solid colors. Your custom CSS may deliberately make them transparent again; the extension does not override your design. Existing --lpt-fill and --lpt-subtle now follow the screen/card colors. All appearance defaults remain in src/styles.css.
-
-Helper AI adds only the source, connection, recent-message count and Update now controls in Settings. They reuse the same opaque colors and existing spacing variables. Protected sidebar recovery and the phone frame are unchanged; no new visual redesign is included.
+The protected wrapper receives explicit measured placement bounds independently of the host root's height. Only those numeric bounds are emitted into an instance-scoped rule; appearance defaults stay in styles.css. The original speaker element remains hidden for compatibility. Existing recovery behavior and the zero-height-mount fix are retained. [Recovery details](docs/FIX-0.4.2.md).

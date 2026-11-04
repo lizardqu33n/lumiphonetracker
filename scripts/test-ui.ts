@@ -175,7 +175,7 @@ try {
   async function opaque(screen: string) {
     const result = await ui(page).evaluate((host, screen) => {
       const root = host.shadowRoot!; const canvas = document.createElement("canvas"); canvas.width=canvas.height=1; const ctx=canvas.getContext("2d")!;
-      const nodes = [root.querySelector(".lpt-root"),root.querySelector(".lpt-frame"),root.querySelector(".lpt-content"),root.querySelector(`.lpt-${screen}`),...Array.from(root.querySelectorAll(".lpt-card, .lpt-section"))].filter(Boolean) as Element[];
+      const nodes = [root.querySelector(".lpt-root"),root.querySelector(".lpt-frame"),root.querySelector(".lpt-header"),root.querySelector(".lpt-content"),root.querySelector(`.lpt-${screen}`),...Array.from(root.querySelectorAll(".lpt-card, .lpt-section, .lpt-field, .lpt-card-body, .lpt-form, .lpt-advanced, .lpt-custom-css"))].filter(Boolean) as Element[];
       return nodes.every(node => { ctx.clearRect(0,0,1,1); ctx.fillStyle=getComputedStyle(node).backgroundColor; ctx.fillRect(0,0,1,1); return ctx.getImageData(0,0,1,1).data[3]===255; });
     }, screen);
     check(result, `${screen} and its frame/content/cards have opaque backgrounds under translucent theme fills`);
@@ -187,7 +187,7 @@ try {
   await page.evaluate(() => document.documentElement.style.setProperty("--lumiverse-fill", "initial"));
   check(await ui(page).locator(".lpt-frame").evaluate(e => {
     const canvas=document.createElement("canvas"); canvas.width=canvas.height=1; const ctx=canvas.getContext("2d")!;
-    ctx.fillStyle=getComputedStyle(e).backgroundColor; ctx.fillRect(0,0,1,1); return [...ctx.getImageData(0,0,1,1).data].join(",")==="25,23,31,255";
+    ctx.fillStyle=getComputedStyle(e).backgroundColor; ctx.fillRect(0,0,1,1); return [...ctx.getImageData(0,0,1,1).data].join(",")==="18,16,23,255";
   }), "Missing theme background uses the explicit solid dark fallback");
   await page.evaluate(() => { document.documentElement.style.removeProperty("--lumiverse-fill"); document.documentElement.style.removeProperty("--lumiverse-fill-subtle"); });
   await seed(page); await open(page);
@@ -242,7 +242,7 @@ try {
   await page.evaluate(() => (window as any).harness.incoming("Ada","A real saved text while closed.")); await page.waitForTimeout(150);
   check(await ui(page).locator(".lpt-text-notice").isVisible(), "A new saved text shows its notice even with the phone closed");
   const noticeBounds = await ui(page).locator(".lpt-text-notice").boundingBox(); const noticeWidget = await page.locator(".harness-widget").boundingBox();
-  check(!!noticeBounds && !!noticeWidget && noticeBounds.y + noticeBounds.height <= noticeWidget.y + noticeWidget.height, "Closed-phone notice fits inside its own protected placement");
+  check(!!noticeBounds && !!noticeWidget && noticeBounds.y + noticeBounds.height <= noticeWidget.y + noticeWidget.height, `Closed-phone notice fits inside its own protected placement: ${JSON.stringify({noticeBounds,noticeWidget})}`);
   await open(page,"Messages"); await ui(page).locator('[data-conversation="ada"] > summary').click();
   await ui(page).locator(".lpt-reply-input").fill("Pinned to the original chat");
   await page.evaluate(() => { (window as any).oldReplyForm=document.querySelector(".lpt-island")!.shadowRoot!.querySelector(".lpt-reply"); (window as any).harness.switchChat("b"); }); await page.waitForTimeout(100);

@@ -154,7 +154,8 @@ export class PhoneView {
     const width = node.offsetWidth || Number.parseFloat(computed.width);
     const height = node.offsetHeight || Number.parseFloat(computed.height);
     if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
-    const closedHeight = this.textNotice.hidden ? height : Math.max(48, this.root.offsetHeight);
+    // Fractional line heights must round up so the protected viewport never clips a notice.
+    const closedHeight = this.textNotice.hidden ? height : Math.max(48, Math.ceil(this.root.getBoundingClientRect().height));
     this.actions.size(Math.max(48, width), Math.max(48, this.openState ? height : closedHeight), this.openState);
   }
   private navigate(app: App | "Home"): void { this.app = app; this.editing = false; this.render(); this.content.scrollTop = 0; if(app==="Settings")void this.loadConnections(); }

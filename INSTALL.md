@@ -1,11 +1,11 @@
 # Install Lumi Phone Tracker
 
-Version 0.6.0 includes the built files. You do not need to build or upload anything yourself.
+Version 0.6.1 includes the built files. You do not need to build or upload anything yourself.
 
 ## Install or update
 
 1. Open Lumiverse > Extensions > Install.
-2. Paste this repository address: https://github.com/lizardqu33n/lumiphonetracker . For an existing install from this repository, use its update option to get version 0.6.0. Enable the extension.
+2. Paste this repository address: https://github.com/lizardqu33n/lumiphonetracker . For an existing install from this repository, use its update option to get version 0.6.1. Enable the extension.
 3. Allow chat access, message processing, prompt interception and floating panels (chats, chat_mutation, interceptor, ui_panels). The new generation permission enables optional Helper AI: completed-reply tracking and calls through the connection you select. Main AI makes no extra model requests. If generation permission is declined, Main AI still works.
 4. Open a chat. Tap the floating phone, or use Open phone in the Phone sidebar tab.
 5. Add this exact single line to your active preset and save it:

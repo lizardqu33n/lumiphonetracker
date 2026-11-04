@@ -1,136 +1,1111 @@
-/* All phone defaults live on this one root. Theme tokens are documented by Lumiverse. */
+/* All phone defaults live on this one root[cite: 2]. Theme tokens are documented by Lumiverse[cite: 2]. */
 .lpt-root {
-  --lpt-text: var(--lumiverse-text, CanvasText);
-  --lpt-muted: var(--lumiverse-text-muted, GrayText);
-  --lpt-phone-bg: #19171f;
-  --lpt-screen-bg: #19171f;
-  --lpt-card-bg: #24212d;
+  /* Core Surfaces (Strictly Opaque) */
+  --lpt-phone-bg: #121017;
+  --lpt-screen-bg: #15131c;
+  --lpt-card-bg: #1f1c29;
+  --lpt-elevated-bg: #292536;
   --lpt-fill: var(--lpt-screen-bg);
   --lpt-subtle: var(--lpt-card-bg);
-  --lpt-accent: var(--lumiverse-accent, Highlight);
-  --lpt-accent-text: var(--lumiverse-accent-fg, HighlightText);
-  --lpt-border: var(--lumiverse-border, ButtonBorder);
-  --lpt-hover-border: var(--lumiverse-border-hover, ButtonBorder);
-  --lpt-radius: var(--lumiverse-radius, 10px);
-  --lpt-frame-radius: calc(var(--lpt-radius) * 3);
+
+  /* Typography & Accent Colors */
+  --lpt-text: var(--lumiverse-text, #f0edf6);
+  --lpt-muted: var(--lumiverse-text-muted, #9b95aa);
+  --lpt-accent: var(--lumiverse-accent, #a485f7);
+  --lpt-accent-text: var(--lumiverse-accent-fg, #120f1d);
+
+  /* Borders & Highlights */
+  --lpt-border: #2d293b;
+  --lpt-hover-border: #47405c;
+  --lpt-frame-edge: #353047;
+
+  /* Hardware Details (Notch & Home Bar) */
+  --lpt-notch-bg: #09080c;
+  --lpt-notch-width: 76px;
+  --lpt-notch-height: 18px;
+  --lpt-home-bar-width: 112px;
+  --lpt-home-bar-height: 4px;
+  --lpt-home-bar-color: #3f3952;
+
+  /* App Icon Tints (Soft Hues, Opaque Bases Calculated per App) */
+  --lpt-tint-scene: #b494ff;
+  --lpt-tint-weather: #72bdf5;
+  --lpt-tint-locations: #66d4a5;
+  --lpt-tint-notes: #f0bf6c;
+  --lpt-tint-contacts: #f08ca6;
+  --lpt-tint-messages: #8ea2ff;
+  --lpt-tint-settings: #b0a9c4;
+
+  /* Messaging Bubbles (Opaque) */
+  --lpt-bubble-in-bg: #272333;
+  --lpt-bubble-out-bg: #362859;
+  --lpt-bubble-out-border: #5a4294;
+  --lpt-bubble-radius: 18px;
+
+  /* Toggle Switch Tokens */
+  --lpt-toggle-width: 42px;
+  --lpt-toggle-height: 24px;
+  --lpt-toggle-thumb: #ffffff;
+
+  /* Radii & Spacing */
+  --lpt-radius: var(--lumiverse-radius, 12px);
+  --lpt-card-radius: 16px;
+  --lpt-icon-radius: 20px;
+  --lpt-frame-radius: 40px;
+  --lpt-space: 8px;
+
+  /* Typography Metrics */
   --lpt-font: inherit;
   --lpt-font-size: 14px;
   --lpt-small-font-size: 12px;
-  --lpt-title-size: 21px;
-  --lpt-location-size: 26px;
+  --lpt-title-size: 18px;
+  --lpt-location-size: 24px;
   --lpt-weight: 450;
   --lpt-strong-weight: 650;
-  --lpt-line-height: 1.5;
-  --lpt-space: 8px;
-  --lpt-width: 350px;
-  --lpt-height: 590px;
-  --lpt-launcher-size: 48px;
-  --lpt-icon-size: 24px;
+  --lpt-line-height: 1.45;
+
+  /* Dimensions & Controls */
+  --lpt-width: 356px;
+  --lpt-height: 620px;
+  --lpt-launcher-size: 50px;
+  --lpt-icon-size: 26px;
+  --lpt-app-tile-size: 64px;
   --lpt-icon-stroke-size: 2px;
   --lpt-control-size: 38px;
   --lpt-border-size: 1px;
-  --lpt-frame-border-size: 3px;
-  --lpt-shadow: 0 10px 38px color-mix(in srgb, var(--lpt-text) 13%, transparent);
-  --lpt-icon-fill: color-mix(in srgb, var(--lpt-accent) 10%, var(--lpt-fill));
+  --lpt-frame-border-size: 2px;
   --lpt-focus-size: 2px;
-  --lpt-opacity-disabled: .55;
+  --lpt-opacity-disabled: 0.5;
   --lpt-grid-columns: 3;
-  --lpt-max-label-width: 18rem;
-  color: var(--lpt-text); font-family: var(--lpt-font); font-size: var(--lpt-font-size);
-  line-height: var(--lpt-line-height); font-weight: var(--lpt-weight);
-  box-sizing: border-box; width: fit-content; max-width: 100%;
+  --lpt-max-label-width: 17rem;
+
+  /* Shadows & Transitions */
+  --lpt-shadow:
+    0 22px 54px -10px rgba(0, 0, 0, 0.72),
+    0 4px 16px -2px rgba(0, 0, 0, 0.48),
+    inset 0 1px 0 0 var(--lpt-frame-edge);
+  --lpt-icon-fill: color-mix(in srgb, var(--lpt-accent) 16%, var(--lpt-card-bg));
+  --lpt-transition: 150ms cubic-bezier(0.22, 1, 0.36, 1);
+
+  color: var(--lpt-text);
+  font-family: var(--lpt-font);
+  font-size: var(--lpt-font-size);
+  line-height: var(--lpt-line-height);
+  font-weight: var(--lpt-weight);
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: 100%;
 }
-/* Composite translucent theme fills over explicit dark defaults, with alpha 1.
-   Older browsers retain the solid defaults. All editable tokens stay on lpt-root. */
-@supports (color: rgb(from red calc(r * alpha + 25 * (1 - alpha)) g b / 1)) {
+
+/* Composite translucent theme fills over explicit dark defaults, with alpha 1[cite: 2].
+   Older browsers retain the solid defaults[cite: 2]. All editable tokens stay on lpt-root[cite: 2]. */
+@supports (color: rgb(from red calc(r * alpha + 20 * (1 - alpha)) g b / 1)) {
   .lpt-root {
-    --lpt-phone-bg: rgb(from var(--lumiverse-fill, #19171f) calc(r * alpha + 25 * (1 - alpha)) calc(g * alpha + 23 * (1 - alpha)) calc(b * alpha + 31 * (1 - alpha)) / 1);
-    --lpt-screen-bg: var(--lpt-phone-bg);
-    --lpt-card-bg: color-mix(in srgb, rgb(from var(--lumiverse-fill-subtle, #24212d) calc(r * alpha + 36 * (1 - alpha)) calc(g * alpha + 33 * (1 - alpha)) calc(b * alpha + 45 * (1 - alpha)) / 1) 92%, rgb(from var(--lumiverse-text, #ece9f1) r g b / 1) 8%);
+    --lpt-phone-bg: rgb(from var(--lumiverse-fill, #121017) calc(r * alpha + 18 * (1 - alpha)) calc(g * alpha + 16 * (1 - alpha)) calc(b * alpha + 23 * (1 - alpha)) / 1);
+    --lpt-screen-bg: rgb(from var(--lumiverse-fill, #15131c) calc(r * alpha + 21 * (1 - alpha)) calc(g * alpha + 19 * (1 - alpha)) calc(b * alpha + 28 * (1 - alpha)) / 1);
+    --lpt-card-bg: color-mix(in srgb, rgb(from var(--lumiverse-fill-subtle, #1f1c29) calc(r * alpha + 31 * (1 - alpha)) calc(g * alpha + 28 * (1 - alpha)) calc(b * alpha + 41 * (1 - alpha)) / 1) 93%, rgb(from var(--lumiverse-text, #f0edf6) r g b / 1) 7%);
+    --lpt-elevated-bg: color-mix(in srgb, var(--lpt-card-bg) 86%, rgb(from var(--lumiverse-text, #f0edf6) r g b / 1) 14%);
+    --lpt-border: color-mix(in srgb, var(--lpt-card-bg) 82%, rgb(from var(--lumiverse-text, #f0edf6) r g b / 1) 18%);
+    --lpt-hover-border: color-mix(in srgb, var(--lpt-card-bg) 66%, rgb(from var(--lumiverse-text, #f0edf6) r g b / 1) 34%);
+    --lpt-frame-edge: color-mix(in srgb, var(--lpt-phone-bg) 76%, rgb(from var(--lumiverse-text, #f0edf6) r g b / 1) 24%);
+    --lpt-bubble-in-bg: var(--lpt-elevated-bg);
+    --lpt-bubble-out-bg: color-mix(in srgb, var(--lpt-accent) 26%, var(--lpt-card-bg));
+    --lpt-bubble-out-border: color-mix(in srgb, var(--lpt-accent) 52%, var(--lpt-card-bg));
   }
 }
-.lpt-frame, .lpt-root[data-open="true"] { background-color: var(--lpt-phone-bg); }
-.lpt-content, .lpt-header, .lpt-home, .lpt-scene, .lpt-weather, .lpt-locations,
-.lpt-notes, .lpt-contacts, .lpt-messages, .lpt-settings { background-color: var(--lpt-screen-bg); }
-.lpt-card, .lpt-section { background-color: var(--lpt-card-bg); }
-.lpt-root *, .lpt-root *::before, .lpt-root *::after { box-sizing: border-box; }
-.lpt-root[data-open="true"] { width: 100%; height: 100%; }
-.lpt-root[data-open="false"][data-notice="true"] { width: 100%; }
-.lpt-app-icon { position: relative; }
-.lpt-unread-badge { display: inline-block; min-width: calc(var(--lpt-space) * 2.5); padding: 0 calc(var(--lpt-space) / 2); margin-left: var(--lpt-space); border-radius: var(--lpt-radius); color: var(--lpt-accent-text); background: var(--lpt-accent); font-size: var(--lpt-small-font-size); text-align: center; }
-.lpt-app-icon > .lpt-unread-badge { position: absolute; top: calc(var(--lpt-space) / -2); right: calc(var(--lpt-space) / -2); }
-.lpt-text-notice { flex-shrink: 0; margin: var(--lpt-space); padding: var(--lpt-space); border: var(--lpt-border-size) solid var(--lpt-border); border-radius: var(--lpt-radius); color: var(--lpt-text); background: var(--lpt-card-bg); font-size: var(--lpt-small-font-size); overflow-wrap: anywhere; }
-.lpt-text-message { margin: var(--lpt-space) 0; padding: var(--lpt-space); background: var(--lpt-screen-bg); border: var(--lpt-border-size) solid var(--lpt-border); border-radius: var(--lpt-radius); overflow-wrap: anywhere; }
-.lpt-outgoing { border-color: var(--lpt-accent); }
-.lpt-text-sender { font-size: var(--lpt-small-font-size); font-weight: var(--lpt-strong-weight); margin: 0; }
-.lpt-text-body { white-space: pre-wrap; margin: calc(var(--lpt-space) / 2) 0; }
-.lpt-text-time { color: var(--lpt-muted); font-size: var(--lpt-small-font-size); }
-.lpt-reply { display: grid; gap: var(--lpt-space); margin-top: var(--lpt-space); }
-.lpt-reply-status { margin: 0; }
-.lpt-reply-status:empty { display: none; }
-.lpt-size-probe { visibility: hidden; pointer-events: none; position: fixed; width: var(--lpt-width); height: var(--lpt-height); max-width: calc(100vw - var(--lpt-space) * 4); max-height: calc(100dvh - var(--lpt-space) * 12); }
-.lpt-root [hidden] { display: none !important; }
-.lpt-root button, .lpt-root input, .lpt-root textarea, .lpt-root select { font: inherit; color: inherit; }
-.lpt-option { color: var(--lpt-text); background: var(--lpt-screen-bg); }
-.lpt-root button { cursor: pointer; }
-.lpt-root button:disabled { opacity: var(--lpt-opacity-disabled); cursor: default; }
-.lpt-root :focus-visible { outline: var(--lpt-focus-size) solid var(--lpt-accent); outline-offset: var(--lpt-focus-size); }
-.lpt-launcher { display: grid; place-items: center; width: var(--lpt-launcher-size); height: var(--lpt-launcher-size); border-radius: var(--lpt-radius); background: var(--lpt-fill); color: var(--lpt-accent); border: var(--lpt-border-size) solid var(--lpt-border); box-shadow: var(--lpt-shadow); }
-.lpt-icon { width: var(--lpt-icon-size); height: var(--lpt-icon-size); flex-shrink: 0; }
-.lpt-icon-path { fill: none; stroke: currentColor; stroke-width: var(--lpt-icon-stroke-size); stroke-linecap: round; stroke-linejoin: round; }
-.lpt-frame { width: 100%; height: 100%; max-width: 100%; max-height: 100%; background: var(--lpt-phone-bg); border: var(--lpt-frame-border-size) solid var(--lpt-border); border-radius: var(--lpt-frame-radius); box-shadow: var(--lpt-shadow); display: flex; flex-direction: column; overflow: hidden; }
-.lpt-speaker { width: calc(var(--lpt-space) * 4); height: calc(var(--lpt-border-size) * 3); margin: var(--lpt-space) auto 0; background: var(--lpt-border); border-radius: var(--lpt-radius); flex-shrink: 0; }
-.lpt-header { display: flex; gap: var(--lpt-space); align-items: center; padding: var(--lpt-space) calc(var(--lpt-space) * 2); flex-shrink: 0; }
-.lpt-heading { margin: 0; flex: 1; font-size: var(--lpt-title-size); font-weight: var(--lpt-strong-weight); }
-.lpt-back, .lpt-close, .lpt-dismiss { display: grid; place-items: center; padding: calc(var(--lpt-space) / 2); min-width: var(--lpt-control-size); min-height: var(--lpt-control-size); background: transparent; border: 0; border-radius: var(--lpt-radius); color: var(--lpt-muted); }
-.lpt-content { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: var(--lpt-space) calc(var(--lpt-space) * 2) calc(var(--lpt-space) * 3); }
-.lpt-home { display: grid; grid-template-columns: repeat(var(--lpt-grid-columns), minmax(0, 1fr)); gap: calc(var(--lpt-space) * 2) var(--lpt-space); padding-top: calc(var(--lpt-space) * 2); }
-.lpt-app-button { display: flex; flex-direction: column; align-items: center; gap: var(--lpt-space); padding: var(--lpt-space) 0; border: 0; background: transparent; border-radius: var(--lpt-radius); min-width: 0; }
-.lpt-app-icon { display: grid; place-items: center; width: calc(var(--lpt-icon-size) * 2.3); height: calc(var(--lpt-icon-size) * 2.3); background: var(--lpt-icon-fill); border: var(--lpt-border-size) solid var(--lpt-border); color: var(--lpt-accent); border-radius: calc(var(--lpt-radius) * 1.5); }
-.lpt-app-label { font-size: var(--lpt-small-font-size); font-weight: var(--lpt-strong-weight); }
-.lpt-description { display: flex; align-items: start; gap: var(--lpt-space); margin-bottom: calc(var(--lpt-space) * 2); color: var(--lpt-muted); font-size: var(--lpt-small-font-size); }
-.lpt-description-text { flex: 1; margin: 0; padding-top: var(--lpt-space); }
-.lpt-empty, .lpt-help, .lpt-status { color: var(--lpt-muted); font-size: var(--lpt-small-font-size); line-height: var(--lpt-line-height); }
-.lpt-empty { padding: calc(var(--lpt-space) * 2) 0; margin: 0; }
-.lpt-status { margin: 0; }
-.lpt-field { display: block; text-align: left; width: 100%; border: 0; border-bottom: var(--lpt-border-size) solid var(--lpt-border); background: transparent; padding: calc(var(--lpt-space) * 1.5) 0; overflow-wrap: anywhere; }
-.lpt-field-label { display: block; font-size: var(--lpt-small-font-size); color: var(--lpt-muted); }
-.lpt-field-value { display: block; white-space: pre-wrap; }
-.lpt-location .lpt-field-value { font-size: var(--lpt-location-size); font-weight: var(--lpt-strong-weight); }
-.lpt-wider { display: block; color: var(--lpt-muted); font-size: var(--lpt-small-font-size); }
-.lpt-present-list { padding-left: calc(var(--lpt-space) * 2.5); margin: var(--lpt-space) 0; }
-.lpt-marker { display: inline-block; color: var(--lpt-accent); font-size: var(--lpt-small-font-size); margin-right: var(--lpt-space); }
-.lpt-card { border: var(--lpt-border-size) solid var(--lpt-border); border-radius: var(--lpt-radius); margin: var(--lpt-space) 0; padding: 0 var(--lpt-space); overflow-wrap: anywhere; }
-.lpt-summary { cursor: pointer; padding: calc(var(--lpt-space) * 1.25) 0; }
-.lpt-card-title { font-weight: var(--lpt-strong-weight); }
-.lpt-card-subtitle { display: block; font-size: var(--lpt-small-font-size); color: var(--lpt-muted); }
-.lpt-card-body { padding-bottom: var(--lpt-space); }
-.lpt-section { margin-bottom: calc(var(--lpt-space) * 2); }
-.lpt-section-title { font-size: var(--lpt-font-size); font-weight: var(--lpt-strong-weight); margin: 0; }
-.lpt-section-header { display: flex; align-items: center; gap: var(--lpt-space); justify-content: space-between; }
-.lpt-counter { color: var(--lpt-muted); font-size: var(--lpt-small-font-size); }
-.lpt-note-line { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lpt-button, .lpt-add, .lpt-save, .lpt-cancel, .lpt-delete, .lpt-open-texts { min-height: var(--lpt-control-size); border: var(--lpt-border-size) solid var(--lpt-border); background: var(--lpt-subtle); padding: calc(var(--lpt-space) / 2) var(--lpt-space); border-radius: var(--lpt-radius); }
-.lpt-save { background: var(--lpt-accent); color: var(--lpt-accent-text); border-color: var(--lpt-accent); }
-.lpt-button:hover, .lpt-add:hover, .lpt-cancel:hover, .lpt-delete:hover, .lpt-open-texts:hover { border-color: var(--lpt-hover-border); }
-.lpt-actions { display: flex; flex-wrap: wrap; gap: var(--lpt-space); margin: var(--lpt-space) 0; }
-.lpt-form { display: grid; gap: var(--lpt-space); margin: var(--lpt-space) 0; padding: var(--lpt-space); border: var(--lpt-border-size) solid var(--lpt-accent); border-radius: var(--lpt-radius); }
-.lpt-label { display: grid; gap: calc(var(--lpt-space) / 2); font-size: var(--lpt-small-font-size); }
-.lpt-input, .lpt-textarea, .lpt-number, .lpt-css-editor { width: 100%; border: var(--lpt-border-size) solid var(--lpt-border); background: var(--lpt-fill); border-radius: var(--lpt-radius); padding: var(--lpt-space); min-height: var(--lpt-control-size); }
-.lpt-textarea { min-height: calc(var(--lpt-control-size) * 2); resize: vertical; }
-.lpt-css-editor { min-height: calc(var(--lpt-control-size) * 4); resize: vertical; }
-.lpt-setting { display: flex; gap: var(--lpt-space); justify-content: space-between; align-items: center; padding: var(--lpt-space) 0; border-bottom: var(--lpt-border-size) solid var(--lpt-border); }
-.lpt-setting-text { display: grid; gap: calc(var(--lpt-space) / 2); max-width: var(--lpt-max-label-width); }
-.lpt-setting-label { font-weight: var(--lpt-strong-weight); font-size: var(--lpt-small-font-size); }
-.lpt-setting-description { font-size: var(--lpt-small-font-size); color: var(--lpt-muted); }
-.lpt-toggle { accent-color: var(--lpt-accent); width: calc(var(--lpt-space) * 2.5); height: calc(var(--lpt-space) * 2.5); flex-shrink: 0; }
-.lpt-number { width: calc(var(--lpt-space) * 9); }
-.lpt-notice, .lpt-error { border: var(--lpt-border-size) solid var(--lpt-accent); border-radius: var(--lpt-radius); padding: var(--lpt-space); margin: var(--lpt-space) 0; font-size: var(--lpt-small-font-size); }
-.lpt-notice { display: flex; align-items: start; gap: var(--lpt-space); }
-.lpt-notice-text { flex: 1; }
-.lpt-error:empty, .lpt-status:empty { display: none; }
-.lpt-advanced { border-top: var(--lpt-border-size) solid var(--lpt-border); padding-top: var(--lpt-space); }
-/* Host-owned recovery surface: outside the phone shadow tree and never custom-styled. */
+
+/* Explicit Opaque Surface Guarantees */
+.lpt-frame,
+.lpt-root[data-open="true"] {
+  background-color: var(--lpt-phone-bg);
+}
+
+.lpt-content,
+.lpt-header,
+.lpt-home,
+.lpt-scene,
+.lpt-weather,
+.lpt-locations,
+.lpt-notes,
+.lpt-contacts,
+.lpt-messages,
+.lpt-settings {
+  background-color: var(--lpt-screen-bg);
+}
+
+.lpt-card,
+.lpt-section {
+  background-color: var(--lpt-card-bg);
+}
+
+.lpt-root[data-open="true"] {
+  width: 100%;
+  height: 100%;
+}
+
+.lpt-root[data-open="false"][data-notice="true"] {
+  width: 100%;
+}
+
+.lpt-size-probe {
+  visibility: hidden;
+  pointer-events: none;
+  position: fixed;
+  width: var(--lpt-width);
+  height: var(--lpt-height);
+  max-width: calc(100vw - var(--lpt-space) * 3);
+  max-height: calc(100dvh - var(--lpt-space) * 10);
+}
+
+.lpt-root [hidden] {
+  display: none !important;
+}
+
+.lpt-root button,
+.lpt-root input,
+.lpt-root textarea,
+.lpt-root select {
+  font: inherit;
+  color: inherit;
+  box-sizing: border-box;
+}
+
+.lpt-option {
+  color: var(--lpt-text);
+  background: var(--lpt-screen-bg);
+}
+
+.lpt-root button {
+  cursor: pointer;
+  transition:
+    background-color var(--lpt-transition),
+    border-color var(--lpt-transition),
+    color var(--lpt-transition),
+    transform var(--lpt-transition);
+}
+
+.lpt-root button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.lpt-root button:disabled {
+  opacity: var(--lpt-opacity-disabled);
+  cursor: default;
+}
+
+.lpt-root :focus-visible {
+  outline: var(--lpt-focus-size) solid var(--lpt-accent);
+  outline-offset: var(--lpt-focus-size);
+}
+
+/* Closed Floating Launcher */
+.lpt-launcher {
+  display: grid;
+  place-items: center;
+  width: var(--lpt-launcher-size);
+  height: var(--lpt-launcher-size);
+  border-radius: calc(var(--lpt-radius) * 1.4);
+  background: var(--lpt-card-bg);
+  color: var(--lpt-accent);
+  border: var(--lpt-border-size) solid var(--lpt-frame-edge);
+  box-shadow: var(--lpt-shadow);
+  box-sizing: border-box;
+}
+
+.lpt-launcher:hover {
+  border-color: var(--lpt-accent);
+  background: var(--lpt-elevated-bg);
+}
+
+/* SVG Icons */
+.lpt-icon {
+  width: var(--lpt-icon-size);
+  height: var(--lpt-icon-size);
+  flex-shrink: 0;
+}
+
+.lpt-icon-path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: var(--lpt-icon-stroke-size);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Outer Phone Frame, Top Notch Pill (::before), & Bottom Home Bar (::after) */
+.lpt-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  background: var(--lpt-phone-bg);
+  border: var(--lpt-frame-border-size) solid var(--lpt-frame-edge);
+  border-radius: var(--lpt-frame-radius);
+  box-shadow: var(--lpt-shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.lpt-frame::before {
+  content: "";
+  display: block;
+  width: var(--lpt-notch-width);
+  height: var(--lpt-notch-height);
+  margin: calc(var(--lpt-space) * 1.25) auto calc(var(--lpt-space) * 0.25);
+  background: var(--lpt-notch-bg);
+  border: var(--lpt-border-size) solid var(--lpt-border);
+  border-radius: 999px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.lpt-frame::after {
+  content: "";
+  display: block;
+  width: var(--lpt-home-bar-width);
+  height: var(--lpt-home-bar-height);
+  margin: calc(var(--lpt-space) * 0.75) auto calc(var(--lpt-space) * 1.25);
+  background: var(--lpt-home-bar-color);
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+/* Collapse original speaker line so the ::before notch pill sits cleanly alone */
+.lpt-speaker {
+  display: none;
+}
+
+/* Phone App Header */
+.lpt-header {
+  display: flex;
+  gap: var(--lpt-space);
+  align-items: center;
+  padding: calc(var(--lpt-space) * 0.75) calc(var(--lpt-space) * 2);
+  border-bottom: var(--lpt-border-size) solid var(--lpt-border);
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.lpt-heading {
+  margin: 0;
+  flex: 1;
+  font-size: var(--lpt-title-size);
+  font-weight: var(--lpt-strong-weight);
+  letter-spacing: -0.015em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lpt-back,
+.lpt-close,
+.lpt-dismiss {
+  display: grid;
+  place-items: center;
+  padding: calc(var(--lpt-space) * 0.5);
+  min-width: var(--lpt-control-size);
+  min-height: var(--lpt-control-size);
+  background: var(--lpt-card-bg);
+  border: var(--lpt-border-size) solid var(--lpt-border);
+  border-radius: 999px;
+  color: var(--lpt-muted);
+  box-sizing: border-box;
+}
+
+.lpt-back:hover,
+.lpt-close:hover,
+.lpt-dismiss:hover {
+  color: var(--lpt-text);
+  background: var(--lpt-elevated-bg);
+  border-color: var(--lpt-hover-border);
+}
+
+/* Scrollable App Content Area */
+.lpt-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding: calc(var(--lpt-space) * 2) calc(var(--lpt-space) * 2.25) calc(var(--lpt-space) * 3);
+  scrollbar-width: thin;
+  scrollbar-color: var(--lpt-hover-border) var(--lpt-screen-bg);
+  box-sizing: border-box;
+}
+
+/* Home Screen App Grid */
+.lpt-home {
+  display: grid;
+  grid-template-columns: repeat(var(--lpt-grid-columns), minmax(0, 1fr));
+  gap: calc(var(--lpt-space) * 2.75) calc(var(--lpt-space) * 1.5);
+  padding: calc(var(--lpt-space) * 2.5) calc(var(--lpt-space) * 0.5);
+  box-sizing: border-box;
+}
+
+/* Center the 7th item (Settings) in the middle column of the last 3-column row */
+.lpt-app-button:last-child:nth-child(3n + 1) {
+  grid-column: 2;
+}
+
+.lpt-app-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--lpt-space) * 1);
+  padding: calc(var(--lpt-space) * 0.75) calc(var(--lpt-space) * 0.5);
+  border: 0;
+  background: transparent;
+  border-radius: var(--lpt-card-radius);
+  min-width: 0;
+}
+
+.lpt-app-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--lpt-app-tile-size);
+  height: var(--lpt-app-tile-size);
+  background: var(--lpt-icon-fill);
+  border: var(--lpt-border-size) solid color-mix(in srgb, currentColor 26%, var(--lpt-border));
+  color: var(--lpt-accent);
+  border-radius: var(--lpt-icon-radius);
+  box-shadow: 0 6px 14px -4px rgba(0, 0, 0, 0.45);
+  transition:
+    transform var(--lpt-transition),
+    border-color var(--lpt-transition),
+    background-color var(--lpt-transition);
+  box-sizing: border-box;
+}
+
+/* Individual Opaque Soft Tints per Home App */
+.lpt-app-button[data-app="Scene"] .lpt-app-icon {
+  color: var(--lpt-tint-scene);
+  background: color-mix(in srgb, var(--lpt-tint-scene) 16%, var(--lpt-card-bg));
+}
+
+.lpt-app-button[data-app="Weather"] .lpt-app-icon {
+  color: var(--lpt-tint-weather);
+  background: color-mix(in srgb, var(--lpt-tint-weather) 16%, var(--lpt-card-bg));
+}
+
+.lpt-app-button[data-app="Locations"] .lpt-app-icon {
+  color: var(--lpt-tint-locations);
+  background: color-mix(in srgb, var(--lpt-tint-locations) 16%, var(--lpt-card-bg));
+}
+
+.lpt-app-button[data-app="Notes"] .lpt-app-icon {
+  color: var(--lpt-tint-notes);
+  background: color-mix(in srgb, var(--lpt-tint-notes) 16%, var(--lpt-card-bg));
+}
+
+.lpt-app-button[data-app="Contacts"] .lpt-app-icon {
+  color: var(--lpt-tint-contacts);
+  background: color-mix(in srgb, var(--lpt-tint-contacts) 16%, var(--lpt-card-bg));
+}
+
+.lpt-app-button[data-app="Messages"] .lpt-app-icon {
+  color: var(--lpt-tint-messages);
+  background: color-mix(in srgb, var(--lpt-tint-messages) 16%, var(--lpt-card-bg));
+}
+
+.lpt-app-button[data-app="Settings"] .lpt-app-icon {
+  color: var(--lpt-tint-settings);
+  background: color-mix(in srgb, var(--lpt-tint-settings) 16%, var(--lpt-card-bg));
+}
+
+.lpt-app-button:hover .lpt-app-icon {
+  transform: translateY(-2px);
+  border-color: currentColor;
+}
+
+.lpt-app-button:active .lpt-app-icon {
+  transform: scale(0.95);
+}
+
+.lpt-app-label {
+  font-size: var(--lpt-small-font-size);
+  font-weight: var(--lpt-strong-weight);
+  color: var(--lpt-text);
+  letter-spacing: 0.01em;
+}
+
+/* Unread Notification Badges */
+.lpt-unread-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  margin-left: var(--lpt-space);
+  border-radius: 999px;
+  color: var(--lpt-accent-text);
+  background: var(--lpt-accent);
+  font-size: 11px;
+  font-weight: var(--lpt-strong-weight);
+  line-height: 1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+  box-sizing: border-box;
+}
+
+.lpt-app-icon > .lpt-unread-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  margin-left: 0;
+  border: 2px solid var(--lpt-screen-bg);
+}
+
+/* App Intro Banner, Notices & Empty States */
+.lpt-description {
+  display: flex;
+  align-items: center;
+  gap: var(--lpt-space);
+  margin-bottom: calc(var(--lpt-space) * 2);
+  padding: calc(var(--lpt-space) * 1) calc(var(--lpt-space) * 1) calc(var(--lpt-space) * 1) calc(var(--lpt-space) * 1.5);
+  background: var(--lpt-card-bg);
+  border: var(--lpt-border-size) solid var(--lpt-border);
+  border-radius: var(--lpt-radius);
+  color: var(--lpt-muted);
+  font-size: var(--lpt-small-font-size);
+  box-sizing: border-box;
+}
+
+.lpt-description-text {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+}
+
+.lpt-empty,
+.lpt-help,
+.lpt-status {
+  color: var(--lpt-muted);
+  font-size: var(--lpt-small-font-size);
+  line-height: var(--lpt-line-height);
+}
+
+.lpt-empty {
+  padding: calc(var(--lpt-space) * 3) calc(var(--lpt-space) * 2);
+  margin: var(--lpt-space) 0;
+  text-align: center;
+  background: var(--lpt-card-bg);
+  border: var(--lpt-border-size) dashed var(--lpt-border);
+  border-radius: var(--lpt-card-radius);
+}
+
+.lpt-status {
+  margin: calc(var(--lpt-space) * 0.5) 0 0;
+}
+
+.lpt-notice,
+.lpt-error,
+.lpt-text-notice {
+  border: var(--lpt-border-size) solid var(--lpt-accent);
+  border-radius: var(--lpt-card-radius);
+  padding: calc(var(--lpt-space) * 1.25) calc(var(--lpt-space) * 1.5);
+  margin: var(--lpt-space) 0;
+  background: var(--lpt-card-bg);
+  color: var(--lpt-text);
+  font-size: var(--lpt-small-font-size);
+  overflow-wrap: anywhere;
+  box-sizing: border-box;
+}
+
+.lpt-text-notice {
+  flex-shrink: 0;
+  margin: var(--lpt-space) calc(var(--lpt-space) * 2) 0;
+  background: var(--lpt-elevated-bg);
+  font-weight: var(--lpt-strong-weight);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.lpt-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--lpt-space);
+}
+
+.lpt-notice-text {
+  flex: 1;
+}
+
+.lpt-error:empty,
+.lpt-status:empty {
+  display: none;
+}
+
+/* Tappable Fields (Scene, Weather, Contacts) */
+.lpt-field {
+  display: block;
+  text-align: left;
+  width: 100%;
+  border: var(--lpt-border-size) solid var(--lpt-border);
+  border-radius: var(--lpt-card-radius);
+  background: var(--lpt-card-bg);
+  padding: calc(var(--lpt-space) * 1.5) calc(var(--lpt-space) * 1.75);
+  margin-bottom: calc(var(--lpt-space) * 1.25);
+  overflow-wrap: anywhere;
+  box-sizing: border-box;
+}
+
+.lpt-field:hover {
+  background: var(--lpt-elevated-bg);
+  border-color: var(--lpt-hover-border);
+}
+
+.lpt-card-body .lpt-field {
+  background: var(--lpt-screen-bg);
+  border-radius: var(--lpt-radius);
+  padding: calc(var(--lpt-space) * 1.15) calc(var(--lpt-space) * 1.5);
+  margin-bottom: var(--lpt-space);
+}
+
+.lpt-card-body .lpt-field:hover {
+  background: var(--lpt-elevated-bg);
+}
+
+.lpt-field-label {
+  display: block;
+  font-size: 11px;
+  font-weight: var(--lpt-strong-weight);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--lpt-muted);
+  margin-bottom: calc(var(--lpt-space) * 0.35);
+}
+
+.lpt-field-value {
+  display: block;
+  white-space: pre-wrap;
+  font-weight: var(--lpt-weight);
+  color: var(--lpt-text);
+}
+
+.lpt-location {
+  background: var(--lpt-elevated-bg);
+  border-color: color-mix(in srgb, var(--lpt-accent) 42%, var(--lpt-border));
+  padding: calc(var(--lpt-space) * 2);
+}
+
+.lpt-location .lpt-field-value {
+  font-size: var(--lpt-location-size);
+  font-weight: var(--lpt-strong-weight);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  margin-top: 2px;
+}
+
+.lpt-wider {
+  display: block;
+  color: var(--lpt-muted);
+  font-size: var(--lpt-small-font-size);
+  margin-top: calc(var(--lpt-space) * 0.5);
+}
+
+.lpt-present-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--lpt-space) * 0.75);
+  list-style: none;
+  padding: 0;
+  margin: calc(var(--lpt-space) * 1) 0 0;
+}
+
+.lpt-present-name {
+  background: var(--lpt-elevated-bg);
+  border: var(--lpt-border-size) solid var(--lpt-border);
+  border-radius: 999px;
+  padding: calc(var(--lpt-space) * 0.35) calc(var(--lpt-space) * 1.25);
+  font-size: var(--lpt-small-font-size);
+  font-weight: var(--lpt-strong-weight);
+}
+
+.lpt-marker {
+  display: inline-block;
+  color: var(--lpt-accent);
+  background: color-mix(in srgb, var(--lpt-accent) 16%, var(--lpt-card-bg));
+  border: var(--lpt-border-size) solid color-mix(in srgb, var(--lpt-accent) 34%, var(--lpt-border));
+  border-radius: 999px;
+  padding: 1px calc(var(--lpt-space) * 0.9);
+  font-size: 11px;
+  font-weight: var(--lpt-strong-weight);
+  margin-top: calc(var(--lpt-space) * 0.5);
+  margin-right: calc(var(--lpt-space) * 0.75);
+}
+
+/* Expandable Cards & Sections */
+.lpt-card {
+  border: var(--lpt-border-size) solid var(--lpt-border);
+  border-radius: var(--lpt-card-radius);
+  margin: calc(var(--lpt-space) * 1.25) 0;
+  padding: 0;
+  background: var(--lpt-card-bg);
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  transition: border-color var(--lpt-transition), background-color var(--lpt-transition);
+  box-sizing: border-box;
+}
+
+.lpt-card:hover {
+  border-color: var(--lpt-hover-border);
+}
+
+.lpt-card[open] {
+  border-color: color-mix(in srgb, var(--lpt-accent) 45%, var(--lpt-border));
+}
+
+.lpt-summary {
+  cursor: pointer;
+  padding: calc(var(--lpt-space) * 1.5) calc(var(--lpt-space) * 1.75);
+  min-height: var(--lpt-control-size);
+  user-select: none;
+  transition: background-color var(--lpt-transition);
+  box-sizing: border-box;
+}
+
+.lpt-summary:hover {
+  background: var(--lpt-elevated-bg);
+}
+
+.lpt-card[open] > .lpt-summary {
+  background: var(--lpt-elevated-bg);
+  border-bottom: var(--lpt-border-size) solid var(--lpt-border);
+}
+
+.lpt-card-title {
+  font-weight: var(--lpt-strong-weight);
+  color: var(--lpt-text);
+}
+
+.lpt-card-subtitle {
+  display: block;
+  font-size: var(--lpt-small-font-size);
+  color: var(--lpt-muted);
+  margin-top: 2px;
+}
+
+.lpt-card-body {
+  padding: calc(var(--lpt-space) * 1.5) calc(var(--lpt-space) * 1.75);
+  background: var(--lpt-card-bg);
+  box-sizing: border-box;
+}
+
+.lpt-place-description,
+.lpt-note-full {
+  margin: 0 0 calc(var(--lpt-space) * 1.25);
+  white-space: pre-wrap;
+  color: var(--lpt-text);
+}
+
+/* Grouped Sections (Notes, Absent Contacts, Resolved Plots) */
+.lpt-section {
+  margin-bottom: calc(var(--lpt-space) * 2);
+  border: var(--lpt-border-size) solid var(--lpt-border);
+  border-radius: var(--lpt-card-radius);
+  padding: calc(var(--lpt-space) * 1.5);
+  background: var(--lpt-card-bg);
+  box-sizing: border-box;
+}
+
+.lpt-section-title {
+  font-size: var(--lpt-font-size);
+  font-weight: var(--lpt-strong-weight);
+  margin: 0;
+}
+
+.lpt-section-header {
+  display: flex;
+  align-items: center;
+  gap: var(--lpt-space);
+  justify-content: space-between;
+  margin-bottom: var(--lpt-space);
+}
+
+.lpt-section-body {
+  padding-top: calc(var(--lpt-space) * 0.5);
+}
+
+.lpt-counter {
+  color: var(--lpt-muted);
+  background: var(--lpt-screen-bg);
+  border: var(--lpt-border-size) solid var(--lpt-border);
+  border-radius: 999px;
+  padding: 2px calc(var(--lpt-space) * 1);
+  font-size: 11px;
+  font-weight: var(--lpt-strong-weight);
+}
+
+.lpt-note-line {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: var(--lpt-strong-weight);
+}
+
+.lpt-absent,
+.lpt-resolved {
+  margin-top: calc(var(--lpt-space) * 1.5);
+  border-style: dashed;
+}
+
+/* Messages App & Conversation Bubbles */
+.lpt-conversation {
+  margin: calc(var(--lpt-space) * 1.25) 0;
+}
+
+.lpt-text-list {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--lpt-space) * 1.25);
+  padding: calc(var(--lpt-space) * 0.5) 0 calc(var(--lpt-space) * 1.25);
+}
+
+.lpt-text-message {
+  display: flex;
+  flex-direction: column;
+  max-width: 85%;
+  margin: 0;
+  padding: calc(var(--lpt-space) * 1.25) calc(var(--lpt-space) * 1.5);
+  border-radius: var(--lpt-bubble-radius);
+  border: var(--lpt-border-size) solid var(--lpt-border);
+  background: var(--lpt-bubble-in-bg);
+  overflow-wrap: anywhere;
+  box-sizing: border-box;
+}
+
+.lpt-incoming {
+  align-self: flex-start;
+  background: var(--lpt-bubble-in-bg);
+  border-color: var(--lpt-border);
+  border-bottom-left-radius: 4px;
+}
+
+.lpt-outgoing {
+  align-self: flex-end;
+  background: var(--lpt-bubble-out-bg);
+  border-color: var(--lpt-bubble-out-border);
+  border-bottom-right-radius: 4px;
+}
+
+.lpt-text-sender {
+  font-size: 11px;
+  font-weight: var(--lpt-strong-weight);
+  color: var(--lpt-muted);
+  margin: 0 0 2px;
+}
+
+.lpt-outgoing .lpt-text-sender {
+  color: var(--lpt-accent);
+  text-align: right;
+}
+
+.lpt-text-body {
+  white-space: pre-wrap;
+  margin: 2px 0;
+  color: var(--lpt-text);
+}
+
+.lpt-text-time {
+  color: var(--lpt-muted);
+  font-size: 11px;
+  margin-top: 4px;
+  align-self: flex-end;
+}
+
+/* Message Composer / Reply Bar */
+.lpt-reply {
+  display: grid;
+  gap: var(--lpt-space);
+  margin-top: var(--lpt-space);
+  padding-top: calc(var(--lpt-space) * 1.5);
+  border-top: var(--lpt-border-size) solid var(--lpt-border);
+}
+
+.lpt-reply-input {
+  min-height: 44px;
+  max-height: 120px;
+  border-radius: 20px;
+  padding: calc(var(--lpt-space) * 1.25) calc(var(--lpt-space) * 1.75);
+  background: var(--lpt-screen-bg);
+  border: var(--lpt-border-size) solid var(--lpt-border);
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.lpt-reply-input:focus {
+  border-color: var(--lpt-accent);
+}
+
+.lpt-add-draft {
+  min-height: var(--lpt-control-size);
+  border-radius: 999px;
+  background: var(--lpt-accent);
+  color: var(--lpt-accent-text);
+  border: var(--lpt-border-size) solid var(--lpt-accent);
+  font-weight: var(--lpt-strong-weight);
+  padding: calc(var(--lpt-space) * 0.75) calc(var(--lpt-space) * 2);
+}
+
+.lpt-add-draft:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.lpt-reply-status {
+  margin: 0;
+  font-size: var(--lpt-small-font-size);
+  color: var(--lpt-muted);
+}
+
+.lpt-reply-status:empty {
+  display: none;
+}
+
+.lpt-manual-tag {
+  font-family: monospace;
+  font-size: var(--lpt-small-font-size);
+  background: var(--lpt-screen-bg);
+}
+
+/* Buttons & Action Bars */
+.lpt-button,
+.lpt-add,
+.lpt-save,
+.lpt-cancel,
+.lpt-delete,
+.lpt-open-texts,
+.lpt-update-now {
+  min-height: var(--lpt-control-size);
+  border: var(--lpt-border-size) solid var(--lpt-border);
+  background: var(--lpt-elevated-bg);
+  color: var(--lpt-text);
+  padding: calc(var(--lpt-space) * 0.65) calc(var(--lpt-space) * 1.5);
+  border-radius: var(--lpt-radius);
+  font-weight: var(--lpt-strong-weight);
+  font-size: var(--lpt-small-font-size);
+  box-sizing: border-box;
+}
+
+.lpt-save,
+.lpt-update-now {
+  background: var(--lpt-accent);
+  color: var(--lpt-accent-text);
+  border-color: var(--lpt-accent);
+}
+
+.lpt-button:hover:not(:disabled),
+.lpt-add:hover:not(:disabled),
+.lpt-cancel:hover:not(:disabled),
+.lpt-delete:hover:not(:disabled),
+.lpt-open-texts:hover:not(:disabled) {
+  border-color: var(--lpt-hover-border);
+  background: color-mix(in srgb, var(--lpt-elevated-bg) 85%, var(--lpt-text) 15%);
+}
+
+.lpt-save:hover:not(:disabled),
+.lpt-update-now:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.lpt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lpt-space);
+  margin: calc(var(--lpt-space) * 1.25) 0 0;
+}
+
+/* Forms & Text Inputs */
+.lpt-form {
+  display: grid;
+  gap: calc(var(--lpt-space) * 1.25);
+  margin: calc(var(--lpt-space) * 1.25) 0;
+  padding: calc(var(--lpt-space) * 1.75);
+  background: var(--lpt-card-bg);
+  border: var(--lpt-border-size) solid var(--lpt-accent);
+  border-radius: var(--lpt-card-radius);
+  box-sizing: border-box;
+}
+
+.lpt-label {
+  display: grid;
+  gap: calc(var(--lpt-space) * 0.5);
+  font-size: var(--lpt-small-font-size);
+  font-weight: var(--lpt-strong-weight);
+  color: var(--lpt-muted);
+}
+
+.lpt-input,
+.lpt-textarea,
+.lpt-number,
+.lpt-css-editor,
+.lpt-helper-source,
+.lpt-helper-connection {
+  width: 100%;
+  border: var(--lpt-border-size) solid var(--lpt-border);
+  background: var(--lpt-screen-bg);
+  color: var(--lpt-text);
+  border-radius: var(--lpt-radius);
+  padding: calc(var(--lpt-space) * 1) calc(var(--lpt-space) * 1.25);
+  min-height: var(--lpt-control-size);
+  transition: border-color var(--lpt-transition);
+  box-sizing: border-box;
+}
+
+.lpt-input:focus,
+.lpt-textarea:focus,
+.lpt-number:focus,
+.lpt-css-editor:focus,
+.lpt-helper-source:focus,
+.lpt-helper-connection:focus {
+  border-color: var(--lpt-accent);
+}
+
+.lpt-textarea {
+  min-height: calc(var(--lpt-control-size) * 2.2);
+  resize: vertical;
+}
+
+.lpt-css-editor {
+  min-height: calc(var(--lpt-control-size) * 4);
+  font-family: monospace;
+  font-size: var(--lpt-small-font-size);
+  resize: vertical;
+}
+
+/* Settings App: Grouped Sections & Clean Pill Toggle Switches */
+.lpt-settings-group,
+.lpt-helper-settings {
+  background: var(--lpt-card-bg);
+  border: var(--lpt-border-size) solid var(--lpt-border);
+  border-radius: var(--lpt-card-radius);
+  padding: calc(var(--lpt-space) * 1.25) calc(var(--lpt-space) * 1.75);
+  margin-bottom: calc(var(--lpt-space) * 2);
+  box-sizing: border-box;
+}
+
+.lpt-setting {
+  display: flex;
+  gap: calc(var(--lpt-space) * 1.5);
+  justify-content: space-between;
+  align-items: center;
+  padding: calc(var(--lpt-space) * 1.25) 0;
+  border-bottom: var(--lpt-border-size) solid var(--lpt-border);
+}
+
+.lpt-setting:last-child {
+  border-bottom: 0;
+}
+
+.lpt-setting-text {
+  display: grid;
+  gap: 2px;
+  max-width: var(--lpt-max-label-width);
+}
+
+.lpt-setting-label {
+  font-weight: var(--lpt-strong-weight);
+  font-size: var(--lpt-font-size);
+  color: var(--lpt-text);
+}
+
+.lpt-setting-description {
+  font-size: var(--lpt-small-font-size);
+  color: var(--lpt-muted);
+  line-height: 1.35;
+}
+
+/* Custom iOS/Phone Pill Toggle Switch */
+.lpt-toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: var(--lpt-toggle-width);
+  height: var(--lpt-toggle-height);
+  border-radius: 999px;
+  background: var(--lpt-screen-bg);
+  border: var(--lpt-border-size) solid var(--lpt-hover-border);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin: 0;
+  transition: background-color var(--lpt-transition), border-color var(--lpt-transition);
+  box-sizing: border-box;
+}
+
+.lpt-toggle::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: calc(var(--lpt-toggle-height) - 6px);
+  height: calc(var(--lpt-toggle-height) - 6px);
+  border-radius: 50%;
+  background: var(--lpt-muted);
+  transition: transform var(--lpt-transition), background-color var(--lpt-transition);
+}
+
+.lpt-toggle:checked {
+  background: var(--lpt-accent);
+  border-color: var(--lpt-accent);
+}
+
+.lpt-toggle:checked::after {
+  background: var(--lpt-toggle-thumb);
+  transform: translateX(calc(var(--lpt-toggle-width) - var(--lpt-toggle-height)));
+}
+
+.lpt-number {
+  width: calc(var(--lpt-space) * 9);
+  text-align: center;
+}
+
+/* Secondary Advanced & Custom CSS Sections */
+.lpt-advanced,
+.lpt-custom-css {
+  margin-top: calc(var(--lpt-space) * 2);
+  border: var(--lpt-border-size) solid var(--lpt-border);
+  border-radius: var(--lpt-card-radius);
+  background: var(--lpt-screen-bg);
+  padding: 0 calc(var(--lpt-space) * 1.5);
+  box-sizing: border-box;
+}
+
+.lpt-advanced > .lpt-summary,
+.lpt-custom-css > .lpt-summary {
+  color: var(--lpt-muted);
+  font-size: var(--lpt-small-font-size);
+  font-weight: var(--lpt-strong-weight);
+  padding: calc(var(--lpt-space) * 1.25) 0;
+}
+
+.lpt-advanced[open],
+.lpt-custom-css[open] {
+  background: var(--lpt-card-bg);
+  padding-bottom: calc(var(--lpt-space) * 1.5);
+}
+
+/* Responsive adjustments for narrow mobile screens */
+@media (max-width: 420px) {
+  .lpt-root {
+    --lpt-frame-radius: 28px;
+    --lpt-app-tile-size: 58px;
+    --lpt-title-size: 17px;
+    --lpt-location-size: 21px;
+  }
+
+  .lpt-content {
+    padding: calc(var(--lpt-space) * 1.5) calc(var(--lpt-space) * 1.5) calc(var(--lpt-space) * 2.5);
+  }
+
+  .lpt-home {
+    gap: calc(var(--lpt-space) * 2) var(--lpt-space);
+  }
+}
+
+/* Host-owned recovery surface: outside the phone shadow tree and never custom-styled[cite: 2]. */
 .lpt-transport { display: flex; flex-direction: column; height: 48px; width: 48px; overflow: hidden; }
 .lpt-viewport { flex: 1; min-height: 0; width: 100%; overflow: clip; contain: layout paint size; position: relative; }
 .lpt-island { display: block; width: 100%; height: 100%; }

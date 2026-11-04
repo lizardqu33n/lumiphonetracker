@@ -1,6 +1,10 @@
-# Verification report - 0.6.0
+# Verification report - 0.6.1
 
 Checked November 4, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **This test environment did not have a real Lumiverse install or a real model connection. No paid model request was made.**
+
+## Stylesheet update
+
+The supplied stylesheet is copied byte-for-byte into src/styles.css. STYLING.md documents its 62 variables and 107 stable classes. The browser suite also exposed fractional-height rounding that clipped the closed-phone text notice; its measured height now rounds up. No navigation, tracker rules or class names changed.
 
 ## Passed in code
 
@@ -40,6 +44,6 @@ Checked November 4, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, o
 - Actual outgoing provider prompt stripping (default recent texts 3, trackers 0), configured retention, source markers and media preservation. Code tests verify transformations, not a final network payload. Helper input is tested separately to strip ALL phone tags.
 - Human first-use clarity: a new person should identify each app within about five seconds. No human usability study was performed. Custom CSS can intentionally make the phone transparent or hide it; native recovery still needs a real-host check.
 
-The earlier real-install v0.4.1 failure was user-reported. Its layout cause was reproduced locally and retained as a regression, but this environment has not validated 0.6.0 in that install. Publishing source to GitHub does not verify native installation or make a model request.
+The earlier real-install v0.4.1 failure was user-reported. Its layout cause was reproduced locally and retained as a regression, but this environment has not validated 0.6.1 in that install. Publishing source to GitHub does not verify native installation or make a model request.
 
 Earlier reports: [Step 5](docs/STEP-5-TESTING.md), [Step 4](docs/STEP-4-TESTING.md), [Step 3](docs/STEP-3-TESTING.md). Previous archives are preserved. All six build steps are delivered; work is paused for review.

@@ -597,7 +597,7 @@ class PhoneView {
     const height = node.offsetHeight || Number.parseFloat(computed.height);
     if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0)
       return;
-    const closedHeight = this.textNotice.hidden ? height : Math.max(48, this.root.offsetHeight);
+    const closedHeight = this.textNotice.hidden ? height : Math.max(48, Math.ceil(this.root.getBoundingClientRect().height));
     this.actions.size(Math.max(48, width), Math.max(48, this.openState ? height : closedHeight), this.openState);
   }
   navigate(app) {
@@ -1352,148 +1352,1122 @@ class PhoneView {
 }
 
 // src/styles.css
-var styles_default = `/* All phone defaults live on this one root. Theme tokens are documented by Lumiverse. */
-.lpt-root {
-  --lpt-text: var(--lumiverse-text, CanvasText);
-  --lpt-muted: var(--lumiverse-text-muted, GrayText);
-  --lpt-phone-bg: #19171f;
-  --lpt-screen-bg: #19171f;
-  --lpt-card-bg: #24212d;
-  --lpt-fill: var(--lpt-screen-bg);
-  --lpt-subtle: var(--lpt-card-bg);
-  --lpt-accent: var(--lumiverse-accent, Highlight);
-  --lpt-accent-text: var(--lumiverse-accent-fg, HighlightText);
-  --lpt-border: var(--lumiverse-border, ButtonBorder);
-  --lpt-hover-border: var(--lumiverse-border-hover, ButtonBorder);
-  --lpt-radius: var(--lumiverse-radius, 10px);
-  --lpt-frame-radius: calc(var(--lpt-radius) * 3);
-  --lpt-font: inherit;
-  --lpt-font-size: 14px;
-  --lpt-small-font-size: 12px;
-  --lpt-title-size: 21px;
-  --lpt-location-size: 26px;
-  --lpt-weight: 450;
-  --lpt-strong-weight: 650;
-  --lpt-line-height: 1.5;
-  --lpt-space: 8px;
-  --lpt-width: 350px;
-  --lpt-height: 590px;
-  --lpt-launcher-size: 48px;
-  --lpt-icon-size: 24px;
-  --lpt-icon-stroke-size: 2px;
-  --lpt-control-size: 38px;
-  --lpt-border-size: 1px;
-  --lpt-frame-border-size: 3px;
-  --lpt-shadow: 0 10px 38px color-mix(in srgb, var(--lpt-text) 13%, transparent);
-  --lpt-icon-fill: color-mix(in srgb, var(--lpt-accent) 10%, var(--lpt-fill));
-  --lpt-focus-size: 2px;
-  --lpt-opacity-disabled: .55;
-  --lpt-grid-columns: 3;
-  --lpt-max-label-width: 18rem;
-  color: var(--lpt-text); font-family: var(--lpt-font); font-size: var(--lpt-font-size);
-  line-height: var(--lpt-line-height); font-weight: var(--lpt-weight);
-  box-sizing: border-box; width: fit-content; max-width: 100%;
-}
-/* Composite translucent theme fills over explicit dark defaults, with alpha 1.
-   Older browsers retain the solid defaults. All editable tokens stay on lpt-root. */
-@supports (color: rgb(from red calc(r * alpha + 25 * (1 - alpha)) g b / 1)) {
-  .lpt-root {
-    --lpt-phone-bg: rgb(from var(--lumiverse-fill, #19171f) calc(r * alpha + 25 * (1 - alpha)) calc(g * alpha + 23 * (1 - alpha)) calc(b * alpha + 31 * (1 - alpha)) / 1);
-    --lpt-screen-bg: var(--lpt-phone-bg);
-    --lpt-card-bg: color-mix(in srgb, rgb(from var(--lumiverse-fill-subtle, #24212d) calc(r * alpha + 36 * (1 - alpha)) calc(g * alpha + 33 * (1 - alpha)) calc(b * alpha + 45 * (1 - alpha)) / 1) 92%, rgb(from var(--lumiverse-text, #ece9f1) r g b / 1) 8%);
-  }
-}
-.lpt-frame, .lpt-root[data-open="true"] { background-color: var(--lpt-phone-bg); }
-.lpt-content, .lpt-header, .lpt-home, .lpt-scene, .lpt-weather, .lpt-locations,
-.lpt-notes, .lpt-contacts, .lpt-messages, .lpt-settings { background-color: var(--lpt-screen-bg); }
-.lpt-card, .lpt-section { background-color: var(--lpt-card-bg); }
-.lpt-root *, .lpt-root *::before, .lpt-root *::after { box-sizing: border-box; }
-.lpt-root[data-open="true"] { width: 100%; height: 100%; }
-.lpt-root[data-open="false"][data-notice="true"] { width: 100%; }
-.lpt-app-icon { position: relative; }
-.lpt-unread-badge { display: inline-block; min-width: calc(var(--lpt-space) * 2.5); padding: 0 calc(var(--lpt-space) / 2); margin-left: var(--lpt-space); border-radius: var(--lpt-radius); color: var(--lpt-accent-text); background: var(--lpt-accent); font-size: var(--lpt-small-font-size); text-align: center; }
-.lpt-app-icon > .lpt-unread-badge { position: absolute; top: calc(var(--lpt-space) / -2); right: calc(var(--lpt-space) / -2); }
-.lpt-text-notice { flex-shrink: 0; margin: var(--lpt-space); padding: var(--lpt-space); border: var(--lpt-border-size) solid var(--lpt-border); border-radius: var(--lpt-radius); color: var(--lpt-text); background: var(--lpt-card-bg); font-size: var(--lpt-small-font-size); overflow-wrap: anywhere; }
-.lpt-text-message { margin: var(--lpt-space) 0; padding: var(--lpt-space); background: var(--lpt-screen-bg); border: var(--lpt-border-size) solid var(--lpt-border); border-radius: var(--lpt-radius); overflow-wrap: anywhere; }
-.lpt-outgoing { border-color: var(--lpt-accent); }
-.lpt-text-sender { font-size: var(--lpt-small-font-size); font-weight: var(--lpt-strong-weight); margin: 0; }
-.lpt-text-body { white-space: pre-wrap; margin: calc(var(--lpt-space) / 2) 0; }
-.lpt-text-time { color: var(--lpt-muted); font-size: var(--lpt-small-font-size); }
-.lpt-reply { display: grid; gap: var(--lpt-space); margin-top: var(--lpt-space); }
-.lpt-reply-status { margin: 0; }
-.lpt-reply-status:empty { display: none; }
-.lpt-size-probe { visibility: hidden; pointer-events: none; position: fixed; width: var(--lpt-width); height: var(--lpt-height); max-width: calc(100vw - var(--lpt-space) * 4); max-height: calc(100dvh - var(--lpt-space) * 12); }
-.lpt-root [hidden] { display: none !important; }
-.lpt-root button, .lpt-root input, .lpt-root textarea, .lpt-root select { font: inherit; color: inherit; }
-.lpt-option { color: var(--lpt-text); background: var(--lpt-screen-bg); }
-.lpt-root button { cursor: pointer; }
-.lpt-root button:disabled { opacity: var(--lpt-opacity-disabled); cursor: default; }
-.lpt-root :focus-visible { outline: var(--lpt-focus-size) solid var(--lpt-accent); outline-offset: var(--lpt-focus-size); }
-.lpt-launcher { display: grid; place-items: center; width: var(--lpt-launcher-size); height: var(--lpt-launcher-size); border-radius: var(--lpt-radius); background: var(--lpt-fill); color: var(--lpt-accent); border: var(--lpt-border-size) solid var(--lpt-border); box-shadow: var(--lpt-shadow); }
-.lpt-icon { width: var(--lpt-icon-size); height: var(--lpt-icon-size); flex-shrink: 0; }
-.lpt-icon-path { fill: none; stroke: currentColor; stroke-width: var(--lpt-icon-stroke-size); stroke-linecap: round; stroke-linejoin: round; }
-.lpt-frame { width: 100%; height: 100%; max-width: 100%; max-height: 100%; background: var(--lpt-phone-bg); border: var(--lpt-frame-border-size) solid var(--lpt-border); border-radius: var(--lpt-frame-radius); box-shadow: var(--lpt-shadow); display: flex; flex-direction: column; overflow: hidden; }
-.lpt-speaker { width: calc(var(--lpt-space) * 4); height: calc(var(--lpt-border-size) * 3); margin: var(--lpt-space) auto 0; background: var(--lpt-border); border-radius: var(--lpt-radius); flex-shrink: 0; }
-.lpt-header { display: flex; gap: var(--lpt-space); align-items: center; padding: var(--lpt-space) calc(var(--lpt-space) * 2); flex-shrink: 0; }
-.lpt-heading { margin: 0; flex: 1; font-size: var(--lpt-title-size); font-weight: var(--lpt-strong-weight); }
-.lpt-back, .lpt-close, .lpt-dismiss { display: grid; place-items: center; padding: calc(var(--lpt-space) / 2); min-width: var(--lpt-control-size); min-height: var(--lpt-control-size); background: transparent; border: 0; border-radius: var(--lpt-radius); color: var(--lpt-muted); }
-.lpt-content { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: var(--lpt-space) calc(var(--lpt-space) * 2) calc(var(--lpt-space) * 3); }
-.lpt-home { display: grid; grid-template-columns: repeat(var(--lpt-grid-columns), minmax(0, 1fr)); gap: calc(var(--lpt-space) * 2) var(--lpt-space); padding-top: calc(var(--lpt-space) * 2); }
-.lpt-app-button { display: flex; flex-direction: column; align-items: center; gap: var(--lpt-space); padding: var(--lpt-space) 0; border: 0; background: transparent; border-radius: var(--lpt-radius); min-width: 0; }
-.lpt-app-icon { display: grid; place-items: center; width: calc(var(--lpt-icon-size) * 2.3); height: calc(var(--lpt-icon-size) * 2.3); background: var(--lpt-icon-fill); border: var(--lpt-border-size) solid var(--lpt-border); color: var(--lpt-accent); border-radius: calc(var(--lpt-radius) * 1.5); }
-.lpt-app-label { font-size: var(--lpt-small-font-size); font-weight: var(--lpt-strong-weight); }
-.lpt-description { display: flex; align-items: start; gap: var(--lpt-space); margin-bottom: calc(var(--lpt-space) * 2); color: var(--lpt-muted); font-size: var(--lpt-small-font-size); }
-.lpt-description-text { flex: 1; margin: 0; padding-top: var(--lpt-space); }
-.lpt-empty, .lpt-help, .lpt-status { color: var(--lpt-muted); font-size: var(--lpt-small-font-size); line-height: var(--lpt-line-height); }
-.lpt-empty { padding: calc(var(--lpt-space) * 2) 0; margin: 0; }
-.lpt-status { margin: 0; }
-.lpt-field { display: block; text-align: left; width: 100%; border: 0; border-bottom: var(--lpt-border-size) solid var(--lpt-border); background: transparent; padding: calc(var(--lpt-space) * 1.5) 0; overflow-wrap: anywhere; }
-.lpt-field-label { display: block; font-size: var(--lpt-small-font-size); color: var(--lpt-muted); }
-.lpt-field-value { display: block; white-space: pre-wrap; }
-.lpt-location .lpt-field-value { font-size: var(--lpt-location-size); font-weight: var(--lpt-strong-weight); }
-.lpt-wider { display: block; color: var(--lpt-muted); font-size: var(--lpt-small-font-size); }
-.lpt-present-list { padding-left: calc(var(--lpt-space) * 2.5); margin: var(--lpt-space) 0; }
-.lpt-marker { display: inline-block; color: var(--lpt-accent); font-size: var(--lpt-small-font-size); margin-right: var(--lpt-space); }
-.lpt-card { border: var(--lpt-border-size) solid var(--lpt-border); border-radius: var(--lpt-radius); margin: var(--lpt-space) 0; padding: 0 var(--lpt-space); overflow-wrap: anywhere; }
-.lpt-summary { cursor: pointer; padding: calc(var(--lpt-space) * 1.25) 0; }
-.lpt-card-title { font-weight: var(--lpt-strong-weight); }
-.lpt-card-subtitle { display: block; font-size: var(--lpt-small-font-size); color: var(--lpt-muted); }
-.lpt-card-body { padding-bottom: var(--lpt-space); }
-.lpt-section { margin-bottom: calc(var(--lpt-space) * 2); }
-.lpt-section-title { font-size: var(--lpt-font-size); font-weight: var(--lpt-strong-weight); margin: 0; }
-.lpt-section-header { display: flex; align-items: center; gap: var(--lpt-space); justify-content: space-between; }
-.lpt-counter { color: var(--lpt-muted); font-size: var(--lpt-small-font-size); }
-.lpt-note-line { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lpt-button, .lpt-add, .lpt-save, .lpt-cancel, .lpt-delete, .lpt-open-texts { min-height: var(--lpt-control-size); border: var(--lpt-border-size) solid var(--lpt-border); background: var(--lpt-subtle); padding: calc(var(--lpt-space) / 2) var(--lpt-space); border-radius: var(--lpt-radius); }
-.lpt-save { background: var(--lpt-accent); color: var(--lpt-accent-text); border-color: var(--lpt-accent); }
-.lpt-button:hover, .lpt-add:hover, .lpt-cancel:hover, .lpt-delete:hover, .lpt-open-texts:hover { border-color: var(--lpt-hover-border); }
-.lpt-actions { display: flex; flex-wrap: wrap; gap: var(--lpt-space); margin: var(--lpt-space) 0; }
-.lpt-form { display: grid; gap: var(--lpt-space); margin: var(--lpt-space) 0; padding: var(--lpt-space); border: var(--lpt-border-size) solid var(--lpt-accent); border-radius: var(--lpt-radius); }
-.lpt-label { display: grid; gap: calc(var(--lpt-space) / 2); font-size: var(--lpt-small-font-size); }
-.lpt-input, .lpt-textarea, .lpt-number, .lpt-css-editor { width: 100%; border: var(--lpt-border-size) solid var(--lpt-border); background: var(--lpt-fill); border-radius: var(--lpt-radius); padding: var(--lpt-space); min-height: var(--lpt-control-size); }
-.lpt-textarea { min-height: calc(var(--lpt-control-size) * 2); resize: vertical; }
-.lpt-css-editor { min-height: calc(var(--lpt-control-size) * 4); resize: vertical; }
-.lpt-setting { display: flex; gap: var(--lpt-space); justify-content: space-between; align-items: center; padding: var(--lpt-space) 0; border-bottom: var(--lpt-border-size) solid var(--lpt-border); }
-.lpt-setting-text { display: grid; gap: calc(var(--lpt-space) / 2); max-width: var(--lpt-max-label-width); }
-.lpt-setting-label { font-weight: var(--lpt-strong-weight); font-size: var(--lpt-small-font-size); }
-.lpt-setting-description { font-size: var(--lpt-small-font-size); color: var(--lpt-muted); }
-.lpt-toggle { accent-color: var(--lpt-accent); width: calc(var(--lpt-space) * 2.5); height: calc(var(--lpt-space) * 2.5); flex-shrink: 0; }
-.lpt-number { width: calc(var(--lpt-space) * 9); }
-.lpt-notice, .lpt-error { border: var(--lpt-border-size) solid var(--lpt-accent); border-radius: var(--lpt-radius); padding: var(--lpt-space); margin: var(--lpt-space) 0; font-size: var(--lpt-small-font-size); }
-.lpt-notice { display: flex; align-items: start; gap: var(--lpt-space); }
-.lpt-notice-text { flex: 1; }
-.lpt-error:empty, .lpt-status:empty { display: none; }
-.lpt-advanced { border-top: var(--lpt-border-size) solid var(--lpt-border); padding-top: var(--lpt-space); }
-/* Host-owned recovery surface: outside the phone shadow tree and never custom-styled. */
-.lpt-transport { display: flex; flex-direction: column; height: 48px; width: 48px; overflow: hidden; }
-.lpt-viewport { flex: 1; min-height: 0; width: 100%; overflow: clip; contain: layout paint size; position: relative; }
-.lpt-island { display: block; width: 100%; height: 100%; }
-.lpt-recovery-actions { display: flex; gap: .5em; }
-.lpt-recovery-actions .lpt-recovery-button { flex: 1; min-width: 0; white-space: normal; }
-.lpt-recovery-button { font: inherit; color: inherit; min-height: 2em; padding: .2em .7em; background: var(--lumiverse-fill-subtle, Canvas); border: 1px solid var(--lumiverse-border, ButtonBorder); border-radius: var(--lumiverse-radius, 10px); cursor: pointer; }
-.lpt-recovery-status { font: inherit; color: var(--lumiverse-text-muted, GrayText); }
-.lpt-recovery-panel { padding: 1em; display: grid; gap: .75em; color: var(--lumiverse-text, CanvasText); font: inherit; }
-`;
+var styles_default = `/* All phone defaults live on this one root[cite: 2]. Theme tokens are documented by Lumiverse[cite: 2]. */\r
+.lpt-root {\r
+  /* Core Surfaces (Strictly Opaque) */\r
+  --lpt-phone-bg: #121017;\r
+  --lpt-screen-bg: #15131c;\r
+  --lpt-card-bg: #1f1c29;\r
+  --lpt-elevated-bg: #292536;\r
+  --lpt-fill: var(--lpt-screen-bg);\r
+  --lpt-subtle: var(--lpt-card-bg);\r
+\r
+  /* Typography & Accent Colors */\r
+  --lpt-text: var(--lumiverse-text, #f0edf6);\r
+  --lpt-muted: var(--lumiverse-text-muted, #9b95aa);\r
+  --lpt-accent: var(--lumiverse-accent, #a485f7);\r
+  --lpt-accent-text: var(--lumiverse-accent-fg, #120f1d);\r
+\r
+  /* Borders & Highlights */\r
+  --lpt-border: #2d293b;\r
+  --lpt-hover-border: #47405c;\r
+  --lpt-frame-edge: #353047;\r
+\r
+  /* Hardware Details (Notch & Home Bar) */\r
+  --lpt-notch-bg: #09080c;\r
+  --lpt-notch-width: 76px;\r
+  --lpt-notch-height: 18px;\r
+  --lpt-home-bar-width: 112px;\r
+  --lpt-home-bar-height: 4px;\r
+  --lpt-home-bar-color: #3f3952;\r
+\r
+  /* App Icon Tints (Soft Hues, Opaque Bases Calculated per App) */\r
+  --lpt-tint-scene: #b494ff;\r
+  --lpt-tint-weather: #72bdf5;\r
+  --lpt-tint-locations: #66d4a5;\r
+  --lpt-tint-notes: #f0bf6c;\r
+  --lpt-tint-contacts: #f08ca6;\r
+  --lpt-tint-messages: #8ea2ff;\r
+  --lpt-tint-settings: #b0a9c4;\r
+\r
+  /* Messaging Bubbles (Opaque) */\r
+  --lpt-bubble-in-bg: #272333;\r
+  --lpt-bubble-out-bg: #362859;\r
+  --lpt-bubble-out-border: #5a4294;\r
+  --lpt-bubble-radius: 18px;\r
+\r
+  /* Toggle Switch Tokens */\r
+  --lpt-toggle-width: 42px;\r
+  --lpt-toggle-height: 24px;\r
+  --lpt-toggle-thumb: #ffffff;\r
+\r
+  /* Radii & Spacing */\r
+  --lpt-radius: var(--lumiverse-radius, 12px);\r
+  --lpt-card-radius: 16px;\r
+  --lpt-icon-radius: 20px;\r
+  --lpt-frame-radius: 40px;\r
+  --lpt-space: 8px;\r
+\r
+  /* Typography Metrics */\r
+  --lpt-font: inherit;\r
+  --lpt-font-size: 14px;\r
+  --lpt-small-font-size: 12px;\r
+  --lpt-title-size: 18px;\r
+  --lpt-location-size: 24px;\r
+  --lpt-weight: 450;\r
+  --lpt-strong-weight: 650;\r
+  --lpt-line-height: 1.45;\r
+\r
+  /* Dimensions & Controls */\r
+  --lpt-width: 356px;\r
+  --lpt-height: 620px;\r
+  --lpt-launcher-size: 50px;\r
+  --lpt-icon-size: 26px;\r
+  --lpt-app-tile-size: 64px;\r
+  --lpt-icon-stroke-size: 2px;\r
+  --lpt-control-size: 38px;\r
+  --lpt-border-size: 1px;\r
+  --lpt-frame-border-size: 2px;\r
+  --lpt-focus-size: 2px;\r
+  --lpt-opacity-disabled: 0.5;\r
+  --lpt-grid-columns: 3;\r
+  --lpt-max-label-width: 17rem;\r
+\r
+  /* Shadows & Transitions */\r
+  --lpt-shadow:\r
+    0 22px 54px -10px rgba(0, 0, 0, 0.72),\r
+    0 4px 16px -2px rgba(0, 0, 0, 0.48),\r
+    inset 0 1px 0 0 var(--lpt-frame-edge);\r
+  --lpt-icon-fill: color-mix(in srgb, var(--lpt-accent) 16%, var(--lpt-card-bg));\r
+  --lpt-transition: 150ms cubic-bezier(0.22, 1, 0.36, 1);\r
+\r
+  color: var(--lpt-text);\r
+  font-family: var(--lpt-font);\r
+  font-size: var(--lpt-font-size);\r
+  line-height: var(--lpt-line-height);\r
+  font-weight: var(--lpt-weight);\r
+  box-sizing: border-box;\r
+  width: fit-content;\r
+  max-width: 100%;\r
+}\r
+\r
+/* Composite translucent theme fills over explicit dark defaults, with alpha 1[cite: 2].\r
+   Older browsers retain the solid defaults[cite: 2]. All editable tokens stay on lpt-root[cite: 2]. */\r
+@supports (color: rgb(from red calc(r * alpha + 20 * (1 - alpha)) g b / 1)) {\r
+  .lpt-root {\r
+    --lpt-phone-bg: rgb(from var(--lumiverse-fill, #121017) calc(r * alpha + 18 * (1 - alpha)) calc(g * alpha + 16 * (1 - alpha)) calc(b * alpha + 23 * (1 - alpha)) / 1);\r
+    --lpt-screen-bg: rgb(from var(--lumiverse-fill, #15131c) calc(r * alpha + 21 * (1 - alpha)) calc(g * alpha + 19 * (1 - alpha)) calc(b * alpha + 28 * (1 - alpha)) / 1);\r
+    --lpt-card-bg: color-mix(in srgb, rgb(from var(--lumiverse-fill-subtle, #1f1c29) calc(r * alpha + 31 * (1 - alpha)) calc(g * alpha + 28 * (1 - alpha)) calc(b * alpha + 41 * (1 - alpha)) / 1) 93%, rgb(from var(--lumiverse-text, #f0edf6) r g b / 1) 7%);\r
+    --lpt-elevated-bg: color-mix(in srgb, var(--lpt-card-bg) 86%, rgb(from var(--lumiverse-text, #f0edf6) r g b / 1) 14%);\r
+    --lpt-border: color-mix(in srgb, var(--lpt-card-bg) 82%, rgb(from var(--lumiverse-text, #f0edf6) r g b / 1) 18%);\r
+    --lpt-hover-border: color-mix(in srgb, var(--lpt-card-bg) 66%, rgb(from var(--lumiverse-text, #f0edf6) r g b / 1) 34%);\r
+    --lpt-frame-edge: color-mix(in srgb, var(--lpt-phone-bg) 76%, rgb(from var(--lumiverse-text, #f0edf6) r g b / 1) 24%);\r
+    --lpt-bubble-in-bg: var(--lpt-elevated-bg);\r
+    --lpt-bubble-out-bg: color-mix(in srgb, var(--lpt-accent) 26%, var(--lpt-card-bg));\r
+    --lpt-bubble-out-border: color-mix(in srgb, var(--lpt-accent) 52%, var(--lpt-card-bg));\r
+  }\r
+}\r
+\r
+/* Explicit Opaque Surface Guarantees */\r
+.lpt-frame,\r
+.lpt-root[data-open="true"] {\r
+  background-color: var(--lpt-phone-bg);\r
+}\r
+\r
+.lpt-content,\r
+.lpt-header,\r
+.lpt-home,\r
+.lpt-scene,\r
+.lpt-weather,\r
+.lpt-locations,\r
+.lpt-notes,\r
+.lpt-contacts,\r
+.lpt-messages,\r
+.lpt-settings {\r
+  background-color: var(--lpt-screen-bg);\r
+}\r
+\r
+.lpt-card,\r
+.lpt-section {\r
+  background-color: var(--lpt-card-bg);\r
+}\r
+\r
+.lpt-root[data-open="true"] {\r
+  width: 100%;\r
+  height: 100%;\r
+}\r
+\r
+.lpt-root[data-open="false"][data-notice="true"] {\r
+  width: 100%;\r
+}\r
+\r
+.lpt-size-probe {\r
+  visibility: hidden;\r
+  pointer-events: none;\r
+  position: fixed;\r
+  width: var(--lpt-width);\r
+  height: var(--lpt-height);\r
+  max-width: calc(100vw - var(--lpt-space) * 3);\r
+  max-height: calc(100dvh - var(--lpt-space) * 10);\r
+}\r
+\r
+.lpt-root [hidden] {\r
+  display: none !important;\r
+}\r
+\r
+.lpt-root button,\r
+.lpt-root input,\r
+.lpt-root textarea,\r
+.lpt-root select {\r
+  font: inherit;\r
+  color: inherit;\r
+  box-sizing: border-box;\r
+}\r
+\r
+.lpt-option {\r
+  color: var(--lpt-text);\r
+  background: var(--lpt-screen-bg);\r
+}\r
+\r
+.lpt-root button {\r
+  cursor: pointer;\r
+  transition:\r
+    background-color var(--lpt-transition),\r
+    border-color var(--lpt-transition),\r
+    color var(--lpt-transition),\r
+    transform var(--lpt-transition);\r
+}\r
+\r
+.lpt-root button:active:not(:disabled) {\r
+  transform: scale(0.97);\r
+}\r
+\r
+.lpt-root button:disabled {\r
+  opacity: var(--lpt-opacity-disabled);\r
+  cursor: default;\r
+}\r
+\r
+.lpt-root :focus-visible {\r
+  outline: var(--lpt-focus-size) solid var(--lpt-accent);\r
+  outline-offset: var(--lpt-focus-size);\r
+}\r
+\r
+/* Closed Floating Launcher */\r
+.lpt-launcher {\r
+  display: grid;\r
+  place-items: center;\r
+  width: var(--lpt-launcher-size);\r
+  height: var(--lpt-launcher-size);\r
+  border-radius: calc(var(--lpt-radius) * 1.4);\r
+  background: var(--lpt-card-bg);\r
+  color: var(--lpt-accent);\r
+  border: var(--lpt-border-size) solid var(--lpt-frame-edge);\r
+  box-shadow: var(--lpt-shadow);\r
+  box-sizing: border-box;\r
+}\r
+\r
+.lpt-launcher:hover {\r
+  border-color: var(--lpt-accent);\r
+  background: var(--lpt-elevated-bg);\r
+}\r
+\r
+/* SVG Icons */\r
+.lpt-icon {\r
+  width: var(--lpt-icon-size);\r
+  height: var(--lpt-icon-size);\r
+  flex-shrink: 0;\r
+}\r
+\r
+.lpt-icon-path {\r
+  fill: none;\r
+  stroke: currentColor;\r
+  stroke-width: var(--lpt-icon-stroke-size);\r
+  stroke-linecap: round;\r
+  stroke-linejoin: round;\r
+}\r
+\r
+/* Outer Phone Frame, Top Notch Pill (::before), & Bottom Home Bar (::after) */\r
+.lpt-frame {\r
+  position: relative;\r
+  width: 100%;\r
+  height: 100%;\r
+  max-width: 100%;\r
+  max-height: 100%;\r
+  background: var(--lpt-phone-bg);\r
+  border: var(--lpt-frame-border-size) solid var(--lpt-frame-edge);\r
+  border-radius: var(--lpt-frame-radius);\r
+  box-shadow: var(--lpt-shadow);\r
+  display: flex;\r
+  flex-direction: column;\r
+  overflow: hidden;\r
+  box-sizing: border-box;\r
+}\r
+\r
+.lpt-frame::before {\r
+  content: "";\r
+  display: block;\r
+  width: var(--lpt-notch-width);\r
+  height: var(--lpt-notch-height);\r
+  margin: calc(var(--lpt-space) * 1.25) auto calc(var(--lpt-space) * 0.25);\r
+  background: var(--lpt-notch-bg);\r
+  border: var(--lpt-border-size) solid var(--lpt-border);\r
+  border-radius: 999px;\r
+  flex-shrink: 0;\r
+  box-sizing: border-box;\r
+}\r
+\r
+.lpt-frame::after {\r
+  content: "";\r
+  display: block;\r
+  width: var(--lpt-home-bar-width);\r
+  height: var(--lpt-home-bar-height);\r
+  margin: calc(var(--lpt-space) * 0.75) auto calc(var(--lpt-space) * 1.25);\r
+  background: var(--lpt-home-bar-color);\r
+  border-radius: 999px;\r
+  flex-shrink: 0;\r
+}\r
+\r
+/* Collapse original speaker line so the ::before notch pill sits cleanly alone */\r
+.lpt-speaker {\r
+  display: none;\r
+}\r
+\r
+/* Phone App Header */\r
+.lpt-header {\r
+  display: flex;\r
+  gap: var(--lpt-space);\r
+  align-items: center;\r
+  padding: calc(var(--lpt-space) * 0.75) calc(var(--lpt-space) * 2);\r
+  border-bottom: var(--lpt-border-size) solid var(--lpt-border);\r
+  flex-shrink: 0;\r
+  box-sizing: border-box;\r
+}\r
+\r
+.lpt-heading {\r
+  margin: 0;\r
+  flex: 1;\r
+  font-size: var(--lpt-title-size);\r
+  font-weight: var(--lpt-strong-weight);\r
+  letter-spacing: -0.015em;\r
+  white-space: nowrap;\r
+  overflow: hidden;\r
+  text-overflow: ellipsis;\r
+}\r
+\r
+.lpt-back,\r
+.lpt-close,\r
+.lpt-dismiss {\r
+  display: grid;\r
+  place-items: center;\r
+  padding: calc(var(--lpt-space) * 0.5);\r
+  min-width: var(--lpt-control-size);\r
+  min-height: var(--lpt-control-size);\r
+  background: var(--lpt-card-bg);\r
+  border: var(--lpt-border-size) solid var(--lpt-border);\r
+  border-radius: 999px;\r
+  color: var(--lpt-muted);\r
+  box-sizing: border-box;\r
+}\r
+\r
+.lpt-back:hover,\r
+.lpt-close:hover,\r
+.lpt-dismiss:hover {\r
+  color: var(--lpt-text);\r
+  background: var(--lpt-elevated-bg);\r
+  border-color: var(--lpt-hover-border);\r
+}\r
+\r
+/* Scrollable App Content Area */\r
+.lpt-content {\r
+  flex: 1;\r
+  min-height: 0;\r
+  overflow-y: auto;\r
+  overflow-x: hidden;\r
+  overscroll-behavior: contain;\r
+  padding: calc(var(--lpt-space) * 2) calc(var(--lpt-space) * 2.25) calc(var(--lpt-space) * 3);\r
+  scrollbar-width: thin;\r
+  scrollbar-color: var(--lpt-hover-border) var(--lpt-screen-bg);\r
+  box-sizing: border-box;\r
+}\r
+\r
+/* Home Screen App Grid */\r
+.lpt-home {\r
+  display: grid;\r
+  grid-template-columns: repeat(var(--lpt-grid-columns), minmax(0, 1fr));\r
+  gap: calc(var(--lpt-space) * 2.75) calc(var(--lpt-space) * 1.5);\r
+  padding: calc(var(--lpt-space) * 2.5) calc(var(--lpt-space) * 0.5);\r
+  box-sizing: border-box;\r
+}\r
+\r
+/* Center the 7th item (Settings) in the middle column of the last 3-column row */\r
+.lpt-app-button:last-child:nth-child(3n + 1) {\r
+  grid-column: 2;\r
+}\r
+\r
+.lpt-app-button {\r
+  display: flex;\r
+  flex-direction: column;\r
+  align-items: center;\r
+  gap: calc(var(--lpt-space) * 1);\r
+  padding: calc(var(--lpt-space) * 0.75) calc(var(--lpt-space) * 0.5);\r
+  border: 0;\r
+  background: transparent;\r
+  border-radius: var(--lpt-card-radius);\r
+  min-width: 0;\r
+}\r
+\r
+.lpt-app-icon {\r
+  position: relative;\r
+  display: grid;\r
+  place-items: center;\r
+  width: var(--lpt-app-tile-size);\r
+  height: var(--lpt-app-tile-size);\r
+  background: var(--lpt-icon-fill);\r
+  border: var(--lpt-border-size) solid color-mix(in srgb, currentColor 26%, var(--lpt-border));\r
+  color: var(--lpt-accent);\r
+  border-radius: var(--lpt-icon-radius);\r
+  box-shadow: 0 6px 14px -4px rgba(0, 0, 0, 0.45);\r
+  transition:\r
+    transform var(--lpt-transition),\r
+    border-color var(--lpt-transition),\r
+    background-color var(--lpt-transition);\r
+  box-sizing: border-box;\r
+}\r
+\r
+/* Individual Opaque Soft Tints per Home App */\r
+.lpt-app-button[data-app="Scene"] .lpt-app-icon {\r
+  color: var(--lpt-tint-scene);\r
+  background: color-mix(in srgb, var(--lpt-tint-scene) 16%, var(--lpt-card-bg));\r
+}\r
+\r
+.lpt-app-button[data-app="Weather"] .lpt-app-icon {\r
+  color: var(--lpt-tint-weather);\r
+  background: color-mix(in srgb, var(--lpt-tint-weather) 16%, var(--lpt-card-bg));\r
+}\r
+\r
+.lpt-app-button[data-app="Locations"] .lpt-app-icon {\r
+  color: var(--lpt-tint-locations);\r
+  background: color-mix(in srgb, var(--lpt-tint-locations) 16%, var(--lpt-card-bg));\r
+}\r
+\r
+.lpt-app-button[data-app="Notes"] .lpt-app-icon {\r
+  color: var(--lpt-tint-notes);\r
+  background: color-mix(in srgb, var(--lpt-tint-notes) 16%, var(--lpt-card-bg));\r
+}\r
+\r
+.lpt-app-button[data-app="Contacts"] .lpt-app-icon {\r
+  color: var(--lpt-tint-contacts);\r
+  background: color-mix(in srgb, var(--lpt-tint-contacts) 16%, var(--lpt-card-bg));\r
+}\r
+\r
+.lpt-app-button[data-app="Messages"] .lpt-app-icon {\r
+  color: var(--lpt-tint-messages);\r
+  background: color-mix(in srgb, var(--lpt-tint-messages) 16%, var(--lpt-card-bg));\r
+}\r
+\r
+.lpt-app-button[data-app="Settings"] .lpt-app-icon {\r
+  color: var(--lpt-tint-settings);\r
+  background: color-mix(in srgb, var(--lpt-tint-settings) 16%, var(--lpt-card-bg));\r
+}\r
+\r
+.lpt-app-button:hover .lpt-app-icon {\r
+  transform: translateY(-2px);\r
+  border-color: currentColor;\r
+}\r
+\r
+.lpt-app-button:active .lpt-app-icon {\r
+  transform: scale(0.95);\r
+}\r
+\r
+.lpt-app-label {\r
+  font-size: var(--lpt-small-font-size);\r
+  font-weight: var(--lpt-strong-weight);\r
+  color: var(--lpt-text);\r
+  letter-spacing: 0.01em;\r
+}\r
+\r
+/* Unread Notification Badges */\r
+.lpt-unread-badge {\r
+  display: inline-flex;\r
+  align-items: center;\r
+  justify-content: center;\r
+  min-width: 22px;\r
+  height: 22px;\r
+  padding: 0 6px;\r
+  margin-left: var(--lpt-space);\r
+  border-radius: 999px;\r
+  color: var(--lpt-accent-text);\r
+  background: var(--lpt-accent);\r
+  font-size: 11px;\r
+  font-weight: var(--lpt-strong-weight);\r
+  line-height: 1;\r
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);\r
+  box-sizing: border-box;\r
+}\r
+\r
+.lpt-app-icon > .lpt-unread-badge {\r
+  position: absolute;\r
+  top: -5px;\r
+  right: -5px;\r
+  margin-left: 0;\r
+  border: 2px solid var(--lpt-screen-bg);\r
+}\r
+\r
+/* App Intro Banner, Notices & Empty States */\r
+.lpt-description {\r
+  display: flex;\r
+  align-items: center;\r
+  gap: var(--lpt-space);\r
+  margin-bottom: calc(var(--lpt-space) * 2);\r
+  padding: calc(var(--lpt-space) * 1) calc(var(--lpt-space) * 1) calc(var(--lpt-space) * 1) calc(var(--lpt-space) * 1.5);\r
+  background: var(--lpt-card-bg);\r
+  border: var(--lpt-border-size) solid var(--lpt-border);\r
+  border-radius: var(--lpt-radius);\r
+  color: var(--lpt-muted);\r
+  font-size: var(--lpt-small-font-size);\r
+  box-sizing: border-box;\r
+}\r
+\r
+.lpt-description-text {\r
+  flex: 1;\r
+  margin: 0;\r
+  padding: 0;\r
+}\r
+\r
+.lpt-empty,\r
+.lpt-help,\r
+.lpt-status {\r
+  color: var(--lpt-muted);\r
+  font-size: var(--lpt-small-font-size);\r
+  line-height: var(--lpt-line-height);\r
+}\r
+\r
+.lpt-empty {\r
+  padding: calc(var(--lpt-space) * 3) calc(var(--lpt-space) * 2);\r
+  margin: var(--lpt-space) 0;\r
+  text-align: center;\r
+  background: var(--lpt-card-bg);\r
+  border: var(--lpt-border-size) dashed var(--lpt-border);\r
+  border-radius: var(--lpt-card-radius);\r
+}\r
+\r
+.lpt-status {\r
+  margin: calc(var(--lpt-space) * 0.5) 0 0;\r
+}\r
+\r
+.lpt-notice,\r
+.lpt-error,\r
+.lpt-text-notice {\r
+  border: var(--lpt-border-size) solid var(--lpt-accent);\r
+  border-radius: var(--lpt-card-radius);\r
+  padding: calc(var(--lpt-space) * 1.25) calc(var(--lpt-space) * 1.5);\r
+  margin: var(--lpt-space) 0;\r
+  background: var(--lpt-card-bg);\r
+  color: var(--lpt-text);\r
+  font-size: var(--lpt-small-font-size);\r
+  overflow-wrap: anywhere;\r
+  box-sizing: border-box;\r
+}\r
+\r
+.lpt-text-notice {\r
+  flex-shrink: 0;\r
+  margin: var(--lpt-space) calc(var(--lpt-space) * 2) 0;\r
+  background: var(--lpt-elevated-bg);\r
+  font-weight: var(--lpt-strong-weight);\r
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);\r
+}\r
+\r
+.lpt-notice {\r
+  display: flex;\r
+  align-items: center;\r
+  gap: var(--lpt-space);\r
+}\r
+\r
+.lpt-notice-text {\r
+  flex: 1;\r
+}\r
+\r
+.lpt-error:empty,\r
+.lpt-status:empty {\r
+  display: none;\r
+}\r
+\r
+/* Tappable Fields (Scene, Weather, Contacts) */\r
+.lpt-field {\r
+  display: block;\r
+  text-align: left;\r
+  width: 100%;\r
+  border: var(--lpt-border-size) solid var(--lpt-border);\r
+  border-radius: var(--lpt-card-radius);\r
+  background: var(--lpt-card-bg);\r
+  padding: calc(var(--lpt-space) * 1.5) calc(var(--lpt-space) * 1.75);\r
+  margin-bottom: calc(var(--lpt-space) * 1.25);\r
+  overflow-wrap: anywhere;\r
+  box-sizing: border-box;\r
+}\r
+\r
+.lpt-field:hover {\r
+  background: var(--lpt-elevated-bg);\r
+  border-color: var(--lpt-hover-border);\r
+}\r
+\r
+.lpt-card-body .lpt-field {\r
+  background: var(--lpt-screen-bg);\r
+  border-radius: var(--lpt-radius);\r
+  padding: calc(var(--lpt-space) * 1.15) calc(var(--lpt-space) * 1.5);\r
+  margin-bottom: var(--lpt-space);\r
+}\r
+\r
+.lpt-card-body .lpt-field:hover {\r
+  background: var(--lpt-elevated-bg);\r
+}\r
+\r
+.lpt-field-label {\r
+  display: block;\r
+  font-size: 11px;\r
+  font-weight: var(--lpt-strong-weight);\r
+  text-transform: uppercase;\r
+  letter-spacing: 0.05em;\r
+  color: var(--lpt-muted);\r
+  margin-bottom: calc(var(--lpt-space) * 0.35);\r
+}\r
+\r
+.lpt-field-value {\r
+  display: block;\r
+  white-space: pre-wrap;\r
+  font-weight: var(--lpt-weight);\r
+  color: var(--lpt-text);\r
+}\r
+\r
+.lpt-location {\r
+  background: var(--lpt-elevated-bg);\r
+  border-color: color-mix(in srgb, var(--lpt-accent) 42%, var(--lpt-border));\r
+  padding: calc(var(--lpt-space) * 2);\r
+}\r
+\r
+.lpt-location .lpt-field-value {\r
+  font-size: var(--lpt-location-size);\r
+  font-weight: var(--lpt-strong-weight);\r
+  line-height: 1.2;\r
+  letter-spacing: -0.02em;\r
+  margin-top: 2px;\r
+}\r
+\r
+.lpt-wider {\r
+  display: block;\r
+  color: var(--lpt-muted);\r
+  font-size: var(--lpt-small-font-size);\r
+  margin-top: calc(var(--lpt-space) * 0.5);\r
+}\r
+\r
+.lpt-present-list {\r
+  display: flex;\r
+  flex-wrap: wrap;\r
+  gap: calc(var(--lpt-space) * 0.75);\r
+  list-style: none;\r
+  padding: 0;\r
+  margin: calc(var(--lpt-space) * 1) 0 0;\r
+}\r
+\r
+.lpt-present-name {\r
+  background: var(--lpt-elevated-bg);\r
+  border: var(--lpt-border-size) solid var(--lpt-border);\r
+  border-radius: 999px;\r
+  padding: calc(var(--lpt-space) * 0.35) calc(var(--lpt-space) * 1.25);\r
+  font-size: var(--lpt-small-font-size);\r
+  font-weight: var(--lpt-strong-weight);\r
+}\r
+\r
+.lpt-marker {\r
+  display: inline-block;\r
+  color: var(--lpt-accent);\r
+  background: color-mix(in srgb, var(--lpt-accent) 16%, var(--lpt-card-bg));\r
+  border: var(--lpt-border-size) solid color-mix(in srgb, var(--lpt-accent) 34%, var(--lpt-border));\r
+  border-radius: 999px;\r
+  padding: 1px calc(var(--lpt-space) * 0.9);\r
+  font-size: 11px;\r
+  font-weight: var(--lpt-strong-weight);\r
+  margin-top: calc(var(--lpt-space) * 0.5);\r
+  margin-right: calc(var(--lpt-space) * 0.75);\r
+}\r
+\r
+/* Expandable Cards & Sections */\r
+.lpt-card {\r
+  border: var(--lpt-border-size) solid var(--lpt-border);\r
+  border-radius: var(--lpt-card-radius);\r
+  margin: calc(var(--lpt-space) * 1.25) 0;\r
+  padding: 0;\r
+  background: var(--lpt-card-bg);\r
+  overflow: hidden;\r
+  overflow-wrap: anywhere;\r
+  transition: border-color var(--lpt-transition), background-color var(--lpt-transition);\r
+  box-sizing: border-box;\r
+}\r
+\r
+.lpt-card:hover {\r
+  border-color: var(--lpt-hover-border);\r
+}\r
+\r
+.lpt-card[open] {\r
+  border-color: color-mix(in srgb, var(--lpt-accent) 45%, var(--lpt-border));\r
+}\r
+\r
+.lpt-summary {\r
+  cursor: pointer;\r
+  padding: calc(var(--lpt-space) * 1.5) calc(var(--lpt-space) * 1.75);\r
+  min-height: var(--lpt-control-size);\r
+  user-select: none;\r
+  transition: background-color var(--lpt-transition);\r
+  box-sizing: border-box;\r
+}\r
+\r
+.lpt-summary:hover {\r
+  background: var(--lpt-elevated-bg);\r
+}\r
+\r
+.lpt-card[open] > .lpt-summary {\r
+  background: var(--lpt-elevated-bg);\r
+  border-bottom: var(--lpt-border-size) solid var(--lpt-border);\r
+}\r
+\r
+.lpt-card-title {\r
+  font-weight: var(--lpt-strong-weight);\r
+  color: var(--lpt-text);\r
+}\r
+\r
+.lpt-card-subtitle {\r
+  display: block;\r
+  font-size: var(--lpt-small-font-size);\r
+  color: var(--lpt-muted);\r
+  margin-top: 2px;\r
+}\r
+\r
+.lpt-card-body {\r
+  padding: calc(var(--lpt-space) * 1.5) calc(var(--lpt-space) * 1.75);\r
+  background: var(--lpt-card-bg);\r
+  box-sizing: border-box;\r
+}\r
+\r
+.lpt-place-description,\r
+.lpt-note-full {\r
+  margin: 0 0 calc(var(--lpt-space) * 1.25);\r
+  white-space: pre-wrap;\r
+  color: var(--lpt-text);\r
+}\r
+\r
+/* Grouped Sections (Notes, Absent Contacts, Resolved Plots) */\r
+.lpt-section {\r
+  margin-bottom: calc(var(--lpt-space) * 2);\r
+  border: var(--lpt-border-size) solid var(--lpt-border);\r
+  border-radius: var(--lpt-card-radius);\r
+  padding: calc(var(--lpt-space) * 1.5);\r
+  background: var(--lpt-card-bg);\r
+  box-sizing: border-box;\r
+}\r
+\r
+.lpt-section-title {\r
+  font-size: var(--lpt-font-size);\r
+  font-weight: var(--lpt-strong-weight);\r
+  margin: 0;\r
+}\r
+\r
+.lpt-section-header {\r
+  display: flex;\r
+  align-items: center;\r
+  gap: var(--lpt-space);\r
+  justify-content: space-between;\r
+  margin-bottom: var(--lpt-space);\r
+}\r
+\r
+.lpt-section-body {\r
+  padding-top: calc(var(--lpt-space) * 0.5);\r
+}\r
+\r
+.lpt-counter {\r
+  color: var(--lpt-muted);\r
+  background: var(--lpt-screen-bg);\r
+  border: var(--lpt-border-size) solid var(--lpt-border);\r
+  border-radius: 999px;\r
+  padding: 2px calc(var(--lpt-space) * 1);\r
+  font-size: 11px;\r
+  font-weight: var(--lpt-strong-weight);\r
+}\r
+\r
+.lpt-note-line {\r
+  display: block;\r
+  white-space: nowrap;\r
+  overflow: hidden;\r
+  text-overflow: ellipsis;\r
+  font-weight: var(--lpt-strong-weight);\r
+}\r
+\r
+.lpt-absent,\r
+.lpt-resolved {\r
+  margin-top: calc(var(--lpt-space) * 1.5);\r
+  border-style: dashed;\r
+}\r
+\r
+/* Messages App & Conversation Bubbles */\r
+.lpt-conversation {\r
+  margin: calc(var(--lpt-space) * 1.25) 0;\r
+}\r
+\r
+.lpt-text-list {\r
+  display: flex;\r
+  flex-direction: column;\r
+  gap: calc(var(--lpt-space) * 1.25);\r
+  padding: calc(var(--lpt-space) * 0.5) 0 calc(var(--lpt-space) * 1.25);\r
+}\r
+\r
+.lpt-text-message {\r
+  display: flex;\r
+  flex-direction: column;\r
+  max-width: 85%;\r
+  margin: 0;\r
+  padding: calc(var(--lpt-space) * 1.25) calc(var(--lpt-space) * 1.5);\r
+  border-radius: var(--lpt-bubble-radius);\r
+  border: var(--lpt-border-size) solid var(--lpt-border);\r
+  background: var(--lpt-bubble-in-bg);\r
+  overflow-wrap: anywhere;\r
+  box-sizing: border-box;\r
+}\r
+\r
+.lpt-incoming {\r
+  align-self: flex-start;\r
+  background: var(--lpt-bubble-in-bg);\r
+  border-color: var(--lpt-border);\r
+  border-bottom-left-radius: 4px;\r
+}\r
+\r
+.lpt-outgoing {\r
+  align-self: flex-end;\r
+  background: var(--lpt-bubble-out-bg);\r
+  border-color: var(--lpt-bubble-out-border);\r
+  border-bottom-right-radius: 4px;\r
+}\r
+\r
+.lpt-text-sender {\r
+  font-size: 11px;\r
+  font-weight: var(--lpt-strong-weight);\r
+  color: var(--lpt-muted);\r
+  margin: 0 0 2px;\r
+}\r
+\r
+.lpt-outgoing .lpt-text-sender {\r
+  color: var(--lpt-accent);\r
+  text-align: right;\r
+}\r
+\r
+.lpt-text-body {\r
+  white-space: pre-wrap;\r
+  margin: 2px 0;\r
+  color: var(--lpt-text);\r
+}\r
+\r
+.lpt-text-time {\r
+  color: var(--lpt-muted);\r
+  font-size: 11px;\r
+  margin-top: 4px;\r
+  align-self: flex-end;\r
+}\r
+\r
+/* Message Composer / Reply Bar */\r
+.lpt-reply {\r
+  display: grid;\r
+  gap: var(--lpt-space);\r
+  margin-top: var(--lpt-space);\r
+  padding-top: calc(var(--lpt-space) * 1.5);\r
+  border-top: var(--lpt-border-size) solid var(--lpt-border);\r
+}\r
+\r
+.lpt-reply-input {\r
+  min-height: 44px;\r
+  max-height: 120px;\r
+  border-radius: 20px;\r
+  padding: calc(var(--lpt-space) * 1.25) calc(var(--lpt-space) * 1.75);\r
+  background: var(--lpt-screen-bg);\r
+  border: var(--lpt-border-size) solid var(--lpt-border);\r
+  resize: vertical;\r
+  box-sizing: border-box;\r
+}\r
+\r
+.lpt-reply-input:focus {\r
+  border-color: var(--lpt-accent);\r
+}\r
+\r
+.lpt-add-draft {\r
+  min-height: var(--lpt-control-size);\r
+  border-radius: 999px;\r
+  background: var(--lpt-accent);\r
+  color: var(--lpt-accent-text);\r
+  border: var(--lpt-border-size) solid var(--lpt-accent);\r
+  font-weight: var(--lpt-strong-weight);\r
+  padding: calc(var(--lpt-space) * 0.75) calc(var(--lpt-space) * 2);\r
+}\r
+\r
+.lpt-add-draft:hover:not(:disabled) {\r
+  filter: brightness(1.08);\r
+}\r
+\r
+.lpt-reply-status {\r
+  margin: 0;\r
+  font-size: var(--lpt-small-font-size);\r
+  color: var(--lpt-muted);\r
+}\r
+\r
+.lpt-reply-status:empty {\r
+  display: none;\r
+}\r
+\r
+.lpt-manual-tag {\r
+  font-family: monospace;\r
+  font-size: var(--lpt-small-font-size);\r
+  background: var(--lpt-screen-bg);\r
+}\r
+\r
+/* Buttons & Action Bars */\r
+.lpt-button,\r
+.lpt-add,\r
+.lpt-save,\r
+.lpt-cancel,\r
+.lpt-delete,\r
+.lpt-open-texts,\r
+.lpt-update-now {\r
+  min-height: var(--lpt-control-size);\r
+  border: var(--lpt-border-size) solid var(--lpt-border);\r
+  background: var(--lpt-elevated-bg);\r
+  color: var(--lpt-text);\r
+  padding: calc(var(--lpt-space) * 0.65) calc(var(--lpt-space) * 1.5);\r
+  border-radius: var(--lpt-radius);\r
+  font-weight: var(--lpt-strong-weight);\r
+  font-size: var(--lpt-small-font-size);\r
+  box-sizing: border-box;\r
+}\r
+\r
+.lpt-save,\r
+.lpt-update-now {\r
+  background: var(--lpt-accent);\r
+  color: var(--lpt-accent-text);\r
+  border-color: var(--lpt-accent);\r
+}\r
+\r
+.lpt-button:hover:not(:disabled),\r
+.lpt-add:hover:not(:disabled),\r
+.lpt-cancel:hover:not(:disabled),\r
+.lpt-delete:hover:not(:disabled),\r
+.lpt-open-texts:hover:not(:disabled) {\r
+  border-color: var(--lpt-hover-border);\r
+  background: color-mix(in srgb, var(--lpt-elevated-bg) 85%, var(--lpt-text) 15%);\r
+}\r
+\r
+.lpt-save:hover:not(:disabled),\r
+.lpt-update-now:hover:not(:disabled) {\r
+  filter: brightness(1.08);\r
+}\r
+\r
+.lpt-actions {\r
+  display: flex;\r
+  flex-wrap: wrap;\r
+  gap: var(--lpt-space);\r
+  margin: calc(var(--lpt-space) * 1.25) 0 0;\r
+}\r
+\r
+/* Forms & Text Inputs */\r
+.lpt-form {\r
+  display: grid;\r
+  gap: calc(var(--lpt-space) * 1.25);\r
+  margin: calc(var(--lpt-space) * 1.25) 0;\r
+  padding: calc(var(--lpt-space) * 1.75);\r
+  background: var(--lpt-card-bg);\r
+  border: var(--lpt-border-size) solid var(--lpt-accent);\r
+  border-radius: var(--lpt-card-radius);\r
+  box-sizing: border-box;\r
+}\r
+\r
+.lpt-label {\r
+  display: grid;\r
+  gap: calc(var(--lpt-space) * 0.5);\r
+  font-size: var(--lpt-small-font-size);\r
+  font-weight: var(--lpt-strong-weight);\r
+  color: var(--lpt-muted);\r
+}\r
+\r
+.lpt-input,\r
+.lpt-textarea,\r
+.lpt-number,\r
+.lpt-css-editor,\r
+.lpt-helper-source,\r
+.lpt-helper-connection {\r
+  width: 100%;\r
+  border: var(--lpt-border-size) solid var(--lpt-border);\r
+  background: var(--lpt-screen-bg);\r
+  color: var(--lpt-text);\r
+  border-radius: var(--lpt-radius);\r
+  padding: calc(var(--lpt-space) * 1) calc(var(--lpt-space) * 1.25);\r
+  min-height: var(--lpt-control-size);\r
+  transition: border-color var(--lpt-transition);\r
+  box-sizing: border-box;\r
+}\r
+\r
+.lpt-input:focus,\r
+.lpt-textarea:focus,\r
+.lpt-number:focus,\r
+.lpt-css-editor:focus,\r
+.lpt-helper-source:focus,\r
+.lpt-helper-connection:focus {\r
+  border-color: var(--lpt-accent);\r
+}\r
+\r
+.lpt-textarea {\r
+  min-height: calc(var(--lpt-control-size) * 2.2);\r
+  resize: vertical;\r
+}\r
+\r
+.lpt-css-editor {\r
+  min-height: calc(var(--lpt-control-size) * 4);\r
+  font-family: monospace;\r
+  font-size: var(--lpt-small-font-size);\r
+  resize: vertical;\r
+}\r
+\r
+/* Settings App: Grouped Sections & Clean Pill Toggle Switches */\r
+.lpt-settings-group,\r
+.lpt-helper-settings {\r
+  background: var(--lpt-card-bg);\r
+  border: var(--lpt-border-size) solid var(--lpt-border);\r
+  border-radius: var(--lpt-card-radius);\r
+  padding: calc(var(--lpt-space) * 1.25) calc(var(--lpt-space) * 1.75);\r
+  margin-bottom: calc(var(--lpt-space) * 2);\r
+  box-sizing: border-box;\r
+}\r
+\r
+.lpt-setting {\r
+  display: flex;\r
+  gap: calc(var(--lpt-space) * 1.5);\r
+  justify-content: space-between;\r
+  align-items: center;\r
+  padding: calc(var(--lpt-space) * 1.25) 0;\r
+  border-bottom: var(--lpt-border-size) solid var(--lpt-border);\r
+}\r
+\r
+.lpt-setting:last-child {\r
+  border-bottom: 0;\r
+}\r
+\r
+.lpt-setting-text {\r
+  display: grid;\r
+  gap: 2px;\r
+  max-width: var(--lpt-max-label-width);\r
+}\r
+\r
+.lpt-setting-label {\r
+  font-weight: var(--lpt-strong-weight);\r
+  font-size: var(--lpt-font-size);\r
+  color: var(--lpt-text);\r
+}\r
+\r
+.lpt-setting-description {\r
+  font-size: var(--lpt-small-font-size);\r
+  color: var(--lpt-muted);\r
+  line-height: 1.35;\r
+}\r
+\r
+/* Custom iOS/Phone Pill Toggle Switch */\r
+.lpt-toggle {\r
+  appearance: none;\r
+  -webkit-appearance: none;\r
+  position: relative;\r
+  width: var(--lpt-toggle-width);\r
+  height: var(--lpt-toggle-height);\r
+  border-radius: 999px;\r
+  background: var(--lpt-screen-bg);\r
+  border: var(--lpt-border-size) solid var(--lpt-hover-border);\r
+  cursor: pointer;\r
+  flex-shrink: 0;\r
+  margin: 0;\r
+  transition: background-color var(--lpt-transition), border-color var(--lpt-transition);\r
+  box-sizing: border-box;\r
+}\r
+\r
+.lpt-toggle::after {\r
+  content: "";\r
+  position: absolute;\r
+  top: 2px;\r
+  left: 2px;\r
+  width: calc(var(--lpt-toggle-height) - 6px);\r
+  height: calc(var(--lpt-toggle-height) - 6px);\r
+  border-radius: 50%;\r
+  background: var(--lpt-muted);\r
+  transition: transform var(--lpt-transition), background-color var(--lpt-transition);\r
+}\r
+\r
+.lpt-toggle:checked {\r
+  background: var(--lpt-accent);\r
+  border-color: var(--lpt-accent);\r
+}\r
+\r
+.lpt-toggle:checked::after {\r
+  background: var(--lpt-toggle-thumb);\r
+  transform: translateX(calc(var(--lpt-toggle-width) - var(--lpt-toggle-height)));\r
+}\r
+\r
+.lpt-number {\r
+  width: calc(var(--lpt-space) * 9);\r
+  text-align: center;\r
+}\r
+\r
+/* Secondary Advanced & Custom CSS Sections */\r
+.lpt-advanced,\r
+.lpt-custom-css {\r
+  margin-top: calc(var(--lpt-space) * 2);\r
+  border: var(--lpt-border-size) solid var(--lpt-border);\r
+  border-radius: var(--lpt-card-radius);\r
+  background: var(--lpt-screen-bg);\r
+  padding: 0 calc(var(--lpt-space) * 1.5);\r
+  box-sizing: border-box;\r
+}\r
+\r
+.lpt-advanced > .lpt-summary,\r
+.lpt-custom-css > .lpt-summary {\r
+  color: var(--lpt-muted);\r
+  font-size: var(--lpt-small-font-size);\r
+  font-weight: var(--lpt-strong-weight);\r
+  padding: calc(var(--lpt-space) * 1.25) 0;\r
+}\r
+\r
+.lpt-advanced[open],\r
+.lpt-custom-css[open] {\r
+  background: var(--lpt-card-bg);\r
+  padding-bottom: calc(var(--lpt-space) * 1.5);\r
+}\r
+\r
+/* Responsive adjustments for narrow mobile screens */\r
+@media (max-width: 420px) {\r
+  .lpt-root {\r
+    --lpt-frame-radius: 28px;\r
+    --lpt-app-tile-size: 58px;\r
+    --lpt-title-size: 17px;\r
+    --lpt-location-size: 21px;\r
+  }\r
+\r
+  .lpt-content {\r
+    padding: calc(var(--lpt-space) * 1.5) calc(var(--lpt-space) * 1.5) calc(var(--lpt-space) * 2.5);\r
+  }\r
+\r
+  .lpt-home {\r
+    gap: calc(var(--lpt-space) * 2) var(--lpt-space);\r
+  }\r
+}\r
+\r
+/* Host-owned recovery surface: outside the phone shadow tree and never custom-styled[cite: 2]. */\r
+.lpt-transport { display: flex; flex-direction: column; height: 48px; width: 48px; overflow: hidden; }\r
+.lpt-viewport { flex: 1; min-height: 0; width: 100%; overflow: clip; contain: layout paint size; position: relative; }\r
+.lpt-island { display: block; width: 100%; height: 100%; }\r
+.lpt-recovery-actions { display: flex; gap: .5em; }\r
+.lpt-recovery-actions .lpt-recovery-button { flex: 1; min-width: 0; white-space: normal; }\r
+.lpt-recovery-button { font: inherit; color: inherit; min-height: 2em; padding: .2em .7em; background: var(--lumiverse-fill-subtle, Canvas); border: 1px solid var(--lumiverse-border, ButtonBorder); border-radius: var(--lumiverse-radius, 10px); cursor: pointer; }\r
+.lpt-recovery-status { font: inherit; color: var(--lumiverse-text-muted, GrayText); }\r
+.lpt-recovery-panel { padding: 1em; display: grid; gap: .75em; color: var(--lumiverse-text, CanvasText); font: inherit; }`;
 
 // src/message-reads.ts
 function readState(value) {

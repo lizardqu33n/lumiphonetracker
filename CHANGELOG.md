@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.1
+
+- Replaced the default stylesheet with the user-supplied CSS: phone notch/home bar, individual app tints, message bubbles and pill switches.
+- Kept existing classes, behavior, opaque screens and protected sidebar Reset.
+- Rounded the closed-phone notice height up so fractional typography cannot clip it.
+- Updated the styling reference and rebuilt the extension; reran browser recovery/opacity checks.
+
 ## 0.6.0
 
 - Added optional Helper AI with a saved-connection picker, recent-message count, cost note and Update now. Main AI stays the default.
