@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.4
+
+- Fixed the actual native preset path, which bypasses macro interceptors. The pull handler reads the host-supplied env.extra.userId and env.chat.id, with agreement checks against top-level IDs. These compatibility fields are verified in host source, not guaranteed by the minimal pull DTO.
+- Added a regression that bypasses the macro interceptor and reproduces the v0.6.3 blank before the fix.
+- Kept user scoping, safe empty warnings, permissions, UI, stylesheet and tracker format unchanged.
+
 ## 0.6.3
 
 - Fixed blank phone macros when the legacy pull handler lacks top-level user/chat context. Uses the documented macro interceptor and its per-evaluation identity/environment; adds the macro_interceptor permission.

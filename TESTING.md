@@ -1,4 +1,4 @@
-# Verification report - 0.6.3
+# Verification report - 0.6.4
 
 Checked November 4, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **This test environment did not have a real Lumiverse install or a real model connection. No paid model request was made.**
 
@@ -6,7 +6,21 @@ Checked November 4, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, o
 
 The supplied stylesheet is copied byte-for-byte into src/styles.css. STYLING.md documents its 62 variables and 107 stable classes. The browser suite also exposed fractional-height rounding that clipped the closed-phone text notice; its measured height now rounds up. No navigation, tracker rules or class names changed.
 
-## Blank-format fix (0.6.3)
+## Native preset-path fix (0.6.4)
+
+The real-server report confirmed 0.6.3 and granted macro_interceptor permission, yet phone_format still logged no userId. Inspection of the official host at commit 45f8db563e1c314ed2aab227613b28eb5ea1084e found the missed dispatch path: prompt-assembly.service.ts evaluates native preset content with sourceOwner:"host"; MacroEvaluator.ts deliberately skips the macro interceptor for that owner. The registered pull macro is still called. Its RPC contains no top-level userId, but serializes the host-built environment, including env.extra.userId and env.chat.id. buildEnv populates that userId from its authenticated user context or the owning chat. This explains why granting the permission did not fix native preset entries.
+
+The pull handler now accepts those exact host-supplied paths, or valid top-level IDs where a host supplies them. If top-level and environment IDs disagree, it returns empty before any read. Model/preset text, args, variable values, tag attributes, saved helper owner and foreground/active-chat state are never identity sources. Every actual operator-scoped API call still receives the resolved user, and the chat is authorized before reading. No global cache or write is introduced.
+
+**Contract limit, stated plainly:** commit and optional top-level chatId are in the published minimal pull DTO. env.extra.userId and env.chat.id in pull RPCs are implementation fields verified in official host source, not promised by that minimal DTO or the prose macro page. This is a guarded compatibility adapter, not a new Spindle API. Hosts omitting both supported identity representations still get empty output and the same safe warning; generation continues. No exact payload from the user's running host was captured, and 0.6.4 has not yet been tested on it.
+
+**Regression:** the new actual-backend test directly invokes the registered pull handler with the host-shaped preset payload, completely bypassing the macro interceptor. Before the fix it failed: expected tracker-writing instructions, received an empty string. After the fix it passes in both dry and normal commit modes under the strict operator mock. Additional checks cover an empty new chat, simultaneous users in different chats, unauthorized access, conflicting IDs and spoofed identity only in args/variables. No preview writes or provider calls occur. Previous template-hook tests remain, but are no longer used as evidence that native preset dispatch was tested.
+
+There are no new permissions, screens, settings, stylesheet or tracker-format changes in 0.6.4. Keep {{phone_format}} as the preset entry. Existing safe empty reasons and optional prompt processing are unchanged.
+
+Pinned primary-source evidence: [native preset assembly](https://github.com/prolix-oc/Lumiverse/blob/45f8db563e1c314ed2aab227613b28eb5ea1084e/src/services/prompt-assembly.service.ts), [interceptor bypass](https://github.com/prolix-oc/Lumiverse/blob/45f8db563e1c314ed2aab227613b28eb5ea1084e/src/macros/MacroEvaluator.ts), [pull RPC serialization](https://github.com/prolix-oc/Lumiverse/blob/45f8db563e1c314ed2aab227613b28eb5ea1084e/src/spindle/worker-host.ts), [environment construction](https://github.com/prolix-oc/Lumiverse/blob/45f8db563e1c314ed2aab227613b28eb5ea1084e/src/macros/MacroEnv.ts). Published contract: [macro docs](https://docs.lumiverse.chat/backend-api/macros/) and official lumiverse-spindle-types 0.6.77.
+
+## Blank-format attempt (0.6.3, incomplete native-preset coverage)
 
 **Cause:** 0.6.2 required top-level userId AND chatId on its pull macro context before it even called formatMacro. Missing either returned empty. The documented minimal pull DTO guarantees only commit and optional chatId, not top-level userId. Current official host source also constructs the pull payload without a top-level userId. That makes the no-userId guard a concrete explanation consistent with the reported multi-user blank; the exact payload of the user's installed version has not been captured. Missing chat is separately reproduced. Main AI, no stored facts and only SOME disabled items do not explain an empty format.
 
@@ -44,7 +58,7 @@ The strict operator mock first failed with exactly **userId is required for oper
 | Helper `connections.list` / `generate.raw` | Already pass userId, including the raw request object. The later preview and shared player-resolution path lost it; both are fixed. Macro preview now checks only the invoking user's connection, never another saved helper owner's profile. |
 | Registration, permissions, logging, capability declaration | Extension-local APIs; no userId parameter. Targeted `sendToFrontend` calls use the authenticated user; unscoped frontend requests are ignored. |
 
-**Historical 0.6.2 limit, addressed in 0.6.3:** the official minimal pull context does not guarantee userId. Returning empty was safe but left phone_format blank. Version 0.6.3 now uses the documented macro interceptor's userId and env.chat snapshot before native macro parsing. It requires macro_interceptor permission. The legacy pull function is only a fallback, still returning empty rather than inventing identity.
+**Historical 0.6.2 limit, attempted in 0.6.3 and corrected for presets in 0.6.4:** the official minimal pull context does not guarantee userId. Returning empty was safe but left phone_format blank. Version 0.6.3 now uses the documented macro interceptor's userId and env.chat snapshot before native macro parsing. It requires macro_interceptor permission. The legacy pull function is only a fallback, still returning empty rather than inventing identity.
 
 Regression coverage includes all six macro handlers; missing/null/blank context; unauthorized users; failed reads and failed logging; zero preview writes; exact original prompt pass-through; authenticated lifecycle sync; read receipts; appearance save/Reset; missing frontend identity despite a forged payload userId; manual and completion-triggered Helper requests. The mock requires explicit IDs for user-scoped API methods, but correctly does not invent IDs for chat-derived APIs. No model provider was called.
 
@@ -52,7 +66,7 @@ Sources: [macros](https://docs.lumiverse.chat/backend-api/macros/), [interceptor
 
 ## Passed in code
 
-- 112 behavioral tests, 626 assertions, zero failures, across six test files.
+- 113 behavioral tests, 652 assertions, zero failures, across six test files.
 - Typecheck; backend/frontend builds; manifest, entry/export and bundle/source checks; packaged source/built-file matching.
 - Earlier parsing, independent valid-line acceptance, safe warning logs, partial-tag hiding, raw saved-tag retention, chronological replay, user edits, caps, notes, migration, macros, auth checks, chat isolation, swipes/regeneration/deletion and recent-tag/media transformations.
 - Messages grouping, incoming-only unread receipts, recipient-aware outgoing records, read persistence, escaped draft tags, cancellation, exact-chat composer checks and no extension Send call.
@@ -78,6 +92,8 @@ Sources: [macros](https://docs.lumiverse.chat/backend-api/macros/), [interceptor
 
 ## Not verified without a real Lumiverse install and connection
 
+- Native preset Dry Run and normal generation after installing 0.6.4 on the reported server; whether its Lumiverse build serializes the pull environment as the inspected source does. The user confirmed 0.6.3 and its permission, not successful 0.6.4 behavior. Server/version/runtime-specific dispatch, live simultaneous users and final provider prompt contents still need verification.
+
 - Repeating the reported failing Dry Run and normal generation on the user's install after updating. Grant/revoke/update handling for macro_interceptor; whether that host supplies userId and env.chat.id on the macro interceptor during the real preset Dry Run and all generation paths; no live payload was captured. Correct native placement of the resolved text, cache invalidation, nested/scoped macro composition and concurrent users need real-server verification. Host timeout/process isolation, optional-interceptor fallback and final provider prompt payload need real-host verification. The local strict mock proves the reported missing-ID call is fixed, not that native installation was tested.
 
 - GitHub install/update/security scanning, native permissions and revocation/regrant, restart/disable/re-enable, real host placement/styles/transforms, desktop pop-outs and actual mobile/iOS WebViews.
@@ -90,6 +106,6 @@ Sources: [macros](https://docs.lumiverse.chat/backend-api/macros/), [interceptor
 - Actual outgoing provider prompt stripping (default recent texts 3, trackers 0), configured retention, source markers and media preservation. Code tests verify transformations, not a final network payload. Helper input is tested separately to strip ALL phone tags.
 - Human first-use clarity: a new person should identify each app within about five seconds. No human usability study was performed. Custom CSS can intentionally make the phone transparent or hide it; native recovery still needs a real-host check.
 
-The earlier real-install v0.4.1 failure was user-reported. Its layout cause was reproduced locally and retained as a regression, but this environment has not validated 0.6.3 in that install. Publishing source to GitHub does not verify native installation or make a model request.
+The earlier real-install v0.4.1 failure was user-reported. Its layout cause was reproduced locally and retained as a regression, but this environment has not validated 0.6.4 in that install. Publishing source to GitHub does not verify native installation or make a model request.
 
 Earlier reports: [Step 5](docs/STEP-5-TESTING.md), [Step 4](docs/STEP-4-TESTING.md), [Step 3](docs/STEP-3-TESTING.md). Previous archives are preserved. All six build steps are delivered; work is paused for review.

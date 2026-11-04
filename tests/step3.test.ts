@@ -279,6 +279,22 @@ describe("macros and persistent isolation", () => {
     const count=loads;expect(await handler({...ctx,template:"{{unrelated}}"})).toBeUndefined();
     expect(await handler({...ctx,env:{...ctx.env,dynamicMacros:{phone_format:"Preset override"}}})).toBeUndefined();expect(loads).toBe(count);
   });
+  test("preset pull RPC uses source-verified host environment, never arguments or conflicting identities", async () => {
+    const handlers=new Map<string,(ctx:any)=>Promise<string>>();const calls:string[]=[];const warnings:string[]=[];
+    const api={registerMacro:(d:{name:string;handler:(ctx:any)=>Promise<string>})=>handlers.set(d.name,d.handler),log:{warn:(s:string)=>warnings.push(s)}};
+    registerPhoneMacros(api as never,async(chat,user)=>{calls.push(`${user}/${chat}`);return emptyDocument(chat);});
+    const format=handlers.get("phone_format")!;
+    const host={commit:false,env:{chat:{id:"a"},extra:{userId:"u"}}};
+    expect(await format(host)).toContain("End each reply with <phone-state>");expect(calls).toEqual(["u/a"]);
+    expect(await format({...host,commit:true,chatId:"a"})).toContain("End each reply with <phone-state>");
+    const before=calls.length;
+    expect(await format({...host,userId:"v"})).toBe("");expect(warnings.at(-1)).toBe("Lumi Phone Tracker: phone_format empty: extension setting.");
+    expect(await format({...host,chatId:"b"})).toBe("");
+    expect(await format({commit:false,args:{userId:"u",chatId:"a"},env:{variables:{chat:{userId:"u"}}}})).toBe("");
+    expect(warnings.at(-1)).toBe("Lumi Phone Tracker: phone_format empty: no userId.");
+    expect(calls.length).toBe(before);
+    expect(warnings.every(s=>!s.includes("u/a")&&!s.includes("v"))).toBe(true);
+  });
   function fixture() {
     const saved = new Map<string, string>(); const histories = new Map<string, StoryRow[]>();
     let writes = 0;

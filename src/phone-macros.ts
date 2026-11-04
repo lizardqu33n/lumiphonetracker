@@ -122,8 +122,22 @@ export function registerPhoneMacros(api: SpindleAPI, load: PhoneLoader): void {
   const register = api.registerMacro.bind(api) as unknown as (definition: PullDefinition) => void;
   for (const name of MACRO_NAMES) register({ name, category: "extension:lumi_phone_tracker", returnType: "string",
     description: `Chat-specific ${name.slice(6)} continuity`, volatile: true,
-    // Legacy fallback: neither top-level identity nor chat is assumed to exist.
-    handler: ctx => resolvePhoneMacro(api,load,name,ctx?.userId,ctx?.chatId) });
+    handler: ctx => {
+      // Native preset entries bypass macro interceptors. The current host pull RPC
+      // serializes buildEnv's authenticated user into env.extra.userId. This exact
+      // compatibility field is source-verified, not guaranteed by the minimal DTO.
+      const env = isRecord(ctx?.env) ? ctx.env : undefined;
+      const extra = isRecord(env?.extra) ? env.extra : undefined;
+      const chat = isRecord(env?.chat) ? env.chat : undefined;
+      const validId = (v: unknown): v is string => typeof v === "string" && !!v.trim();
+      const users = [ctx?.userId,extra?.userId].filter(validId);
+      const chats = [ctx?.chatId,chat?.id].filter(validId);
+      if (new Set(users).size > 1 || new Set(chats).size > 1) {
+        warning(api,name,"extension setting"); return Promise.resolve("");
+      }
+      // Never use args, variables, tag data, saved helper owner or active-chat state.
+      return resolvePhoneMacro(api,load,name,users[0],chats[0]);
+    } });
 }
 
 /** Documented macro-time identity and environment, without global active-chat state. */

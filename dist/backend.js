@@ -1468,7 +1468,19 @@ function registerPhoneMacros(api, load) {
       returnType: "string",
       description: `Chat-specific ${name.slice(6)} continuity`,
       volatile: true,
-      handler: (ctx) => resolvePhoneMacro(api, load, name, ctx?.userId, ctx?.chatId)
+      handler: (ctx) => {
+        const env = isRecord(ctx?.env) ? ctx.env : undefined;
+        const extra = isRecord(env?.extra) ? env.extra : undefined;
+        const chat = isRecord(env?.chat) ? env.chat : undefined;
+        const validId = (v) => typeof v === "string" && !!v.trim();
+        const users = [ctx?.userId, extra?.userId].filter(validId);
+        const chats = [ctx?.chatId, chat?.id].filter(validId);
+        if (new Set(users).size > 1 || new Set(chats).size > 1) {
+          warning(api, name, "extension setting");
+          return Promise.resolve("");
+        }
+        return resolvePhoneMacro(api, load, name, users[0], chats[0]);
+      }
     });
 }
 function registerPhoneMacroTemplates(api, load) {

@@ -97,6 +97,21 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     expect(a).toContain('location: a');expect(a).not.toContain('location: c');expect(c).toContain('location: c');expect(c).not.toContain('location: a');
     expect(await renderTemplate("a","v")).toBe("");
     expect(calls).not.toContain("chats.getActive");
+    // Native preset assembly uses sourceOwner:"host": the macro interceptor is bypassed.
+    // Match the actual pull RPC payload, with no top-level userId.
+    for(const commit of [false,true]) {
+      const pull={commit,chatId:"a",env:{chat:{id:"a"},extra:{userId:"u"},variables:{chat:{}}}};
+      const text=await macros.get("phone_format")!(pull);
+      expect(text).toContain("End each reply with <phone-state>");
+      expect(text).toContain("location: a");
+    }
+    const nativePull=(chat:string,user:string)=>macros.get("phone_format")!({commit:false,env:{chat:{id:chat},extra:{userId:user}}});
+    const beforePreset=[...persisted.entries()];
+    expect(await nativePull("empty","u")).toContain("End each reply with <phone-state>");
+    const [presetA,presetC]=await Promise.all([nativePull("a","u"),nativePull("c","v")]);
+    expect(presetA).toContain("location: a");expect(presetA).not.toContain("location: c");
+    expect(presetC).toContain("location: c");expect(presetC).not.toContain("location: a");
+    expect(await nativePull("a","v")).toBe("");expect([...persisted.entries()]).toEqual(beforePreset);
     const beforePreview = [...persisted.entries()];
     for (const handler of macros.values()) {
       for (const context of [{},{chatId:"a"},{userId:"u"},{chatId:"a",userId:" "}]) { const count=calls.length; expect(await handler(context)).toBe(""); expect(calls.length).toBe(count); }
