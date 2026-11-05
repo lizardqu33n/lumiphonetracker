@@ -68,6 +68,10 @@
   --lpt-width: 356px;
   --lpt-height: 620px;
   --lpt-launcher-size: 50px;
+  --lpt-launcher-min-size: 50px;
+  --lpt-launcher-shadow-color: rgba(0, 0, 0, 0.55);
+  --lpt-launcher-shadow-blur: 2px;
+  --lpt-launcher-shadow-y: 1px;
   --lpt-icon-size: 26px;
   --lpt-app-tile-size: 64px;
   --lpt-icon-stroke-size: 2px;
@@ -198,34 +202,45 @@
   outline-offset: var(--lpt-focus-size);
 }
 
-/* Closed Floating Launcher */
+/* Closed Floating Launcher: transparent square tap target, art fills its height. */
 .lpt-launcher {
   position: relative;
   padding: 0;
   display: grid;
   place-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   width: var(--lpt-launcher-size);
   height: var(--lpt-launcher-size);
+  min-width: var(--lpt-launcher-min-size);
+  min-height: var(--lpt-launcher-min-size);
   border-radius: calc(var(--lpt-radius) * 1.4);
-  background: var(--lpt-card-bg);
+  background: transparent;
   color: var(--lpt-accent);
-  border: var(--lpt-border-size) solid var(--lpt-frame-edge);
-  box-shadow: var(--lpt-shadow);
+  border: 0;
+  box-shadow: none;
   box-sizing: border-box;
 }
 
 .lpt-launcher:hover {
-  border-color: var(--lpt-accent);
-  background: var(--lpt-elevated-bg);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
-/* Embedded static artwork; smooth browser scaling, never pixelated. */
+/* Keep keyboard focus inside the existing clipped placement. */
+.lpt-launcher:focus-visible {
+  outline-offset: calc(-2 * var(--lpt-focus-size));
+}
+
+/* Static artwork keeps its 88:128 aspect ratio with smooth scaling. */
 .lpt-launcher-image {
   display: block;
-  width: calc(100% - var(--lpt-space));
-  height: calc(100% - var(--lpt-space));
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   image-rendering: auto;
+  filter: drop-shadow(0 var(--lpt-launcher-shadow-y) var(--lpt-launcher-shadow-blur) var(--lpt-launcher-shadow-color));
   pointer-events: none;
 }
 .lpt-launcher > .lpt-unread-badge {

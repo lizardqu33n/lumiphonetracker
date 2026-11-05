@@ -38,18 +38,24 @@ try {
         rendering:getComputedStyle(img).imageRendering,decorative:img.alt===""&&img.getAttribute("aria-hidden")==="true",
         alpha:data.some((v,i)=>i%4===3&&v===0),pixels:data.some((v,i)=>i%4===3&&v===255)};
     });
-    check(info.embedded&&info.width===256&&info.height===256&&info.alpha&&info.pixels,`Embedded transparent PNG decodes at ${density}x density`);
+    check(info.embedded&&info.width===88&&info.height===128&&info.alpha&&info.pixels,`Embedded transparent PNG decodes at ${density}x density`);
     check(info.rendering==="auto"&&info.decorative,`Launcher uses normal smooth scaling and decorative artwork at ${density}x`);
     const bounds=await launcher.boundingBox();const imageBounds=await artwork.boundingBox();
     check(!!bounds&&bounds.width===50&&bounds.height===50&&bounds.x===24&&bounds.y===110,`Launcher keeps default size, position and click target at ${density}x`);
-    check(!!imageBounds&&imageBounds.width>=38&&imageBounds.width<=44&&info.width>=imageBounds.width*density,`Native art has enough pixels for the displayed launcher at ${density}x`);
+    check(!!imageBounds&&imageBounds.width===50&&imageBounds.height===50&&info.width>=imageBounds.width*density*(88/128)&&info.height>=imageBounds.height*density,`Native art has enough pixels for the displayed launcher at ${density}x: ${JSON.stringify(imageBounds)}`);
+    check(await launcher.evaluate(b=>{const s=getComputedStyle(b);return s.padding==="0px"&&s.backgroundColor==="rgba(0, 0, 0, 0)"&&s.borderWidth==="0px"&&s.boxShadow==="none";}),`Launcher box is transparent with no padding, border or box shadow at ${density}x`);
+    await launcher.hover();check(await launcher.evaluate(b=>getComputedStyle(b).backgroundColor==="rgba(0, 0, 0, 0)"&&getComputedStyle(b).boxShadow==="none"),`Hover keeps the launcher transparent at ${density}x`);
+    check(await artwork.evaluate(n=>getComputedStyle(n).objectFit==="contain"&&getComputedStyle(n).filter.startsWith("drop-shadow(")),`Image alone has a soft shadow and preserves its aspect ratio at ${density}x`);
     await launcher.screenshot({path:`.test-artifacts/launcher-${density}x.png`});
     await launcher.evaluate(b=>{const badge=document.createElement("span");badge.className="lpt-unread-badge";badge.textContent="2";badge.dataset.testBadge="true";b.append(badge);});
     check(await launcher.locator(".lpt-unread-badge").isVisible()&&await launcher.locator(".lpt-unread-badge").evaluate(b=>getComputedStyle(b).position==="absolute"&&getComputedStyle(b).zIndex==="1"),`Any launcher badge stays above the image at ${density}x`);
+    check(await launcher.locator(".lpt-unread-badge").evaluate(b=>{const a=b.getBoundingClientRect(),p=b.parentElement!.getBoundingClientRect();return a.left>=p.left&&a.top>=p.top&&a.right<=p.right&&a.bottom<=p.bottom;}),`Badge fits entirely inside the launcher placement at ${density}x`);
     await launcher.screenshot({path:`.test-artifacts/launcher-badge-${density}x.png`});
     await launcher.locator('[data-test-badge]').evaluate(b=>b.remove());
     await artwork.click();check(await ui(iconPage).locator(".lpt-frame").isVisible(),`Clicking the art still opens the phone at ${density}x`);
-    await ui(iconPage).getByRole("button",{name:"Close phone",exact:true}).click();await launcher.focus();await iconPage.keyboard.press("Enter");
+    await ui(iconPage).getByRole("button",{name:"Close phone",exact:true}).click();await launcher.focus();await iconPage.keyboard.press("Tab");await iconPage.keyboard.press("Shift+Tab");
+    check(await launcher.evaluate(b=>{const s=getComputedStyle(b);return b.matches(":focus-visible")&&s.outlineStyle==="solid"&&parseFloat(s.outlineWidth)>0&&parseFloat(s.outlineOffset)<0;}),`Keyboard focus remains visible inside the clipped placement at ${density}x`);
+    await launcher.screenshot({path:`.test-artifacts/launcher-focus-${density}x.png`});await iconPage.keyboard.press("Enter");
     check(await ui(iconPage).locator(".lpt-frame").isVisible(),`Keyboard activation still opens the phone at ${density}x`);
     await ui(iconPage).getByRole("button",{name:"Close phone",exact:true}).click();
     await open(iconPage,"Settings");
@@ -58,6 +64,25 @@ try {
     await iconPage.waitForTimeout(700);await ui(iconPage).getByRole("button",{name:"Close phone",exact:true}).click();await iconPage.waitForTimeout(100);
     check(await launcher.evaluate(b=>b.getBoundingClientRect().width===64)&&await artwork.evaluate(n=>(n as HTMLImageElement).complete&&getComputedStyle(n).imageRendering==="auto"),`Custom CSS still sizes/restyles the launcher without replacing the PNG at ${density}x`);
     await launcher.screenshot({path:`.test-artifacts/launcher-custom-${density}x.png`});
+    const light=await iconPage.addStyleTag({content:':root {background:#f4f1ed;color:#201b27;}'});
+    await launcher.screenshot({path:`.test-artifacts/launcher-light-${density}x.png`});
+    check(await launcher.evaluate(b=>getComputedStyle(b).backgroundColor==="rgba(0, 0, 0, 0)"),`Launcher stays transparent over a light test background at ${density}x`);
+    await light.evaluate(n=>{n.parentNode?.removeChild(n);});
+    if(density===1) {
+      const uri=await artwork.getAttribute("src");
+      const preview=await context.newPage();
+      await preview.setViewportSize({width:660,height:420});
+      await preview.setContent(`<!doctype html><style>body{margin:0;font:15px system-ui;background:#dedbe2;color:#211c29}main{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:20px}article{border:1px solid #b1aaba;border-radius:12px;overflow:hidden}h2{font-size:16px;margin:14px}p{margin:14px;font-size:13px}.sample{height:110px;display:flex;align-items:center;justify-content:center;gap:25px}.dark{background:#17141e;color:#eee}.light{background:#f4f1ed;color:#201b27}.target{width:50px;height:50px;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);place-items:center;outline:1px dashed #9993a2}.tall{height:55px}.target img{width:100%;height:100%;object-fit:contain;image-rendering:auto;filter:drop-shadow(0 1px 2px #0009)}small{font-size:11px}</style><main><article><h2>A: Square (recommended)</h2><div class="sample dark"><div class="target"><img src="${uri}"></div><small>Dark</small></div><div class="sample light"><div class="target"><img src="${uri}"></div><small>Light</small></div><p>50 x 50 target<br>Art: about 34 x 50</p></article><article><h2>B: Taller artwork</h2><div class="sample dark"><div class="target tall"><img src="${uri}"></div><small>Dark</small></div><div class="sample light"><div class="target tall"><img src="${uri}"></div><small>Light</small></div><p>50 x 55 invisible target<br>Art: about 38 x 55</p></article></main><p>Dashed guides show tap areas for comparison only. No visible box is included in the extension.</p>`);
+      await preview.screenshot({path:'.test-artifacts/launcher-fit-options.png'});await preview.close();
+    }
+    await launcher.click();await home(iconPage);await ui(iconPage).locator('[data-app="Settings"]').click();await ui(iconPage).locator(".lpt-advanced > summary").click();await ui(iconPage).locator(".lpt-custom-css > summary").click();
+    await ui(iconPage).locator(".lpt-css-editor").fill('.lpt-root { --lpt-launcher-size: 50px; --lpt-launcher-shadow-blur: 3px; --lpt-launcher-shadow-color: rgba(20, 10, 40, .6); } .lpt-launcher { height: 55px; }');
+    await iconPage.waitForTimeout(700);await ui(iconPage).getByRole("button",{name:"Close phone",exact:true}).click();
+    check(await launcher.evaluate(b=>b.getBoundingClientRect().width===50&&b.getBoundingClientRect().height===55)&&await artwork.evaluate(n=>getComputedStyle(n).filter.includes("3px")&&getComputedStyle(n).objectFit==="contain"),`Tall option keeps a 50 x 55 target and editable image-only shadow at ${density}x`);
+    await launcher.screenshot({path:`.test-artifacts/launcher-tall-${density}x.png`});
+    await launcher.click();await home(iconPage);await ui(iconPage).locator('[data-app="Settings"]').click();await ui(iconPage).locator(".lpt-advanced > summary").click();await ui(iconPage).locator(".lpt-custom-css > summary").click();
+    await ui(iconPage).locator(".lpt-css-editor").fill('.lpt-root { --lpt-launcher-size: 30px; }');await iconPage.waitForTimeout(700);await ui(iconPage).getByRole("button",{name:"Close phone",exact:true}).click();
+    check(await launcher.evaluate(b=>b.getBoundingClientRect().width===50&&b.getBoundingClientRect().height===50),`Small size preference retains the default minimum tap target at ${density}x`);
     check(imageRequests.length===0,`No external image request at ${density}x`);
     await context.close();
   }

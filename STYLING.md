@@ -8,9 +8,18 @@ That single Reset and its confirmation stay outside the phone's Shadow DOM. Cust
 
 All default rules are in [src/styles.css](src/styles.css). All declared --lpt- variables live on the same .lpt-root element. Some small decorative details are fixed CSS values; use the stable class selectors below to change those. There are no inline style attributes, external fonts, icon downloads or CDN requests. The frame, launcher and app content remain separate.
 
-The floating launcher now uses your embedded transparent flip-phone PNG. Its button still defaults to 50px; the artwork is about 40px, with normal smooth scaling. The supplied file is actually 256 x 256, retained unchanged. It has no external file/CDN dependency and no added CSS variables. Its colors stay as drawn; changing --lpt-accent does not recolor the PNG. The seven Home icons still use currentColor.
+Version 0.8.1 embeds the new tight-cropped 88 x 128 transparent PNG unchanged. The default is **A: a transparent 50 x 50 launcher**, with artwork about 34 x 50, centered and touching top and bottom. It keeps its proportions, with no cropping, stretching or inner padding. Side space is required by the taller artwork's shape. Smooth scaling is used. Only the image has a soft drop shadow; the box has no background, border or box shadow, even on hover. PNG colors stay as drawn; the seven Home icons still use currentColor.
 
-`.lpt-launcher-image` is the stable artwork class. Its size follows --lpt-launcher-size and --lpt-space. The launcher remains a native button labelled **Open phone**. A direct .lpt-unread-badge child is positioned above the artwork; this styling does not add a new unread feature. The existing phone/sidebar Reset protection is unchanged.
+The visible box in earlier versions came from `.lpt-launcher` in our stylesheet. Lumiverse's documented [chromeless float widget](https://docs.lumiverse.chat/frontend-api/ui-placement/#spindlefloatwidgetoptions) is already enabled and removes host background/border/shadow. No host-private selector or new API is used. Native desktop window behavior still needs a real-host check.
+
+**B: taller artwork** is also possible with the CSS below. The art is about 38 x 55. Its invisible tap target stays 50 x 55: making the actual target only 38 pixels wide would shrink the existing tap area. There is no extra setting or control.
+
+```css
+.lpt-root { --lpt-launcher-size: 50px; }
+.lpt-launcher { height: 55px; }
+```
+
+`.lpt-launcher-image` is the stable artwork class. The native button keeps the **Open phone** label, keyboard activation and a visible focus ring inside its bounds, so placement clipping cannot cut the ring off. The direct `.lpt-unread-badge` stays above the image and inside the target. Existing dragging and sidebar Reset protection are unchanged. The existing protected placement still clips to its own bounds; a large custom shadow can be cut off at those edges. Increasing shadow blur does not enlarge the tap area. Open phone screens, frame and cards remain opaque.
 
 ## Variables
 
@@ -66,7 +75,11 @@ Set these inside `.lpt-root { ... }`. Sizes need units such as px; counts, weigh
 | `--lpt-line-height` | `1.45` | Line spacing multiplier. |
 | `--lpt-width` | `356px` | Preferred open-phone width, clamped to screen. |
 | `--lpt-height` | `620px` | Preferred open-phone height, clamped to screen. |
-| `--lpt-launcher-size` | `50px` | Closed floating button size. |
+| `--lpt-launcher-size` | `50px` | Square launcher size; image fills its height with contained proportions. |
+| `--lpt-launcher-min-size` | `50px` | Minimum width and height, preserving the original tap target. Avoid lowering below 44px. |
+| `--lpt-launcher-shadow-color` | `rgba(0, 0, 0, 0.55)` | Soft shadow color behind the PNG only. |
+| `--lpt-launcher-shadow-blur` | `2px` | Image shadow softness; large values may be clipped at placement edges. |
+| `--lpt-launcher-shadow-y` | `1px` | Image shadow vertical offset. |
 | `--lpt-icon-size` | `26px` | Icon artwork size. |
 | `--lpt-app-tile-size` | `64px` | Home icon tile width and height; separate from SVG artwork size. |
 | `--lpt-icon-stroke-size` | `2px` | Icon line thickness. |
@@ -77,7 +90,7 @@ Set these inside `.lpt-root { ... }`. Sizes need units such as px; counts, weigh
 | `--lpt-opacity-disabled` | `0.5` | Disabled control opacity. |
 | `--lpt-grid-columns` | `3` | Home icon columns. |
 | `--lpt-max-label-width` | `17rem` | Maximum Settings label width. |
-| `--lpt-shadow` | `Three-layer shadow; see styles.css` | Layered outer phone/launcher shadow and inset frame highlight. |
+| `--lpt-shadow` | `Three-layer shadow; see styles.css` | Layered outer phone shadow and inset frame highlight; does not affect launcher. |
 | `--lpt-icon-fill` | `color-mix(in srgb, var(--lpt-accent) 16%, var(--lpt-card-bg))` | Fallback tile fill; per-app tint rules take priority on Home. |
 | `--lpt-transition` | `150ms cubic-bezier(0.22, 1, 0.36, 1)` | Hover, press and switch animation timing. |
 
@@ -138,8 +151,8 @@ These remain the existing UI hooks, not extra screens or settings. `.lpt-root[da
 | `.lpt-input` | Single-line text input. |
 | `.lpt-island` | Protected host-side holder of the shadow root (not custom-styled). |
 | `.lpt-label` | Form input label. |
-| `.lpt-launcher` | Closed floating phone button; unchanged target, with relative positioning for overlaid badges. |
-| `.lpt-launcher-image` | Embedded transparent PNG; smooth scaling, contained aspect ratio and no pointer-event interception. |
+| `.lpt-launcher` | Transparent native launcher button; minimum 50px target, inside focus ring and overlaid badges. |
+| `.lpt-launcher-image` | Embedded 88 x 128 PNG; contained proportions, image-only drop shadow, smooth scaling and no pointer interception. |
 | `.lpt-location` | Large exact-location field in Scene. |
 | `.lpt-locations` | Locations app content. |
 | `.lpt-manual-tag` | Read-only escaped tag for manual copy when composer drafting is unsupported. |

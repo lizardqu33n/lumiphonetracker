@@ -1,6 +1,6 @@
-# Current release: Part 2 / 0.8.0
+# Current release: Launcher fit / 0.8.1
 
-Refresh tracker rebuilds saved Main AI data or makes one explicit Helper request. Failures use safe categories, connections are authorized before listing, and late results retain chat/revision guards. See [PART-2.md](PART-2.md) for the identity audit. No new permission or setting. The embedded launcher PNG is unchanged.
+Refresh tracker rebuilds saved Main AI data or makes one explicit Helper request. Failures use safe categories, connections are authorized before listing, and late results retain chat/revision guards. See [PART-2.md](PART-2.md) for the identity audit. No new permission or setting. The launcher now embeds the tight-cropped 88 x 128 PNG with a transparent button and image-only shadow. Only its asset/CSS changed; standard chromeless placement, navigation and tracker handlers are unchanged.
 
 Main AI and Helper AI share shorthand parsing into the existing validated journal schema. Old key=JSON messages remain readable. See [BLOCK-FORMAT.md](BLOCK-FORMAT.md), [TOKEN-REPORT.md](TOKEN-REPORT.md) and [USER-DOCS-REVIEW.md](USER-DOCS-REVIEW.md). No new host calls or identity routes are added. Part 2 is complete; see [PART-2.md](PART-2.md).
 

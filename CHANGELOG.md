@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.1 - Launcher fit only
+
+- Embed the new tight-cropped 88 x 128 PNG unchanged. Default to a square 50px launcher with art touching top/bottom, centered with its original proportions.
+- Remove launcher background, border, box shadow and inner padding, including hover. Keep an image-only drop shadow with editable color/blur/offset variables.
+- Preserve the minimum tap target, label, activation, drag setup and badge placement. Keep keyboard focus inside the protected clipping bounds. Open phone surfaces remain opaque.
+- Document the taller-art CSS option with its 50 x 55 invisible tap target. Test smooth 1x/2x scaling, light/dark backgrounds, focus, badges, custom CSS and sidebar Reset. Real-host mobile/light-theme/drag appearance remains unverified.
+
 ## 0.8.0 - Part 2 only
 
 - Refresh tracker replaces Update now in Settings in both modes. Main AI rebuilds from saved messages without a model request; Helper AI makes one explicit update. Streaming disables it.

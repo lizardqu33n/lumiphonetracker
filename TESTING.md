@@ -1,6 +1,36 @@
-# Verification report - 0.8.0 (Part 2)
+# Verification report - 0.8.1 (Launcher fit)
 
 Checked November 4, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **No live Lumiverse session or real model connection was used. A local Lumiverse build and its user-docs were inspected; that is not live-host verification. No paid model request was made.**
+
+## Launcher fit / transparency (0.8.1)
+
+135 code tests (854 assertions) and 135 browser checks pass. The new PNG is
+embedded unchanged as a data URI, with its real 88 x 128 dimensions and alpha.
+Only src/styles.css and the launcher asset change production behavior; no handler,
+host call, permission or navigation changes. The existing documented chromeless
+widget already removes host chrome. The old visible box was our launcher CSS.
+
+Default A keeps the 50 x 50 target, contained art about 34 x 50 and zero padding.
+B is demonstrated as 38 x 55 art inside a 50 x 55 invisible target, retaining the
+existing minimum width. Tests at 1x/2x check full-height image sizing, adequate
+source pixels, object-fit containment, smooth rendering, transparency and no box
+shadow in normal/hover states. Only the image receives drop-shadow. Tests check
+an inside keyboard focus ring, click/Enter activation, badge stacking and complete
+badge bounds, custom sizing/shadow variables, minimum target and no external
+image requests. Screenshots compare dark/light test backgrounds and both fits.
+Existing opaque-screen and hostile-CSS/sidebar Reset regressions still pass.
+
+A browser check initially exposed intrinsic image dimensions expanding an auto
+Grid row for the non-square PNG. Explicit bounded Grid tracks fix it; the image
+box now stays within the tap target. The comparison preview is test-only and its
+dashed guides never appear in the extension. No demo messages or badges are added.
+
+**Not verified in a real install:** Lumiverse light-theme compositing, actual
+mobile density/WebView scaling, host pointer dragging/snapping, native desktop
+pop-out clipping and saved custom CSS from other users. The browser harness has
+no real Lumiverse drag implementation. The protected placement is unchanged and
+can clip large custom shadows at its edges; no host-private CSS is used to bypass
+it. Light-background screenshots are not real Lumiverse light-theme verification.
 
 ## Part 2: Helper failures and Refresh tracker (0.8.0)
 
