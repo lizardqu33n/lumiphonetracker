@@ -247,3 +247,35 @@ preserved; a changed displayed count becomes unread like any other correction.
 
 `{{phone_format}}` already includes Calls, Email and Bank continuity. Separate
 macros are optional alternatives; using both repeats the same continuity.
+
+## Text recipients: the player's own phone (0.10.2)
+
+Use phone-text only for actual texts sent **to the player**, or actual outgoing
+player texts when player-writing is ON. Texts between NPCs stay in narration
+without tags. The format macro includes one short routing sentence. Email and
+call behavior are unchanged.
+
+- Assistant text from a non-player: omit `to` to mean the player, or set it to
+  the exact confirmed player name (case/outer spacing is normalized).
+- A named non-player recipient is rejected. Unrecognized names and group labels
+  such as `Ada; Player` are also rejected, rather than guessed. Contacts and
+  assistant character names never establish who the player is.
+- When player identity is unknown, only omitted `to` is unambiguous. The extension
+  does not invent aliases such as You/Player from untrusted story text.
+- A sent user tag still requires `from` to match that saved user message's author;
+  it may address another character and is outgoing. Assistant player-sent tags
+  still require the player-writing switch. No player reply is fabricated.
+
+Every rebuild applies this rule, including Refresh tracker and restart; cached
+NPC-to-NPC entries disappear without rewriting saved story messages. Malformed
+same-source fallback is filtered too. Personal old receipts may remain stored
+but cannot display or revive a rejected text or change another user's reads.
+
+Display behavior stays unchanged: canonical tags are hidden by the documented
+frontend removeFromMessage interceptor; incomplete/broken tags are withheld by
+the existing render processor. Rejected content therefore appears in neither
+Messages nor story. No raw tag or HTML is exposed, and no fallback narration is
+invented. Correctly generated NPC-to-NPC text is normal narration with no tag.
+The server logs `Lumi Phone Tracker: text tag ignored: recipient is not a confirmed player.`
+once per unchanged source, using the existing bounded warning deduplication;
+no story text, names, recipients or field values enter that warning.

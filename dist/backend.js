@@ -1221,7 +1221,8 @@ notes=`) || row.content.includes(`
 details=`);
       if (row.role === "assistant") {
         const validLegacy = oldFormat && !parseReply(row.content).invalidTracker;
-        report?.(row, validLegacy ? [] : parsed.issues);
+        if (validLegacy)
+          parsed.issues = [];
       }
       if (row.role === "assistant" && oldFormat) {
         const old = parseReply(row.content);
@@ -1302,16 +1303,19 @@ details=`);
           from = row.name;
           direction = "outgoing";
         } else {
-          if (!players.size)
-            continue;
           if (players.has(normalize(text.from))) {
             if (!document.settings.aiPlayerTexts)
               continue;
             direction = "outgoing";
+          } else if (text.to !== undefined && !players.has(normalize(text.to))) {
+            parsed.issues.push({ line: null, field: "phone-text", reason: "recipient is not a confirmed player" });
+            continue;
           }
         }
         state.messages.push({ ...text, from, direction, at, id: JSON.stringify([at.id, at.variant, ordinal]) });
       }
+      if (row.role === "assistant")
+        report?.(row, parsed.issues);
     }
     for (const entry of document.helperEntries ?? [])
       if (entry.at.id === row.id && entry.at.variant === at.variant && entry.sources.every((s) => sorted.some((r) => r.id === s.id && helperSourceSignature(r) === s.signature))) {
@@ -1638,6 +1642,11 @@ class SkipLogger {
     this.seen.set(key, signature);
     while (this.seen.size > this.limit)
       this.seen.delete(this.seen.keys().next().value);
+    if (issues.some((i) => i.field === "phone-text" && i.reason === "recipient is not a confirmed player"))
+      this.warn("Lumi Phone Tracker: text tag ignored: recipient is not a confirmed player.");
+    issues = issues.filter((i) => i.field !== "phone-text");
+    if (!issues.length)
+      return;
     const count = issues.length;
     this.warn(`Lumi Phone Tracker: skipped invalid tracker data ${JSON.stringify({
       chatId,
@@ -2130,7 +2139,8 @@ ${value}`);
     lines.push(s.aiPlayerTexts ? "Player texts, calls and emails only when actually established." : "NEVER write emails or texts from the player, or invent player replies.");
   }
   if (s.enabled.messages) {
-    lines.push('Actual sent texts only: <phone-text from="Name" to="known recipient" time="known time">escaped text</phone-text>. Omit unknown attributes; text only here, never invent.');
+    lines.push('Actual sent texts only: <phone-text from="Name" to="player name" time="known time">escaped text</phone-text>. Omit unknown attributes; text only here, never invent.');
+    lines.push(s.aiPlayerTexts ? "Tag only texts to the player or actual player-sent texts; NPC-to-NPC texts stay in narration without tags." : "Tag only texts sent to the player; NPC-to-NPC texts stay in narration without tags.");
     lines.push(s.aiPlayerTexts ? "Player texts only when actually sent in the story, using the player's exact name." : "NEVER write texts from the player's character or invent player replies.");
   }
   return lines.join(`

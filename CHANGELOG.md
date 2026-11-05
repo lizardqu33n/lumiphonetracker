@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.2 - Only the player's phone texts
+
+- Tell the AI in one short sentence to tag only texts to the player, plus actual player-sent texts when enabled. NPC-to-NPC texts stay in narration without tags.
+- Enforce incoming recipients during every rebuild: absent recipient means player; explicit recipient must match a confirmed player name. Reject non-player and ambiguous/group targets without guessing. Preserve sent user replies and player-writing protection.
+- Refresh removes old NPC-to-NPC records from Messages; saved source stays unchanged. Incorrect tags remain hidden and produce a deduplicated, value-free server warning. No new screen, setting, permission or CSS change.
+- Add code/browser coverage and update install/format/testing guides and built files.
+
 ## 0.10.1 - Call sources, repeat counts and supplied default theme
 
 - Keep identical calls from different source messages; rereading one source stays idempotent. Selected swipes and regeneration replace that message's calls. Call edits/deletions are source-scoped.

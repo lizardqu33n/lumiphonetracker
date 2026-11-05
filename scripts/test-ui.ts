@@ -160,6 +160,13 @@ try {
   await activityPage.evaluate(()=>(window as any).oldActivityForm.dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));await activityPage.waitForTimeout(100);
   check(await activityPage.evaluate(()=>(window as any).harness.getDocument("b").state.calls.length)===0,"A detached activity editor cannot save into a newly selected chat");
   await activityPage.close();
+  const addressedPage=await browser.newPage({viewport:{width:1100,height:850}});await addressedPage.goto(`http://127.0.0.1:${server.port}`);await ready(addressedPage);await open(addressedPage);
+  await addressedPage.evaluate(()=>(window as any).harness.activityStory('<phone-text from="Ada" to="Bea">NPC-only text</phone-text><phone-text from="Ada" to="Player">For your phone</phone-text><phone-text from="Bea">Implicit incoming</phone-text>'));await addressedPage.waitForTimeout(130);
+  check(await addressedPage.evaluate(()=>(window as any).harness.getDocument().state.messages.map((m:any)=>m.text).join("|"))==="For your phone|Implicit incoming","NPC-to-NPC text is absent while player-addressed and implicit texts are filed");
+  check(await addressedPage.locator('.lpt-island [data-app="Messages"] .lpt-unread-badge').innerText()==="2","Rejected NPC text adds no unread badge item");
+  await addressedPage.locator('.lpt-island [data-app="Messages"]').click();check(!(await addressedPage.locator(".lpt-messages").textContent())!.includes("NPC-only text")&&await addressedPage.locator(".lpt-conversation").count()===2,"Only player-phone conversations appear in Messages");
+  await addressedPage.evaluate(()=>{(window as any).harness.setComposer({text:'<phone-text from="Player" to="Ada">My actual reply</phone-text>'});(window as any).harness.sendComposer();});await addressedPage.waitForTimeout(130);
+  check(await addressedPage.locator(".lpt-outgoing").count()===1&&await addressedPage.evaluate(()=>(window as any).harness.getDocument().state.messages.at(-1).direction)==="outgoing","A sent user reply to a character stays outgoing after recipient filtering");await addressedPage.close();
   const placementPage = await browser.newPage({ viewport: { width: 1100, height: 850 } });
   await placementPage.goto(`http://127.0.0.1:${server.port}/?auto-root`); await ready(placementPage);
   const initialHeight = await placementPage.locator(".lpt-viewport").evaluate(e => e.getBoundingClientRect().height);

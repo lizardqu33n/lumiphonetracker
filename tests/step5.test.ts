@@ -75,3 +75,43 @@ describe("Step 5 saved texts, read status and draft safety", () => {
     expect(replay(doc,[{...row,role:"assistant"}],["Player"]).state.messages).toEqual([]);
   });
 });
+
+describe("player-phone recipient filtering",()=>{
+ const row=(content:string,more:Partial<StoryRow>={}):StoryRow=>({id:"m",chat_id:"a",index_in_chat:0,swipe_id:0,role:"assistant",content,...more});
+ const text=(from:string,to?:string,body="Actual text")=>`<phone-text from="${from}"${to?` to="${to}"`:""}>${body}</phone-text>`;
+ test("NPC-to-NPC is rejected; named player and absent recipients are incoming",()=>{
+  const d=emptyDocument("a");const result=replay(d,[row(text("Ada","Bea","PRIVATE NPC text")+text("Ada","Player","To player")+text("Bea",undefined,"No recipient"))],["Player"]);
+  expect(result.state.messages.map(m=>[m.from,m.to,m.direction,m.text])).toEqual([["Ada","Player","incoming","To player"],["Bea",undefined,"incoming","No recipient"]]);
+  expect(replay(d,[row(text("Ada"," pLaYeR "))],["Player"]).state.messages.length).toBe(1);
+ });
+ test("actual user replies and explicitly allowed AI player texts retain non-player recipients",()=>{
+  const d=emptyDocument("a"),content=text("Player","Ada");
+  expect(replay(d,[row(content,{role:"user",name:"Player"})],["Player"]).state.messages[0].direction).toBe("outgoing");
+  expect(replay(d,[row(content)],["Player"]).state.messages).toEqual([]);
+  d.settings.aiPlayerTexts=true;expect(replay(d,[row(content)],["Player"]).state.messages[0].direction).toBe("outgoing");
+  expect(replay(d,[row(text("Ada","Bea"))],["Player"]).state.messages).toEqual([]);
+ });
+ test("group chats with unknown identity never guess a named recipient, while omitted recipient is incoming",()=>{
+  const d=emptyDocument("a");d.state.contacts=[{name:"Ada",player:false,fields:{}},{name:"Bea",player:false,fields:{}}];
+  const content=text("Ada","Bea")+text("Ada","Player")+text("Ada","You")+text("Bea",undefined,"Implicit incoming");
+  const result=replay(d,[row(content,{name:"Ada"})],[]);expect(result.state.messages.map(m=>m.text)).toEqual(["Implicit incoming"]);expect(result.state.messages[0].direction).toBe("incoming");
+  for(const to of ["Ada; Player","Ada, Player","The group","Someone else"])expect(replay(d,[row(text("Bea",to))],["Player"]).state.messages).toEqual([]);
+ });
+ test("Refresh removes previously cached NPC-to-NPC records and deduplicates value-free warnings",async()=>{
+  const lines:string[]=[];
+  const content=text("PRIVATE sender","PRIVATE recipient","PRIVATE body");const r=row(content);const old=emptyDocument("a");
+  old.state.messages=[{from:"PRIVATE sender",to:"PRIVATE recipient",text:"PRIVATE body",id:"old",direction:"incoming",at:{id:"m",index:0,variant:"[0,null]"}}];
+  old.accepted=[{at:old.state.messages[0].at,patch:{scene:{},contacts:[],locations:[],notes:{}},texts:[{from:"PRIVATE sender",to:"PRIVATE recipient",text:"PRIVATE body"}],prose:"",role:"assistant"}];
+  let disk=JSON.stringify(old);const store=new PhoneStore({authorize:async(c,u)=>c==="a"&&u==="trusted",read:async()=>disk,write:async(c,v)=>{disk=v;},history:async()=>[r],player:async()=>"Player",warn:s=>lines.push(s)});
+  const {HelperAI}=await import("../src/helper");let modelCalls=0;
+  const refresh=new HelperAI(store,{allowed:()=>false,connections:async()=>[],generate:async()=>{modelCalls++;throw Error("must not generate");},changed:()=>{},warn:s=>lines.push(s)});
+  expect((await refresh.refresh("trusted","a")).ok).toBe(true);expect((await store.sync("trusted","a")).state.messages).toEqual([]);expect(modelCalls).toBe(0);
+  expect(lines).toEqual(["Lumi Phone Tracker: text tag ignored: recipient is not a confirmed player."]);expect(lines.join()).not.toContain("PRIVATE");
+  const {transformTags}=await import("../src/tags");expect(transformTags(content,"strip")).toBe("");expect(transformTags(content,"display")).toBe(content); // The existing frontend removeFromMessage interceptor removes canonical tags.
+ });
+ test("phone_format adds exactly one short routing rule, only while Messages is active",async()=>{
+  const {formatMacro}=await import("../src/phone-macros");const d=emptyDocument("a");expect(formatMacro(d)).toContain("Tag only texts sent to the player; NPC-to-NPC texts stay in narration without tags.");
+  d.settings.aiPlayerTexts=true;expect(formatMacro(d)).toContain("Tag only texts to the player or actual player-sent texts; NPC-to-NPC texts stay in narration without tags.");
+  d.settings.apps.Messages=false;expect(formatMacro(d)).not.toContain("NPC-to-NPC texts");
+ });
+});

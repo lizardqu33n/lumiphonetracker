@@ -15,6 +15,9 @@ export class SkipLogger {
     if (this.seen.get(key) === signature) return;
     this.seen.delete(key); this.seen.set(key, signature);
     while (this.seen.size > this.limit) this.seen.delete(this.seen.keys().next().value!);
+    if(issues.some(i=>i.field==="phone-text"&&i.reason==="recipient is not a confirmed player"))this.warn("Lumi Phone Tracker: text tag ignored: recipient is not a confirmed player.");
+    issues=issues.filter(i=>i.field!=="phone-text");
+    if(!issues.length)return;
     const count = issues.length;
     this.warn(`Lumi Phone Tracker: skipped invalid tracker data ${JSON.stringify({ chatId, messageId: row.id,
       swipe: row.swipe_id, issues: issues.slice(0, 20), ...(count > 20 ? { additionalIssues: count - 20 } : {}) })}`);

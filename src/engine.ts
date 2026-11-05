@@ -123,7 +123,7 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
       const oldFormat = row.content.includes("\nnotes=") || row.content.includes("\ndetails=");
       if (row.role === "assistant") {
         const validLegacy = oldFormat && !parseLegacy(row.content).invalidTracker;
-        report?.(row, validLegacy ? [] : parsed.issues);
+        if(validLegacy)parsed.issues=[];
       }
       if (row.role === "assistant" && oldFormat) {
         const old = parseLegacy(row.content);
@@ -172,15 +172,18 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
           if (!row.name || normalize(text.from) !== normalize(row.name)) continue;
           from = row.name; direction = "outgoing";
         } else {
-          // Without known player identity, reject ambiguous AI-authored texts.
-          if (!players.size) continue;
           if (players.has(normalize(text.from))) {
             if (!document.settings.aiPlayerTexts) continue;
             direction = "outgoing";
+          } else if(text.to!==undefined && !players.has(normalize(text.to))) {
+            // Explicit non-player or ambiguous/group recipients never enter the player's phone.
+            parsed.issues.push({line:null,field:"phone-text",reason:"recipient is not a confirmed player"});
+            continue;
           }
         }
         state.messages.push({ ...text, from, direction, at, id: JSON.stringify([at.id, at.variant, ordinal]) });
       }
+      if(row.role==="assistant")report?.(row,parsed.issues);
     }
     for (const entry of document.helperEntries ?? []) if (entry.at.id === row.id &&
       entry.at.variant === at.variant && entry.sources.every(s => sorted.some(r => r.id === s.id && helperSourceSignature(r) === s.signature))) {

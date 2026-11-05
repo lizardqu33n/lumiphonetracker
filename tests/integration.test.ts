@@ -1,3 +1,4 @@
+import {activityReceipt} from "../src/activity";
 import { expect, test } from "bun:test";
 import { emptyDocument, SWITCHES } from "../src/model";
 import type { SpindleAPI } from "lumiverse-spindle-types";
@@ -206,8 +207,8 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     const sharedAdded=await request({type:"phone_update",chatId:"shared",revision:(sharedU.snapshot as {revision:number}).revision,settings:{apps:{Calls:true,Email:true,Bank:true}}},"v");
     const sharedV=await request({type:"phone_sync",chatId:"shared"},"u");expect((sharedV.snapshot as any).state).toEqual((sharedAdded.snapshot as any).state);expect((sharedV.snapshot as any).settings.apps.Bank).toBe(true);
     const call=(sharedV.snapshot as any).state.calls[0],mail=(sharedV.snapshot as any).state.emails[0];
-    for(const [key,entry]of [["@calls",call],["@email",mail]])expect((await request({type:"phone_mark_read",chatId:"shared",key,observed:[{id:entry.id,receipt:JSON.stringify(entry)}]},"u")).type).toBe("phone_reads_result");
-    const uAfter=await request({type:"phone_sync",chatId:"shared"},"u"),vAfter=await request({type:"phone_sync",chatId:"shared"},"v");expect((uAfter.reads as any).seen[mail.id]).toBeDefined();expect((vAfter.reads as any).seen[mail.id]).toBeUndefined();
+    for(const [key,entry]of [["@calls",call],["@email",mail]])expect((await request({type:"phone_mark_read",chatId:"shared",key,observed:[{id:entry.id,receipt:activityReceipt(entry)}]},"u")).type).toBe("phone_reads_result");
+    const uAfter=await request({type:"phone_sync",chatId:"shared"},"u"),vAfter=await request({type:"phone_sync",chatId:"shared"},"v");expect((uAfter.reads as any).seen[call.id]).toBeDefined();expect((vAfter.reads as any).seen[call.id]).toBeUndefined();expect((uAfter.reads as any).seen[mail.id]).toBeDefined();expect((vAfter.reads as any).seen[mail.id]).toBeUndefined();
     expect(await macros.get("phone_email")!({chatId:"shared",userId:"u"})).toBe("");expect(await macros.get("phone_email")!({chatId:"shared",userId:"v"})).toContain("Shared plan");
     failReceipts=true;expect(await macros.get("phone_email")!({chatId:"shared",userId:"v"})).toBe("");expect(await macros.get("phone_format")!({chatId:"shared",userId:"v"})).toContain("call:");expect(warnings.join()).not.toContain("PRIVATE receipt failure");failReceipts=false;
     expect(generations[0].type).toBe("raw");expect(generations[0].connection_id).toBe("small");expect(generations[0].userId).toBe("u");expect((generations[0].messages as unknown[]).length).toBe(2);

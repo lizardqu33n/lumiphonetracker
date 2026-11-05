@@ -118,7 +118,8 @@ export function formatMacro(doc: Document): string {
   else if(tracking||s.enabled.weather)lines.push(...trackerInstructions(doc));
   if(s.enabled.email){lines.push('Actual emails only: <phone-email from="Name or address" to="optional recipient" subject="known subject" time="known time">escaped body</phone-email>. Omit unknown optional attributes. Body max 1500 characters. Email content only in this tag, never in prose. Never invent emails.');lines.push(s.aiPlayerTexts?"Player texts, calls and emails only when actually established.":"NEVER write emails or texts from the player, or invent player replies.");}
   if(s.enabled.messages) {
-    lines.push('Actual sent texts only: <phone-text from="Name" to="known recipient" time="known time">escaped text</phone-text>. Omit unknown attributes; text only here, never invent.');
+    lines.push('Actual sent texts only: <phone-text from="Name" to="player name" time="known time">escaped text</phone-text>. Omit unknown attributes; text only here, never invent.');
+    lines.push(s.aiPlayerTexts?"Tag only texts to the player or actual player-sent texts; NPC-to-NPC texts stay in narration without tags.":"Tag only texts sent to the player; NPC-to-NPC texts stay in narration without tags.");
     lines.push(s.aiPlayerTexts?"Player texts only when actually sent in the story, using the player's exact name.":"NEVER write texts from the player's character or invent player replies.");
   }
   return lines.join("\n");

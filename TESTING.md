@@ -1,6 +1,32 @@
-# Verification report - 0.10.1
+# Verification report - 0.10.2
 
 Checked November 5, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **No live Lumiverse session or real model connection was used. A local Lumiverse build and its user-docs were inspected; that is not live-host verification. No paid model request was made.**
+
+## 0.10.2: player-phone Messages filtering
+
+**177 code tests / 1157 assertions; 177 browser checks pass.** Type checking,
+built-file reproducibility and manifest/package checks pass.
+
+- NPC-to-NPC is rejected; explicit confirmed player names and absent recipients
+  are incoming. Name matching normalizes case/outer spaces. A user's own sent
+  replies remain outgoing. AI-authored player messages still need the switch ON.
+- An unknown player identity never comes from NPC contacts or assistant names;
+  unknown or multi-recipient/group targets are rejected, while omitted `to` is
+  accepted as implicit incoming. Tests do not claim to resolve unnamed groups.
+- An old cached/accepted NPC-to-NPC text is removed by the real Main AI Refresh
+  path with zero model calls. Repeated reads produce one fixed server warning,
+  without names or message values. Saved tags are preserved. Existing display
+  interception still removes tags, so rejected content stays hidden in story.
+- Browser checks verify two allowed incoming texts versus one rejected NPC text,
+  only two badge items/conversations, and an actual sent outgoing user reply.
+  Earlier opaque-screen, hostile-CSS Reset and theme/launcher tests still pass.
+- The strict operator-host test uses the current call receipt format and asserts
+  separate missed-call read state for two users, alongside the existing emails.
+
+**Needs real-install verification:** native tag hiding/cold loading, actual
+Refresh/event delivery in a shared chat, trusted persona resolution in live group
+chats, final prompt rendering and model compliance. No real Lumiverse server,
+second-user session or paid connection was used. No new API or permission is used.
 
 ## 0.10.1: call sources, counts and supplied default theme
 
