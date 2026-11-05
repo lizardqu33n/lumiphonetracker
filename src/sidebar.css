@@ -1,110 +1,88 @@
-/* Host sidebar only; never part of the phone's custom-CSS tree.
-   Calm Y2K version: pastel buttons and switches, heart markers, readable text.
-   Text and backgrounds still follow Lumiverse's own theme variables.
-   Recolor the pastel parts by editing the --lpt-side-* values below. */
+/* Sidebar only: protected from the phone Shadow DOM/custom CSS.
+   The toolbar is a separate flex row; only lpt-sidebar-scroll scrolls. */
+.lpt-sidebar-mount {padding:0!important;min-width:0;min-height:0;height:100%;display:flex;flex-direction:column;overflow:hidden;}
 .lpt-sidebar {
-  --lpt-side-outline: #420642;
-  --lpt-side-btn-bg: #d2aef6;
-  --lpt-side-btn-hover-bg: #dec6f6;
-  --lpt-side-btn-text: #420642;
-  --lpt-side-switch-on: #f6a2d2;
-  --lpt-side-switch-thumb-on: #420642;
-  --lpt-side-pill-bg: #a2d2f6;
-  --lpt-side-pill-text: #420642;
-  --lpt-side-accent: #d9419f;
-  --lpt-side-focus: #420642;
-  --lpt-side-focus-ring: #f6de8a;
-  --lpt-side-marker-closed: "♡";
-  --lpt-side-marker-open: "♥";
-  --lpt-side-radius: 14px;
-  --lpt-side-edge: var(--lumiverse-text-muted, GrayText);
-
-  max-height:100dvh;overflow-y:auto;color:var(--lumiverse-text,CanvasText);font:inherit;padding:12px;box-sizing:border-box;max-width:100%;overflow-wrap:anywhere;
+  --lpt-side-outline:#420642;
+  --lpt-side-btn-bg:#d2aef6;
+  --lpt-side-btn-hover-bg:#dec6f6;
+  --lpt-side-btn-text:#420642;
+  --lpt-side-focus:var(--lumiverse-accent,#f6de8a);
+  --lpt-side-bg:#19171f;
+  --lpt-side-border:var(--lumiverse-border,ButtonBorder);
+  --lpt-side-text:var(--lumiverse-text,CanvasText);
+  --lpt-side-muted:var(--lumiverse-text-muted,GrayText);
+  --lpt-side-gap:6px;
+  --lpt-side-space:10px;
+  --lpt-side-radius:12px;
+  --lpt-side-font-size:12px;
+  --lpt-side-scope-size:10px;
+  --lpt-side-toolbar-icon:32px;
+  --lpt-side-section-icon:24px;
+  --lpt-side-app-icon:28px;
+  --lpt-side-target:44px;
+  box-sizing:border-box;display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;height:100%;max-height:100dvh;max-width:100%;overflow:hidden;padding:0;font:inherit;color:var(--lpt-side-text);background-color:var(--lpt-side-bg);container-type:inline-size;
 }
-
-/* Explicit list instead of a universal selector; same box-sizing effect. */
+@supports(color:rgb(from red r g b / 1)) {.lpt-sidebar {--lpt-side-bg:rgb(from var(--lumiverse-fill,#19171f) r g b / 1);}}
 .lpt-sidebar div,.lpt-sidebar span,.lpt-sidebar p,.lpt-sidebar label,.lpt-sidebar fieldset,.lpt-sidebar details,.lpt-sidebar summary,.lpt-sidebar button,.lpt-sidebar input,.lpt-sidebar textarea,.lpt-sidebar select {box-sizing:border-box;}
+.lpt-sidebar [hidden] {display:none!important;}
+.lpt-sidebar button,.lpt-sidebar input,.lpt-sidebar textarea,.lpt-sidebar select,.lpt-sidebar summary {font:inherit;}
+.lpt-sidebar button:focus-visible,.lpt-sidebar input:focus-visible,.lpt-sidebar textarea:focus-visible,.lpt-sidebar select:focus-visible,.lpt-sidebar summary:focus-visible {outline:2px solid var(--lpt-side-focus);outline-offset:-2px;}
+.lpt-sidebar button:disabled,.lpt-sidebar input:disabled {opacity:.55;cursor:default;}
 
-/* ---- Recovery controls: unchanged from the original file, always visible ---- */
-.lpt-recovery-actions {display:grid;gap:8px;position:sticky;top:0;background:var(--lumiverse-bg,var(--lumiverse-fill,Canvas));z-index:1;padding:8px 0;}
-.lpt-recovery-action {display:grid;grid-template-columns:minmax(0,1fr);gap:3px;}
-.lpt-recovery-button {font:inherit;color:var(--lumiverse-text,CanvasText);background:var(--lumiverse-fill-subtle,ButtonFace);border:1px solid var(--lumiverse-border,ButtonBorder);border-radius:var(--lumiverse-radius,8px);padding:7px 10px;cursor:pointer;min-height:40px;white-space:normal;}
-.lpt-recovery-status {font-size:.85em;line-height:1.4;margin:4px 0;color:var(--lumiverse-text-muted,GrayText);}
-
-/* ---- Focus: always visible on light or dark hosts (plum ring plus butter ring) ---- */
-.lpt-sidebar button:focus-visible,.lpt-sidebar input:focus-visible,.lpt-sidebar textarea:focus-visible,.lpt-sidebar select:focus-visible,.lpt-sidebar summary:focus-visible {outline:2px solid var(--lumiverse-accent,Highlight);outline-offset:2px;}
-.lpt-sidebar .lpt-store-button:focus-visible,.lpt-sidebar .lpt-side-number:focus-visible,.lpt-sidebar .lpt-helper-source:focus-visible,.lpt-sidebar .lpt-helper-connection:focus-visible,.lpt-sidebar .lpt-sidebar-css:focus-visible,.lpt-sidebar .lpt-side-checkbox:focus-visible,.lpt-sidebar .lpt-side-summary:focus-visible {outline:3px solid var(--lpt-side-focus);outline-offset:2px;box-shadow:0 0 0 6px var(--lpt-side-focus-ring);}
-.lpt-sidebar button:disabled {opacity:.55;cursor:default;}
-
-/* ---- Text bits ---- */
-.lpt-side-status,.lpt-side-help,.lpt-side-scope {font-size:.85em;line-height:1.4;margin:4px 0;color:var(--lumiverse-text-muted,GrayText);}
-.lpt-side-scope {font-weight:600;}
-
-/* ---- Collapsible sections with heart markers (shape changes, not just color) ---- */
-.lpt-side-section {border-top:2px dashed var(--lumiverse-border,ButtonBorder);padding:10px 0;}
-.lpt-side-summary {font-weight:600;cursor:pointer;padding:5px 0;min-height:44px;display:flex;align-items:center;list-style:none;}
-.lpt-side-summary::-webkit-details-marker {display:none;}
-.lpt-side-summary::before {content:var(--lpt-side-marker-closed);flex:none;margin-right:8px;font-size:1.15em;line-height:1;color:var(--lpt-side-accent);}
-.lpt-side-section[open] > .lpt-side-summary::before {content:var(--lpt-side-marker-open);}
-
-/* ---- App Store rows ---- */
-.lpt-store-row {display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;align-items:center;padding:10px 0;}
-.lpt-side-label {display:flex;flex-direction:column;gap:4px;min-width:0;}
-.lpt-store-added {display:inline-block;width:fit-content;align-self:flex-start;padding:1px 9px;border:2px solid var(--lpt-side-outline);border-radius:999px;background:var(--lpt-side-pill-bg);color:var(--lpt-side-pill-text);font-size:.85em;font-weight:600;}
-.lpt-store-icon .lpt-icon {width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;}
-
-/* ---- Bubbly pastel Add / Remove buttons ---- */
-.lpt-store-button {font:inherit;font-weight:600;color:var(--lpt-side-btn-text);background:var(--lpt-side-btn-bg);border:2px solid var(--lpt-side-outline);border-radius:999px;padding:8px 16px;cursor:pointer;min-height:44px;min-width:44px;white-space:normal;box-shadow:0 2px 0 0 var(--lpt-side-outline);transition:background-color 140ms ease,transform 140ms ease,box-shadow 140ms ease;}
-.lpt-store-button:hover:not(:disabled) {background:var(--lpt-side-btn-hover-bg);}
-.lpt-store-button:active:not(:disabled) {transform:translateY(2px);box-shadow:0 0 0 0 var(--lpt-side-outline);}
-
-/* ---- Settings rows and switches ---- */
-.lpt-side-setting {display:flex;gap:10px;align-items:center;justify-content:space-between;padding:9px 0;min-height:44px;}
-.lpt-side-setting .lpt-side-label {flex:1;}
-.lpt-side-switch {flex:none;}
-.lpt-side-group {border:0;margin:8px 0;padding:0;min-width:0;}
-.lpt-side-legend {font-weight:600;}
-
-/* Native checkbox fallback drawn as a pill switch: thumb moves right when on. */
-.lpt-side-checkbox {appearance:none;-webkit-appearance:none;position:relative;flex:none;width:52px;height:30px;margin:0;border-radius:999px;border:2px solid var(--lpt-side-edge);background:var(--lumiverse-fill,Canvas);cursor:pointer;transition:background-color 140ms ease;}
-.lpt-side-checkbox::before {content:"";position:absolute;top:-9px;right:-6px;bottom:-9px;left:-6px;}
-.lpt-side-checkbox::after {content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--lpt-side-edge);transition:transform 140ms ease,background-color 140ms ease;}
-.lpt-side-checkbox:checked {background:var(--lpt-side-switch-on);border-color:var(--lpt-side-outline);}
-.lpt-side-checkbox:checked::after {background:var(--lpt-side-switch-thumb-on);transform:translateX(22px);}
-
-/* ---- Inputs ---- */
-.lpt-side-number,.lpt-helper-source,.lpt-helper-connection,.lpt-sidebar-css {font:inherit;color:var(--lumiverse-text,CanvasText);background:var(--lumiverse-fill,Canvas);border:2px solid var(--lumiverse-border,ButtonBorder);border-radius:var(--lpt-side-radius);padding:6px 10px;min-height:44px;max-width:100%;}
-.lpt-side-number {width:68px;flex:none;}
-.lpt-helper-source,.lpt-helper-connection {width:100%;}
-.lpt-sidebar-css {width:100%;min-height:160px;resize:vertical;}
-.lpt-side-chat {font-size:.9em;}
-
-@media(max-width:420px){.lpt-sidebar{padding:8px}.lpt-store-row{gap:5px}.lpt-store-button{padding:6px 12px}.lpt-side-setting{gap:6px}}
-
+/* Flush with the documented drawer content root. Results stay in normal flow. */
+.lpt-recovery-actions {position:sticky;top:0;z-index:3;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));flex:none;gap:2px;margin:0;padding:0;border-bottom:1px solid var(--lpt-side-border);background-color:var(--lpt-side-bg);}
+.lpt-toolbar-button {position:relative;display:flex;justify-content:center;align-items:center;gap:3px;min-height:var(--lpt-side-target);min-width:var(--lpt-side-target);padding:0 2px;border:0;border-radius:0;background-color:var(--lpt-side-bg);color:var(--lpt-side-text);cursor:pointer;}
+.lpt-toolbar-button:hover:not(:disabled) {background-color:var(--lumiverse-fill-subtle,#24212d);}
+.lpt-toolbar-icon {display:block;flex:none;width:var(--lpt-side-toolbar-icon);height:var(--lpt-side-toolbar-icon);object-fit:contain;image-rendering:auto;}
+.lpt-toolbar-label {font-size:var(--lpt-side-font-size);white-space:nowrap;}
+.lpt-toolbar-tooltip {position:absolute;top:100%;left:0;z-index:4;max-width:min(240px,calc(100cqw - 8px));width:max-content;padding:var(--lpt-side-gap);font-size:var(--lpt-side-font-size);line-height:1.4;white-space:normal;text-align:left;border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);background-color:var(--lpt-side-bg);color:var(--lpt-side-text);visibility:hidden;opacity:0;pointer-events:none;}
+.lpt-toolbar-button:nth-child(2) .lpt-toolbar-tooltip {left:50%;transform:translateX(-50%);}
+.lpt-toolbar-button:last-child .lpt-toolbar-tooltip {left:auto;right:0;}
+.lpt-toolbar-button:hover .lpt-toolbar-tooltip,.lpt-toolbar-button:focus-visible .lpt-toolbar-tooltip {visibility:visible;opacity:1;}
+.lpt-toolbar-results {flex:none;margin:0;background-color:var(--lpt-side-bg);}
+.lpt-recovery-status {margin:0;padding:var(--lpt-side-gap) var(--lpt-side-space);font-size:var(--lpt-side-font-size);line-height:1.4;color:var(--lpt-side-muted);overflow-wrap:anywhere;}
 .lpt-recovery-status:empty,.lpt-side-status:empty {display:none;}
+.lpt-sidebar-scroll {flex:1;min-width:0;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:0 var(--lpt-side-space) var(--lpt-side-space);}
+.lpt-side-chat {margin:var(--lpt-side-gap) 0;font-size:var(--lpt-side-font-size);line-height:1.4;overflow-wrap:anywhere;}
+.lpt-side-help,.lpt-side-status {margin:var(--lpt-side-gap) 0;font-size:var(--lpt-side-font-size);line-height:1.4;color:var(--lpt-side-muted);}
+.lpt-side-section {margin:0;padding:0;border-top:1px solid var(--lpt-side-border);}
+.lpt-side-summary {display:flex;align-items:center;gap:var(--lpt-side-gap);min-height:var(--lpt-side-target);padding:0;cursor:pointer;list-style:none;font-weight:600;font-size:var(--lpt-side-font-size);}
+.lpt-side-summary::-webkit-details-marker {display:none;}
+.lpt-side-icon {display:block;flex:none;width:var(--lpt-side-section-icon);height:var(--lpt-side-section-icon);object-fit:contain;image-rendering:auto;}
+.lpt-side-heading {flex:1;min-width:0;white-space:nowrap;}
+.lpt-side-scope {flex:none;font-size:var(--lpt-side-scope-size);color:var(--lpt-side-muted);white-space:nowrap;}
+.lpt-side-section[open] > .lpt-side-summary .lpt-side-heading {text-decoration:underline;text-underline-offset:4px;}
 
-.lpt-store-icon .lpt-app-image {width:22px;height:22px;object-fit:contain;image-rendering:auto;}
+/* A compact grid keeps all nine built-ins in view on ordinary desktop drawers. */
+.lpt-store-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--lpt-side-gap);padding-bottom:var(--lpt-side-space);}
+.lpt-store-row {display:grid;grid-template-columns:var(--lpt-side-app-icon) minmax(0,1fr);align-items:center;gap:2px;padding:4px;border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);min-width:0;}
+.lpt-store-icon {grid-column:1;grid-row:1;}
+.lpt-store-icon .lpt-app-image {display:block;width:var(--lpt-side-app-icon);height:var(--lpt-side-app-icon);object-fit:contain;image-rendering:auto;}
+.lpt-store-row .lpt-side-label {grid-column:1/-1;grid-row:2;text-align:center;}
+.lpt-store-name {display:block;font-size:var(--lpt-side-font-size);overflow-wrap:anywhere;}
+.lpt-store-button {grid-column:2;grid-row:1;font-size:var(--lpt-side-font-size)!important;min-height:var(--lpt-side-target);min-width:var(--lpt-side-target);max-width:100%;padding:0 3px;border:1px solid var(--lpt-side-outline);border-radius:var(--lpt-side-radius);color:var(--lpt-side-btn-text);background-color:var(--lpt-side-btn-bg);cursor:pointer;}
+.lpt-store-button:hover:not(:disabled) {background-color:var(--lpt-side-btn-hover-bg);}
+.lpt-side-label {display:flex;flex-direction:column;gap:var(--lpt-side-gap);min-width:0;}
+.lpt-side-group {display:flex;flex-wrap:wrap;gap:var(--lpt-side-gap);min-width:0;margin:var(--lpt-side-space) 0;padding:0;border:0;}
+.lpt-side-legend {font-weight:600;font-size:var(--lpt-side-font-size);padding:0 0 var(--lpt-side-gap);}
+.lpt-side-setting {min-width:0;}
+.lpt-toggle-chip {display:flex;align-items:center;gap:var(--lpt-side-gap);min-height:var(--lpt-side-target);padding:var(--lpt-side-gap);border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);font-size:var(--lpt-side-font-size);cursor:pointer;}
+.lpt-toggle-chip:has(input:checked) {background-color:var(--lpt-side-btn-bg);color:var(--lpt-side-btn-text);border-color:var(--lpt-side-outline);}
+.lpt-side-checkbox {appearance:auto;flex:none;width:16px;height:16px;margin:0;accent-color:var(--lpt-side-btn-bg);cursor:pointer;}
+.lpt-safety-setting {display:grid;grid-template-columns:20px minmax(0,1fr);align-items:start;gap:var(--lpt-side-gap);padding:var(--lpt-side-space) 0;cursor:pointer;}
+.lpt-safety-setting input {margin-top:3px;}
+.lpt-safety-setting .lpt-side-help {margin:0;}
+.lpt-side-number,.lpt-helper-source,.lpt-helper-connection,.lpt-sidebar-css {min-width:0;max-width:100%;padding:var(--lpt-side-gap);border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);background-color:var(--lpt-side-bg);color:var(--lpt-side-text);min-height:var(--lpt-side-target);}
+.lpt-helper-source,.lpt-helper-connection {width:100%;margin:0 0 var(--lpt-side-gap);}
+.lpt-side-source > .lpt-side-label {margin-bottom:var(--lpt-side-gap);font-size:var(--lpt-side-font-size);}
+.lpt-side-setting:has(.lpt-side-number) {display:flex;flex-direction:column;gap:var(--lpt-side-gap);margin:var(--lpt-side-gap) 0;font-size:var(--lpt-side-font-size);}
+.lpt-side-number {width:100%;}
+.lpt-side-numbers {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--lpt-side-space);}
+.lpt-side-css-summary {min-height:var(--lpt-side-target);display:flex;align-items:center;cursor:pointer;font-size:var(--lpt-side-font-size);}
+.lpt-sidebar-css {display:block;width:100%;min-height:160px;resize:vertical;font-family:monospace;font-size:var(--lpt-side-font-size)!important;}
+@container (min-width:300px) {.lpt-store-grid {grid-template-columns:repeat(3,minmax(0,1fr));}}
+@container (min-width:340px) {.lpt-toolbar-label {display:none;}}
+@container (max-width:239px) {.lpt-recovery-actions {grid-template-columns:repeat(2,minmax(0,1fr));}}
 
-@media (prefers-reduced-motion: reduce) {
-  .lpt-store-button,.lpt-side-checkbox,.lpt-side-checkbox::after {transition:none;}
-}
-
-/* ==========================================================================
-   PLAIN LOOK (turn the cute sidebar off): uncomment these overrides.
-
-.lpt-sidebar {
-  --lpt-side-outline: var(--lumiverse-border, ButtonBorder);
-  --lpt-side-btn-bg: var(--lumiverse-fill-subtle, ButtonFace);
-  --lpt-side-btn-hover-bg: var(--lumiverse-fill, Canvas);
-  --lpt-side-btn-text: var(--lumiverse-text, CanvasText);
-  --lpt-side-switch-on: var(--lumiverse-accent, Highlight);
-  --lpt-side-switch-thumb-on: var(--lumiverse-accent-fg, HighlightText);
-  --lpt-side-pill-bg: var(--lumiverse-fill-subtle, ButtonFace);
-  --lpt-side-pill-text: var(--lumiverse-text, CanvasText);
-  --lpt-side-accent: var(--lumiverse-text-muted, GrayText);
-  --lpt-side-focus: var(--lumiverse-accent, Highlight);
-  --lpt-side-focus-ring: transparent;
-  --lpt-side-marker-closed: "▸";
-  --lpt-side-marker-open: "▾";
-}
-   ========================================================================== */
+@container (max-width:239px) {.lpt-toolbar-button:nth-child(2) .lpt-toolbar-tooltip {left:auto;right:0;transform:none;}.lpt-toolbar-button:last-child .lpt-toolbar-tooltip {left:0;right:auto;}}
+@container (max-width:219px) {.lpt-store-grid {grid-template-columns:1fr;}}

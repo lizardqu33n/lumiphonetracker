@@ -1,6 +1,6 @@
 # Install Lumi Phone Tracker
 
-Version 0.11.0 includes the built files. You do not need to build or upload anything yourself.
+Version 0.12.0 includes the built files. You do not need to build or upload anything yourself.
 
 ## Install or update
 
@@ -16,7 +16,7 @@ Version 0.11.0 includes the built files. You do not need to build or upload anyt
 
 Remove older manual tracker-writing instructions or duplicate phone macros if you pasted them. No preset rewrite is required. The format macro changes its instructions with the settings, so this line works in both modes.
 
-Version 0.11.0 retains the fix for preset entries that bypass the macro interceptor. Keep using just {{phone_format}}. The pull handler reads the identity supplied inside that preset evaluation's host environment. This patch needs no additional permission. The existing macro_interceptor permission still supports other evaluation paths. If the host truly supplies no user or chat, the macro stays empty, logs the reason and lets generation continue.
+Version 0.12.0 retains the fix for preset entries that bypass the macro interceptor. Keep using just {{phone_format}}. The pull handler reads the identity supplied inside that preset evaluation's host environment. This patch needs no additional permission. The existing macro_interceptor permission still supports other evaluation paths. If the host truly supplies no user or chat, the macro stays empty, logs the reason and lets generation continue.
 
 
 Part 1 now requests compact shorthand from Main AI and Helper AI. Old saved JSON blocks still rebuild; do not rewrite old messages. No new permission or preset edit is needed. New AI contacts need confirmed Present names; with Present off, new names without saved presence are not admitted. Part 2 adds Refresh tracker in both modes and named Helper failure reasons. No additional permission is required.
@@ -143,3 +143,22 @@ Use Refresh tracker or switch away and back to reload avatar sources after
 permission changes. Unknown NPCs and ordinary group members without a documented
 card lookup use custom portraits or initials. See docs/PORTRAITS-THREADS.md for
 the documented API limits. The top strip and sidebar rework are the next step.
+
+The phone now shows established story time/date at the top. Edit them in Scene;
+the same Time and Date switches control the strip. Empty values stay hidden.
+Home no longer repeats the extension title. This does not change your preset.
+
+The Phone sidebar starts with Open, Refresh and Reset image buttons. Hover or
+use the keyboard for their tooltips; narrow sidebars also show short text labels.
+Results appear just below and clear after five seconds. Reset stays outside
+phone CSS and works even if the phone cannot appear. Main AI Refresh is free;
+Helper AI requests may cost money depending on the chosen model.
+
+Only one settings section opens at a time. App Store uses a compact grid with
+Add/Remove; removing still keeps all data. What to track shows checked chips
+only for added apps. Helper AI keeps the existing source and connection choices.
+Appearance has a second collapsed Custom CSS editor inside it. Advanced keeps
+the same numbers in two columns and the visible hints under both safety switches.
+Chat settings stay on the chat; appearance stays personal across your chats.
+No permission or setting was added in this update. Narrow/short drawers may
+still need scrolling, but the toolbar stays reachable.

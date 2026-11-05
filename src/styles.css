@@ -1700,3 +1700,11 @@
 
 .lpt-portrait-status {flex-basis:100%;font-size:var(--lpt-small-font-size);color:var(--lpt-muted);}
 .lpt-portrait-status:empty {display:none;}
+
+/* Read-only story time, shared with Scene; never a device clock. */
+.lpt-root { --lpt-strip-size:12px; --lpt-strip-space:6px; }
+.lpt-story-strip {flex:none;text-align:center;padding:var(--lpt-strip-space) var(--lpt-space);font-size:var(--lpt-strip-size);color:var(--lpt-muted);background-color:var(--lpt-screen-bg);overflow-wrap:anywhere;}
+.lpt-story-strip[hidden] {display:none;}
+.lpt-header:has(.lpt-heading[hidden]) {justify-content:flex-end;}
+
+.lpt-header > .lpt-story-strip {flex:1;min-width:0;padding-block:0;}

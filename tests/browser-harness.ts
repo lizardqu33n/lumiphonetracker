@@ -67,10 +67,11 @@ const ctx = {
   dom: { addStyle: (css: string) => { const style = document.createElement("style"); style.textContent = css; document.head.append(style); return () => style.remove(); } },
   messages: { registerTagInterceptor: (options: unknown, callback: (p: unknown) => void) => { const item = { options, callback }; tagHandlers.push(item); tagCalls++; return () => { const i = tagHandlers.indexOf(item); if (i >= 0) tagHandlers.splice(i, 1); }; } },
   ui: {
-    registerDrawerTab: () => {
-      const root = document.createElement("div"); root.className = "harness-drawer"; document.body.append(root);
+    registerDrawerTab: (options:{headerTitle?:string}) => {
+      const drawer=document.createElement("div");drawer.className="harness-drawer";const header=document.createElement("div");header.className="harness-drawer-header";header.textContent=options.headerTitle??"Phone";
+      const root=document.createElement("div");root.className="harness-drawer-root";drawer.append(header,root);document.body.append(drawer);
       const activations = new Set<() => void>();
-      return { root, destroy: () => root.remove(), onActivate: (fn: () => void) => { activations.add(fn); return () => activations.delete(fn); }, activate: () => activations.forEach(fn => fn()) };
+      return { root, destroy: () => drawer.remove(), onActivate: (fn: () => void) => { activations.add(fn); return () => activations.delete(fn); }, activate: () => activations.forEach(fn => fn()) };
     },
     createFloatWidget: (options: { width: number; height: number }) => {
       if (failWidget) throw new Error("Simulated placement failure");

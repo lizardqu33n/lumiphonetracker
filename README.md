@@ -2,7 +2,9 @@
 
 A small phone for keeping track of story facts. Each chat has its own Scene, Weather, Locations, Notes, Contacts and Messages, plus optional Calls, Email and Bank. The existing Phone sidebar tab controls apps, tracking and appearance.
 
-**Version 0.11.0: all six build steps are delivered.** Source, manifest, built frontend/backend, tests and guides are included. The new Helper AI has been tested with mocks, not a real paid connection.
+**Version 0.12.0: all six build steps are delivered.** Source, manifest, built frontend/backend, tests and guides are included. The new Helper AI has been tested with mocks, not a real paid connection.
+
+Version 0.12.0 adds the saved story time/date strip and compact sidebar: protected icon toolbar, single-open sections, app grid and tracking chips. No preset change is needed.
 
 Version 0.11.0 adds compact Scene/Contacts, real text threads, a docked Add to draft composer and safe portraits. Card/persona avatar permissions are optional; initials work without them. See [portraits and threads](docs/PORTRAITS-THREADS.md).
 

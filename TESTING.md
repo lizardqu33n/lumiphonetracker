@@ -1,6 +1,44 @@
-# Verification report - 0.11.0
+# Verification report - 0.12.0
 
 Checked November 5, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **No live Lumiverse session or real model connection was used. A local Lumiverse build and its user-docs were inspected; that is not live-host verification. No paid model request was made.**
+
+## 0.12.0: story strip and compact sidebar
+
+**185 code tests / 1251 assertions; 239 browser checks pass.** Type checking,
+reproducible built-file comparison and manifest/package checks pass. No live
+Lumiverse server, second user, real connection or paid request was used.
+
+- Home title is removed; the single story strip uses saved Time/Date cells and
+  existing effective switches, hides empty values, and leaves data untouched.
+  Checks cover time-only, date-only, both off, new empty chats, all core screens
+  and Close. No device time/date is generated; macros and backend are unchanged.
+- Eight supplied PNGs have verified bytes, names and 64x64 headers. Browser checks
+  confirm 32px toolbar / 24px section art, smooth scaling, decorative attributes,
+  44px targets, hover and actual keyboard Tab tooltips, and narrow text captions.
+- Simulated host title plus padded content root verifies flush placement. Toolbar
+  is outside scrolling content; results occupy a separate flow line and expire
+  after five seconds. Narrow/short scrolling does not overlap the toolbar and
+  Reset remains reachable even with a failed floating-phone mount. Toolbar/root/
+  result backgrounds remain opaque under translucent host fills.
+- Only one outer section opens at a time. All nine app tiles fit a normal 320px
+  desktop drawer; no On phone pill remains. Removed apps have no tracking chips.
+  Native checkmarks preserve non-color state. CSS starts collapsed inside
+  Appearance; Advanced is two columns and retains both safety hints/OFF defaults.
+- Main Refresh still makes zero model calls and is disabled while streaming;
+  Helper tooltip/section contain the cost note. Existing missing-connection,
+  category-only failure logging, shared-chat/per-user separation, stale saves,
+  hostile-CSS Reset, portraits, drafts, unread badges and nine opaque apps pass.
+
+**Needs real-install verification:** exact native title-bar spacing outside the
+provided root, real mobile drawer/keyboard/desktop pop-out placement and event
+routing. No API for styling arbitrary outer host spacing is documented or used;
+only the documented drawer root gets our own class/padding reset. No private
+host selectors, new permission, setting, tab or app is introduced. Narrow/short
+sidebars can still scroll; the toolbar itself does not scroll away.
+
+Icon budget: 46,981 original PNG bytes, 62,828 data-URI characters (~61.4 KiB),
+63,161 bytes in src/ui-icons.ts. No external icon requests. See
+[TOP-STRIP-SIDEBAR.md](docs/TOP-STRIP-SIDEBAR.md) and STYLING.md.
 
 ## 0.11.0: compact layout, text threads and portraits
 

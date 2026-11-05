@@ -1,6 +1,6 @@
 # Style your phone
 
-Version 0.11.0 adds compact Scene and Contact rows, portrait circles, a newest-first Messages list and a docked text-thread composer. The top strip and sidebar rework are the next checkpoint. Existing phone custom CSS still overrides the defaults.
+Version 0.12.0 keeps the compact story views and adds the read-only story strip plus a protected icon toolbar and compact sidebar. Existing phone custom CSS still overrides the defaults.
 
 Version 0.10.1 bundles the supplied styles(1).css and sidebar.css as the default look: pastel tiles, plum outlines, heart markers and solid dark story surfaces. This default does not use the custom CSS character limit. Class names, navigation and tracker behavior are unchanged.
 
@@ -64,7 +64,7 @@ No new navigation tabs or Settings screen are added. New App Store entries start
 removed; removed data stays saved. Shared story data/settings and personal
 receipts/appearance/dismissals follow [PART-4.md](docs/PART-4.md).
 
-## Sidebar settings (0.9.0)
+## Sidebar settings (0.12.0)
 
 All settings are now in the existing **Phone** sidebar. Only App Store opens by
 default. The scope is visible in each section heading. The phone keeps story
@@ -74,17 +74,18 @@ Home has only added apps; it has no Settings or App Store icon.
 Sidebar rules live in [src/sidebar.css](src/sidebar.css), outside the phone's
 Shadow DOM. The phone CSS editor cannot style the sidebar, its controls or Reset.
 Do not put sidebar rules in that editor; it intentionally changes only the phone.
-The sidebar follows host theme variables, and uses Lumiverse's shared switches
-when available. Shared switches own their internal classes; use their documented
-host options rather than styling private children. General shared buttons are
-not documented, so these buttons are native elements with small themed styles.
+The sidebar follows documented host theme colors. It uses native labeled
+checkbox chips with visible checked states. No documented chip component exists
+in the checked shared-components contract, so no private shared-switch children
+are styled. Only the body below the toolbar/results scrolls. The CSS editor is
+collapsed inside Appearance; only one outer section opens at a time.
 
 | Sidebar class | What it is |
 | --- | --- |
-| `.lpt-sidebar` | Host sidebar root, with vertical scrolling and its own --lpt-side- variables. |
+| `.lpt-sidebar` | Protected sidebar layout root with its own --lpt-side- variables. |
 | `.lpt-sidebar-settings` | Chat label and the five collapsible sections. |
 | `.lpt-recovery-actions` | Sticky Open / Refresh / Reset area. |
-| `.lpt-recovery-action` | One top button and its own short result. |
+| `.lpt-recovery-action` | Legacy selector, no longer emitted: results are below the shared toolbar. |
 | `.lpt-recovery-button` | Top action button. |
 | `.lpt-recovery-status` | Short confirmation or recovery explanation. |
 | `.lpt-refresh-result` | Refresh result, kept with the top Refresh button. |
@@ -99,7 +100,7 @@ not documented, so these buttons are native elements with small themed styles.
 | `.lpt-store-row` | Built-in app row, identified by data-store-app. |
 | `.lpt-store-icon` | Container for the bundled app PNG, with no external loading. |
 | `.lpt-store-name` | App's plain name. |
-| `.lpt-store-added` | On phone label. |
+| `.lpt-store-added` | Legacy selector, no longer emitted: redundant pill removed. |
 | `.lpt-store-button` | Add or Remove button. |
 | `.lpt-side-group` | Group of tracking switches for one app. |
 | `.lpt-side-legend` | App name above its switches. |
@@ -107,8 +108,8 @@ not documented, so these buttons are native elements with small themed styles.
 | `.lpt-side-label` | Label and short explanation. |
 | `.lpt-side-title` | Short setting name. |
 | `.lpt-side-help` | One-sentence explanation. |
-| `.lpt-side-switch` | Mount target for the documented shared switch. |
-| `.lpt-side-checkbox` | Native checkbox fallback for older hosts. |
+| `.lpt-side-switch` | Legacy selector, no longer emitted: chips use native inputs. |
+| `.lpt-side-checkbox` | Native checked-state input for tracking chips and safety settings. |
 | `.lpt-side-number` | Existing bounded whole-number input. |
 | `.lpt-helper-source` | Moved Main AI / Helper AI picker. |
 | `.lpt-helper-connection` | Moved saved-connection picker. |
@@ -259,20 +260,23 @@ Changing sidebar defaults requires editing the bundled sidebar stylesheet.
 | Variable | Default | What it changes |
 | --- | --- | --- |
 | `--lpt-side-outline` | `#420642` | Sidebar outline. |
-| `--lpt-side-btn-bg` | `#d2aef6` | Sidebar btn bg. |
-| `--lpt-side-btn-hover-bg` | `#dec6f6` | Sidebar btn hover bg. |
-| `--lpt-side-btn-text` | `#420642` | Sidebar btn text. |
-| `--lpt-side-switch-on` | `#f6a2d2` | Sidebar switch on. |
-| `--lpt-side-switch-thumb-on` | `#420642` | Sidebar switch thumb on. |
-| `--lpt-side-pill-bg` | `#a2d2f6` | Sidebar pill bg. |
-| `--lpt-side-pill-text` | `#420642` | Sidebar pill text. |
-| `--lpt-side-accent` | `#d9419f` | Sidebar accent. |
-| `--lpt-side-focus` | `#420642` | Sidebar focus. |
-| `--lpt-side-focus-ring` | `#f6de8a` | Sidebar focus ring. |
-| `--lpt-side-marker-closed` | `"♡"` | Sidebar marker closed. |
-| `--lpt-side-marker-open` | `"♥"` | Sidebar marker open. |
-| `--lpt-side-radius` | `14px` | Sidebar radius. |
-| `--lpt-side-edge` | `var(--lumiverse-text-muted, GrayText)` | Sidebar edge. |
+| `--lpt-side-btn-bg` | `#d2aef6` | Fill of Add/Remove buttons and checked chips. |
+| `--lpt-side-btn-hover-bg` | `#dec6f6` | Add/Remove button hover fill. |
+| `--lpt-side-btn-text` | `#420642` | Text on pastel buttons and checked chips. |
+| `--lpt-side-focus` | `var(--lumiverse-accent,#f6de8a)` | Keyboard focus ring, using the host accent. |
+| `--lpt-side-bg` | `#19171f` | Opaque sidebar/toolbar background; follows host fill RGB when supported. |
+| `--lpt-side-border` | `var(--lumiverse-border,ButtonBorder)` | Sidebar border. |
+| `--lpt-side-text` | `var(--lumiverse-text,CanvasText)` | Sidebar text. |
+| `--lpt-side-muted` | `var(--lumiverse-text-muted,GrayText)` | Sidebar muted. |
+| `--lpt-side-gap` | `6px` | Sidebar gap. |
+| `--lpt-side-space` | `10px` | Padding inside the scrolling settings body. |
+| `--lpt-side-radius` | `12px` | Sidebar radius. |
+| `--lpt-side-font-size` | `12px` | Sidebar font size. |
+| `--lpt-side-scope-size` | `10px` | Size of This chat / All my chats scope labels. |
+| `--lpt-side-toolbar-icon` | `32px` | Sidebar toolbar icon. |
+| `--lpt-side-section-icon` | `24px` | Sidebar section icon. |
+| `--lpt-side-app-icon` | `28px` | Sidebar app icon. |
+| `--lpt-side-target` | `44px` | Minimum tap-target size. |
 
 ## Stable classes
 
@@ -280,7 +284,7 @@ These remain the existing UI hooks, not extra screens or settings. `.lpt-root[da
 
 | Class | What it is |
 | --- | --- |
-| `.lpt-absent` | Collapsed Not here now contact group. |
+| `.lpt-absent` | Legacy selector, no longer emitted; Contacts are flat inline rows. |
 | `.lpt-actions` | Inline row of action buttons. |
 | `.lpt-add` | Add contact, place or note button. |
 | `.lpt-add-draft` | Add to draft button; never sends a message. |
@@ -460,6 +464,47 @@ threads. `.lpt-text-time` is small and absent for unknown times. The old
 `.lpt-content[data-thread="true"]` switches only the open thread into a fixed
 flex layout so its composer stays below the scrolling bubbles. The native
 rows property controls textarea growth without inline styles.
+
+## Story strip and sidebar toolbar (0.12.0)
+
+The phone strip uses `--lpt-strip-size: 12px` and `--lpt-strip-space: 6px` on
+`.lpt-root`, plus existing muted text/screen background tokens. It displays the
+same Scene cells and switches, with no second saved clock. Home's old title is
+hidden; Close stays. All app headings and existing navigation remain.
+
+| Variable | Default | What it changes |
+| --- | --- | --- |
+| `--lpt-strip-size` | `12px` | Story time/date text size. |
+| `--lpt-strip-space` | `6px` | Strip vertical padding on app screens. |
+
+| Class | What it is |
+| --- | --- |
+| `.lpt-sidebar-mount` | Class on the documented drawer root; removes root padding without host-private selectors. |
+| `.lpt-sidebar-scroll` | The only settings scroll area, below toolbar and results. |
+| `.lpt-toolbar-button` | Protected native Open/Refresh/Reset button, at least 44px. |
+| `.lpt-toolbar-icon` | Embedded 64px PNG displayed at 32px. |
+| `.lpt-toolbar-label` | Short action caption shown in narrow drawers. |
+| `.lpt-toolbar-tooltip` | Hover/focus action text, bounded to the sidebar width. |
+| `.lpt-toolbar-results` | Normal-flow short result line, cleared after five seconds. |
+| `.lpt-side-icon` | Decorative embedded section PNG displayed at 24px. |
+| `.lpt-side-heading` | Plain one-line section title. |
+| `.lpt-store-grid` | Responsive nine-app grid; three, two or one column according to width. |
+| `.lpt-toggle-chip` | One native checked-state field chip for an added app. |
+| `.lpt-safety-setting` | Existing safety switch with a visible hint underneath. |
+| `.lpt-side-numbers` | Two-column Advanced numeric settings layout. |
+| `.lpt-side-css-collapse` | Inner collapsed Custom CSS editor inside Appearance. |
+| `.lpt-side-css-summary` | Keyboard-accessible Custom CSS editor heading. |
+| `.lpt-story-strip` | Single read-only story time/date element; hidden when empty. |
+
+The eight sidebar PNGs add 46,981 raw bytes / 62,828 data-URI characters.
+They never load externally and use smooth scaling. On/Off is also visible in
+native checkbox glyphs, not color alone. The 44px toolbar and native title bar
+are separate from the scrolling content; result messages occupy their own line.
+At drawer widths below 340px, action captions appear; below 240px the toolbar can
+wrap to two columns, keeping targets and labels. The app grid becomes one column
+below 220px, so narrow drawers may scroll. The protected Reset never scrolls away.
+Phone custom CSS cannot recolor these sidebar elements; change src/sidebar.css
+to change the bundled sidebar defaults. No extra appearance settings are added.
 
 ## Copy-paste examples
 

@@ -67,6 +67,7 @@ export class PhoneView {
   readonly launcher = button("", "lpt-launcher", () => this.open());
   private frame = el("section", "lpt-frame");
   private content = el("main", "lpt-content");
+  private storyStrip=el("div","lpt-story-strip");
   private heading = el("h1", "lpt-heading");
   private back = button("", "lpt-back", () => this.navigate("Home"));
   private error = el("p", "lpt-error");
@@ -101,7 +102,7 @@ export class PhoneView {
     const header = el("header", "lpt-header"); header.append(this.back, this.heading, close);
     const speaker = el("div", "lpt-speaker"); speaker.setAttribute("aria-hidden", "true");
     this.textNotice.setAttribute("role", "status"); this.textNotice.setAttribute("aria-live", "polite"); this.textNotice.hidden = true;
-    this.frame.setAttribute("aria-label", "Lumi Phone Tracker"); this.frame.append(speaker, header, this.textNotice, this.content);
+    this.frame.setAttribute("aria-label", "Lumi Phone Tracker"); this.frame.append(speaker,this.storyStrip, header, this.textNotice, this.content);
     this.probe.setAttribute("aria-hidden", "true"); this.root.append(this.launcher, this.frame, this.probe); mount.append(this.root);
     this.root.addEventListener("keydown", e => { if (e.key === "Escape") { e.stopPropagation(); this.close(); } });
     this.observer = new ResizeObserver(() => this.measure()); this.observer.observe(this.root); this.observer.observe(this.probe); this.observer.observe(this.launcher);
@@ -182,7 +183,12 @@ export class PhoneView {
     const previousList=this.content.querySelector<HTMLElement>(".lpt-text-list");const oldScroll=previousList?{key:previousList.closest<HTMLElement>(".lpt-thread")?.dataset.conversation,top:previousList.scrollTop,bottom:this.pendingThreadScroll||previousList.scrollHeight-previousList.clientHeight-previousList.scrollTop<30}:null;
     this.content.dataset.thread=String(this.app==="Messages"&&this.selectedText!==null);
     this.content.replaceChildren(); this.error.textContent = ""; this.status.textContent = "";
-    this.heading.textContent = this.app === "Home" ? "Lumi Phone Tracker" : this.app;
+    this.heading.textContent = this.app === "Home" ? "" : this.app;
+    this.heading.hidden=this.app==="Home";
+    const scene=this.doc?.state.scene;const clock=[this.enabled("scene.time")?valueText(scene?.time):"",this.enabled("scene.date")?valueText(scene?.date):""].filter(Boolean);
+    this.storyStrip.textContent=clock.join(" \u00b7 ");this.storyStrip.hidden=!clock.length;
+    const header=this.frame.querySelector<HTMLElement>(".lpt-header")!;
+    if(this.app==="Home")header.prepend(this.storyStrip);else this.frame.insertBefore(this.storyStrip,header);
     this.back.hidden = this.app === "Home" || (this.app==="Messages"&&this.selectedText!==null);
     if (this.app === "Home") {
       const home = el("div", "lpt-home");

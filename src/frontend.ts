@@ -1,3 +1,4 @@
+import {UI_ICONS,type UIIconName} from "./ui-icons";
 import type { SpindleFrontendContext } from "lumiverse-spindle-types";
 import type { Document as PhoneDocument } from "./model";
 import { EXTENSION_NAME, isRecord, TEXT_TAG, TRACKER_TAG } from "./shared";
@@ -95,29 +96,36 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     const saving = prefsChange({ css: "" });
     const originalView = view;
     openRequested = true; lastSize = ""; view?.resetCSS(); view?.open();
-    recoveryStatus.textContent = "Resetting…";
+    toolbarResult(recoveryStatus,"Resetting...");
     void ensureWidget().then(() => { if (view !== originalView) view?.resetCSS(); view?.open(); });
-    void saving.then(() => { recoveryStatus.textContent = "Appearance reset."; })
-      .catch(() => { recoveryStatus.textContent = "Reset for now. Could not save; try again."; });
+    void saving.then(() => { toolbarResult(recoveryStatus,"Appearance reset."); })
+      .catch(() => { toolbarResult(recoveryStatus,"Reset for now. Could not save; try again."); });
   };
   const tab = ctx.ui.registerDrawerTab({ id: "phone", title: EXTENSION_NAME, shortName: "Phone", headerTitle: EXTENSION_NAME,
     description: "Story phone and tracker settings", keywords: ["phone", "tracker", "reset"] });
+  tab.root.classList.add("lpt-sidebar-mount");
   const panel = document.createElement("section"); panel.className = "lpt-sidebar";
   const help = document.createElement("p"); help.className = "lpt-recovery-status"; help.textContent = "";
   const open = document.createElement("button"); open.className = "lpt-recovery-button"; open.type = "button"; open.textContent = "Open phone";
-  open.addEventListener("click", () => { openRequested = true; void ensureWidget().then(() => { view?.open(); openStatus.textContent=view?"Phone opened.":"Allow floating panels in Extensions, then try again."; }); });
+  open.addEventListener("click", () => { openRequested = true; void ensureWidget().then(() => { view?.open(); toolbarResult(openStatus,view?"Phone opened.":"Allow floating panels in Extensions, then try again."); }); });
   const resetButton = document.createElement("button"); resetButton.className = "lpt-recovery-button"; resetButton.type = "button"; resetButton.textContent = "Reset appearance"; resetButton.addEventListener("click", reset);
   const recoveryActions=document.createElement("div");recoveryActions.className="lpt-recovery-actions";
   const openStatus=document.createElement("p");openStatus.className="lpt-recovery-status";openStatus.setAttribute("aria-live","polite");
   const recoveryStatus=document.createElement("p");recoveryStatus.className="lpt-recovery-status";recoveryStatus.setAttribute("aria-live","polite");
   const refreshStatus=document.createElement("p");refreshStatus.className="lpt-recovery-status lpt-refresh-result";refreshStatus.setAttribute("aria-live","polite");
   const refreshButton=document.createElement("button");refreshButton.type="button";refreshButton.className="lpt-recovery-button lpt-update-now";refreshButton.textContent="Refresh tracker";
-  const updateBusy=()=>{refreshButton.disabled=!activeChat||!current||busy()||refreshPending;};
-  refreshButton.addEventListener("click",()=>{const origin=epoch;portraitChat=null;refreshPending=true;refreshStatus.textContent="";updateBusy();void requestHelper("phone_helper_now").then(value=>{if(origin!==epoch)return;const result=readRefreshResult(value);refreshStatus.textContent=result.ok?"Refreshed":failureLabel(result.category??"invalid output");sendSync();}).catch(error=>{if(origin===epoch)refreshStatus.textContent=failureLabel(failureCategory(error,"validation rejected"));}).finally(()=>{if(origin===epoch){refreshPending=false;updateBusy();}});});
-  for(const [button,status]of [[open,openStatus],[refreshButton,refreshStatus],[resetButton,recoveryStatus]]){const row=document.createElement("div");row.className="lpt-recovery-action";row.append(button,status);recoveryActions.append(row);}
-  panel.append(recoveryActions,help);tab.root.append(panel);
-  sidebar=new Sidebar(panel,ctx,{update:async(settings,revision)=>await update({settings},revision),connections:async()=>await requestHelper("phone_connections") as ConnectionsInfo,css:text=>prefsChange({css:text}),applyCSS:text=>{appearanceEpoch++;preferences={...preferences,css:text};view?.applyCSS(text);}},preferences);
-  updateBusy();disposers.push(()=>sidebar?.destroy(),()=>tab.destroy());
+  let toolbarTimer:ReturnType<typeof setTimeout>|undefined;
+  const statuses=[openStatus,refreshStatus,recoveryStatus];
+  const toolbarResult=(status:HTMLElement,text:string)=>{clearTimeout(toolbarTimer);statuses.forEach(n=>{n.textContent="";});status.textContent=text;if(text)toolbarTimer=setTimeout(()=>{status.textContent="";},5000);};
+  const decorate=(button:HTMLButtonElement,name:UIIconName,label:string,short:string)=>{button.classList.add("lpt-toolbar-button");button.setAttribute("aria-label",label);button.replaceChildren();const image=document.createElement("img");image.className="lpt-toolbar-icon";image.src=UI_ICONS[name];image.alt="";image.setAttribute("aria-hidden","true");image.draggable=false;const caption=document.createElement("span");caption.className="lpt-toolbar-label";caption.textContent=short;const tooltip=document.createElement("span");tooltip.className="lpt-toolbar-tooltip";tooltip.id=`lpt-tip-${crypto.randomUUID()}`;tooltip.setAttribute("role","tooltip");tooltip.textContent=label;button.setAttribute("aria-describedby",tooltip.id);button.append(image,caption,tooltip);return tooltip;};
+  decorate(open,"open-phone","Open phone","Open");const refreshTooltip=decorate(refreshButton,"refresh","Refresh tracker","Refresh");decorate(resetButton,"reset","Reset appearance","Reset");
+  const updateBusy=()=>{refreshButton.disabled=!activeChat||!current||busy()||refreshPending;refreshTooltip.textContent=current?.settings.source==="helper"?"Refresh tracker. Requests may cost money depending on the model chosen.":"Refresh tracker. Main AI makes no model request.";};
+  refreshButton.addEventListener("click",()=>{const origin=epoch;portraitChat=null;refreshPending=true;refreshStatus.textContent="";updateBusy();void requestHelper("phone_helper_now").then(value=>{if(origin!==epoch)return;const result=readRefreshResult(value);toolbarResult(refreshStatus,result.ok?"Refreshed":failureLabel(result.category??"invalid output"));sendSync();}).catch(error=>{if(origin===epoch)toolbarResult(refreshStatus,failureLabel(failureCategory(error,"validation rejected")));}).finally(()=>{if(origin===epoch){refreshPending=false;updateBusy();}});});
+  recoveryActions.setAttribute("role","toolbar");recoveryActions.setAttribute("aria-label","Phone actions");recoveryActions.append(open,refreshButton,resetButton);
+  const results=document.createElement("div");results.className="lpt-toolbar-results";results.append(...statuses);
+  const scroll=document.createElement("div");scroll.className="lpt-sidebar-scroll";scroll.append(help);panel.append(recoveryActions,results,scroll);tab.root.append(panel);
+  sidebar=new Sidebar(scroll,{update:async(settings,revision)=>await update({settings},revision),connections:async()=>await requestHelper("phone_connections") as ConnectionsInfo,css:text=>prefsChange({css:text}),applyCSS:text=>{appearanceEpoch++;preferences={...preferences,css:text};view?.applyCSS(text);}},preferences);
+  updateBusy();disposers.push(()=>{clearTimeout(toolbarTimer);sidebar?.destroy();},()=>tab.destroy());
   disposers.push(tab.onActivate(() => { void ensureWidget(); }));
 
   async function ensureWidget(): Promise<void> {
@@ -248,7 +256,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     backendBusy=payload.helperBusy===true;updateBusy();
   }));
   const switchChat = (chatId: string | null) => {
-    portraitChat=null;portraitRequest="";epoch++; refreshPending=false;refreshStatus.textContent="";openStatus.textContent="";backendBusy=false;pendingSync = ""; activeChat = chatId; current = null; reads = emptyReads(); view?.receive(null, reads);chatName="";sidebar?.receive(null,"");updateBusy();
+    clearTimeout(toolbarTimer);statuses.forEach(n=>{n.textContent="";});portraitChat=null;portraitRequest="";epoch++; refreshPending=false;refreshStatus.textContent="";openStatus.textContent="";backendBusy=false;pendingSync = ""; activeChat = chatId; current = null; reads = emptyReads(); view?.receive(null, reads);chatName="";sidebar?.receive(null,"");updateBusy();
     for (const [id, p] of readRequests) { clearTimeout(p.timer); p.reject(new Error("The chat changed.")); readRequests.delete(id); }
     for (const [id, p] of updates) { clearTimeout(p.timer); p.reject(new Error("The chat changed. Your original chat keeps its saved changes.")); updates.delete(id); }
     for(const [id,p]of helperRequests){clearTimeout(p.timer);p.reject(new Error("The chat changed."));helperRequests.delete(id);}

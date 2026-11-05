@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.12.0 - Story strip and compact sidebar
+
+- Replace Home's title with a slim read-only story Time/Date strip; show the same saved values on every app, honoring the existing Scene switches and membership. Unknown/disabled values stay blank; no device clock. Scene still edits the same fields.
+- Use three protected sidebar icon actions: Open, Refresh, Reset, with 44px targets, keyboard/hover tooltips, narrow text labels and short results that clear after five seconds. Separate scrolling content prevents toolbar overlap. Main Refresh stays free; Helper tooltip and section retain the cost note.
+- Add a single-open accordion with decorative icons. App Store starts open, uses a compact nine-app grid and one Add/Remove control per app. Remove the redundant On phone pill.
+- Show native checked-state tracking chips only for added apps. Compact Helper controls, collapse the CSS editor inside Appearance, and use two columns for Advanced numbers while retaining both safety hints and OFF defaults. No setting scope or saved data changes.
+- Embed the eight supplied 64-square PNGs unchanged: 46,981 raw bytes, 62,828 data-URI characters (about 61.4 KiB encoded). Show toolbar art at 32px and section art at 24px, with smooth scaling and no external loading.
+- Use only the documented drawer root and ordinary DOM/CSS. No new API, permission, settings, tab or app. Protected Reset, portraits, drafts, unread state and opaque phone surfaces remain.
+
 ## 0.11.0 - Compact story views, text threads and portraits
 
 - Put Scene Time and Date in one compact row; flatten Contact rows with portraits, roles and presence labels, keeping player protections and inline details.
