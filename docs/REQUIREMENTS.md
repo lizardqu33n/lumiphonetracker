@@ -1,3 +1,10 @@
+# Current Part 3 override
+
+Settings and the built-in App Store are in the existing Phone sidebar. Home
+shows only added story apps, each labelled; no fixed seven icons and no Settings
+screen. Data, hints, scope and migration rules are in [PART-3.md](PART-3.md).
+Historical build checkpoints below remain for reference.
+
 # Accepted additions — pending Steps 3–6
 
 Step 2 remains the delivered checkpoint. These requirements extend the plan;
@@ -17,8 +24,7 @@ screens. Step 5 implements Messages conversations/replies/badges; Step 6 adds
 Helper AI requests. Continue pausing after every step. Step 4's Messages icon
 must not claim that Step 5 functionality already works.
 
-- Exactly seven labelled icons: Scene, Weather, Locations, Notes, Contacts,
-  Messages, Settings. One-level navigation, inline expansion, persistent
+- Current Home: only added labelled story apps, with no Settings app. One-level navigation, inline expansion, persistent
   dismissible app descriptions, meaningful empty states and no fake data.
   Use plain language; call Sidecar **Helper AI** in the UI. No unplanned extras.
 - Scene: exact location plus known wider places, time, date, Here now names.

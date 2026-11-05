@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.0 - Part 3 only
+
+- Move all settings into the existing Phone sidebar. Open, Refresh and Reset stay at the top with short results. Only App Store starts expanded; each section names its scope.
+- Add built-in App Store rows for the six current apps. Removing hides an app and suppresses its AI output/instructions without losing data or field choices; adding restores it. Migrate old membership from existing switches.
+- Remove the phone Settings screen. Home shows only added apps, plus the requested persistent dismissible hint and empty state. Story editing, replies, descriptions, opaque screens and launcher behavior stay in the phone.
+- Use the documented shared switch where available and host-themed sidebar styles. Guard saves and old controls across chat switches, display the authorized chat name, and retain current storage scopes.
+- Add migration, per-user/chat, no-chat, stale-save, narrow-sidebar and recovery regressions. No new permission or optional Calls/Email/Bank features. Native host/mobile/shared-switch rendering and real multi-user behavior still need testing.
+
 ## 0.8.1 - Launcher fit only
 
 - Embed the new tight-cropped 88 x 128 PNG unchanged. Default to a square 50px launcher with art touching top/bottom, centered with its original proportions.

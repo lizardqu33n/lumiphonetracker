@@ -7,8 +7,8 @@ if (!result.success) throw new Error(result.logs.join("\n"));
 const js = await result.outputs[0].text();
 const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Phone browser verification</title><style>
 :root{--lumiverse-text:#ece9f1;--lumiverse-text-muted:#aaa4b5;--lumiverse-fill:#19171f;--lumiverse-fill-subtle:#24212d;--lumiverse-accent:#b6a1dc;--lumiverse-accent-fg:#17131e;--lumiverse-border:#3a3445;--lumiverse-border-hover:#77648f;--lumiverse-radius:10px;font:14px system-ui;background:#121116;color:var(--lumiverse-text)}
-body{margin:0;min-height:100vh}.harness-widget{position:fixed}.harness-drawer{position:fixed;right:0;top:0;width:250px}.harness-drawer p{font-size:12px}
-@media(max-width:600px){.harness-drawer{display:none}}
+body{margin:0;min-height:100vh}.harness-widget{position:fixed}.harness-drawer{z-index:10001;position:fixed;right:0;top:0;width:250px;height:100dvh;background:var(--lumiverse-fill)}.harness-drawer p{font-size:12px}
+
 </style></head><body><script type="module" src="/harness.js"></script></body></html>`;
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(req) { return new Response(new URL(req.url).pathname === "/harness.js" ? js : html,
   { headers: { "Content-Type": new URL(req.url).pathname === "/harness.js" ? "text/javascript" : "text/html" } }); } });
@@ -16,11 +16,13 @@ const browser = await chromium.launch({ executablePath: "C:\\Program Files (x86)
 await mkdir(".test-artifacts", { recursive: true });
 let checks = 0;
 const check = (condition: unknown, message: string) => { assert.ok(condition, message); checks++; };
-const ui = (page: Page) => page.locator(".lpt-island"); // Playwright traverses open native shadow roots.
+const ui = (page: Page) => page.locator(".lpt-island, .lpt-sidebar"); // Phone shadow tree plus separate host sidebar.
 async function ready(page: Page) { await page.waitForFunction(() => !!document.querySelector(".lpt-island")?.shadowRoot?.querySelector(".lpt-root")); await page.waitForTimeout(80); }
 async function seed(page: Page, kind = "story") { await page.evaluate(k => (window as any).harness.seed(k), kind); await ready(page); }
-async function open(page: Page, app?: string) { await ui(page).getByRole("button", { name: "Open phone", exact: true }).click(); if (app) await ui(page).locator(`[data-app="${app}"]`).click(); }
-async function home(page: Page) { await ui(page).getByRole("button", { name: "Back to Home", exact: true }).click(); }
+async function pageAppearance(page:Page){await page.locator(".lpt-side-appearance").evaluate((n:HTMLDetailsElement)=>{n.open=true;n.dispatchEvent(new Event("toggle"));});}
+async function settings(page:Page){for(const key of ["tracking","source"])await page.locator(`.lpt-side-${key}`).evaluate((n:HTMLDetailsElement)=>{n.open=true;n.dispatchEvent(new Event("toggle"));});}
+async function open(page: Page, app?: string) { const launcher=page.locator(".lpt-island").getByRole("button",{name:"Open phone",exact:true});if(await launcher.isVisible())await launcher.click();if(app==="Settings")await settings(page);else if(app)await page.locator(".lpt-island").locator(`[data-app="${app}"]`).click(); }
+async function home(page: Page) {const back=page.locator(".lpt-island").getByRole("button",{name:"Back to Home",exact:true});if(await back.isVisible())await back.click(); }
 async function save(page: Page) { await ui(page).locator(".lpt-form").getByRole("button", { name: "Save", exact: true }).click(); await page.waitForFunction(() => !document.querySelector(".lpt-island")?.shadowRoot?.querySelector(".lpt-form")); }
 try {
   for(const density of [1,2]) {
@@ -28,7 +30,7 @@ try {
     const iconPage=await context.newPage();const imageRequests:string[]=[];
     iconPage.on("request",r=>{if(r.resourceType()==="image"&&r.url().startsWith("http"))imageRequests.push(r.url());});
     await iconPage.goto(`http://127.0.0.1:${server.port}`);await ready(iconPage);
-    const launcher=ui(iconPage).getByRole("button",{name:"Open phone",exact:true});
+    const launcher=iconPage.locator(".lpt-island").getByRole("button",{name:"Open phone",exact:true});
     const artwork=launcher.locator(".lpt-launcher-image");
     const info=await artwork.evaluate(async node=>{
       const img=node as HTMLImageElement;await img.decode();
@@ -59,8 +61,8 @@ try {
     check(await ui(iconPage).locator(".lpt-frame").isVisible(),`Keyboard activation still opens the phone at ${density}x`);
     await ui(iconPage).getByRole("button",{name:"Close phone",exact:true}).click();
     await open(iconPage,"Settings");
-    await ui(iconPage).locator(".lpt-advanced > summary").click();await ui(iconPage).locator(".lpt-custom-css > summary").click();
-    await ui(iconPage).locator(".lpt-css-editor").fill('.lpt-root { --lpt-launcher-size: 64px; --lpt-space: 4px; --lpt-card-bg: #123145; } .lpt-launcher { border-radius: 50%; }');
+    await pageAppearance(iconPage);
+    await ui(iconPage).locator(".lpt-sidebar-css").fill('.lpt-root { --lpt-launcher-size: 64px; --lpt-space: 4px; --lpt-card-bg: #123145; } .lpt-launcher { border-radius: 50%; }');
     await iconPage.waitForTimeout(700);await ui(iconPage).getByRole("button",{name:"Close phone",exact:true}).click();await iconPage.waitForTimeout(100);
     check(await launcher.evaluate(b=>b.getBoundingClientRect().width===64)&&await artwork.evaluate(n=>(n as HTMLImageElement).complete&&getComputedStyle(n).imageRendering==="auto"),`Custom CSS still sizes/restyles the launcher without replacing the PNG at ${density}x`);
     await launcher.screenshot({path:`.test-artifacts/launcher-custom-${density}x.png`});
@@ -75,17 +77,51 @@ try {
       await preview.setContent(`<!doctype html><style>body{margin:0;font:15px system-ui;background:#dedbe2;color:#211c29}main{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:20px}article{border:1px solid #b1aaba;border-radius:12px;overflow:hidden}h2{font-size:16px;margin:14px}p{margin:14px;font-size:13px}.sample{height:110px;display:flex;align-items:center;justify-content:center;gap:25px}.dark{background:#17141e;color:#eee}.light{background:#f4f1ed;color:#201b27}.target{width:50px;height:50px;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);place-items:center;outline:1px dashed #9993a2}.tall{height:55px}.target img{width:100%;height:100%;object-fit:contain;image-rendering:auto;filter:drop-shadow(0 1px 2px #0009)}small{font-size:11px}</style><main><article><h2>A: Square (recommended)</h2><div class="sample dark"><div class="target"><img src="${uri}"></div><small>Dark</small></div><div class="sample light"><div class="target"><img src="${uri}"></div><small>Light</small></div><p>50 x 50 target<br>Art: about 34 x 50</p></article><article><h2>B: Taller artwork</h2><div class="sample dark"><div class="target tall"><img src="${uri}"></div><small>Dark</small></div><div class="sample light"><div class="target tall"><img src="${uri}"></div><small>Light</small></div><p>50 x 55 invisible target<br>Art: about 38 x 55</p></article></main><p>Dashed guides show tap areas for comparison only. No visible box is included in the extension.</p>`);
       await preview.screenshot({path:'.test-artifacts/launcher-fit-options.png'});await preview.close();
     }
-    await launcher.click();await home(iconPage);await ui(iconPage).locator('[data-app="Settings"]').click();await ui(iconPage).locator(".lpt-advanced > summary").click();await ui(iconPage).locator(".lpt-custom-css > summary").click();
-    await ui(iconPage).locator(".lpt-css-editor").fill('.lpt-root { --lpt-launcher-size: 50px; --lpt-launcher-shadow-blur: 3px; --lpt-launcher-shadow-color: rgba(20, 10, 40, .6); } .lpt-launcher { height: 55px; }');
+    await launcher.click();await settings(iconPage);await pageAppearance(iconPage);
+    await ui(iconPage).locator(".lpt-sidebar-css").fill('.lpt-root { --lpt-launcher-size: 50px; --lpt-launcher-shadow-blur: 3px; --lpt-launcher-shadow-color: rgba(20, 10, 40, .6); } .lpt-launcher { height: 55px; }');
     await iconPage.waitForTimeout(700);await ui(iconPage).getByRole("button",{name:"Close phone",exact:true}).click();
     check(await launcher.evaluate(b=>b.getBoundingClientRect().width===50&&b.getBoundingClientRect().height===55)&&await artwork.evaluate(n=>getComputedStyle(n).filter.includes("3px")&&getComputedStyle(n).objectFit==="contain"),`Tall option keeps a 50 x 55 target and editable image-only shadow at ${density}x`);
     await launcher.screenshot({path:`.test-artifacts/launcher-tall-${density}x.png`});
-    await launcher.click();await home(iconPage);await ui(iconPage).locator('[data-app="Settings"]').click();await ui(iconPage).locator(".lpt-advanced > summary").click();await ui(iconPage).locator(".lpt-custom-css > summary").click();
-    await ui(iconPage).locator(".lpt-css-editor").fill('.lpt-root { --lpt-launcher-size: 30px; }');await iconPage.waitForTimeout(700);await ui(iconPage).getByRole("button",{name:"Close phone",exact:true}).click();
+    await launcher.click();await settings(iconPage);await pageAppearance(iconPage);
+    await ui(iconPage).locator(".lpt-sidebar-css").fill('.lpt-root { --lpt-launcher-size: 30px; }');await iconPage.waitForTimeout(700);await ui(iconPage).getByRole("button",{name:"Close phone",exact:true}).click();
     check(await launcher.evaluate(b=>b.getBoundingClientRect().width===50&&b.getBoundingClientRect().height===50),`Small size preference retains the default minimum tap target at ${density}x`);
     check(imageRequests.length===0,`No external image request at ${density}x`);
     await context.close();
   }
+  const sidebarPage=await browser.newPage({viewport:{width:1100,height:850}});
+  await sidebarPage.goto(`http://127.0.0.1:${server.port}`);await ready(sidebarPage);await open(sidebarPage);
+  const side=sidebarPage.locator(".lpt-sidebar");
+  check(await side.locator("details[open]").count()===1&&await side.locator(".lpt-side-apps").getAttribute("open")!==null,"Only App Store is expanded by default");
+  check((await side.locator(".lpt-side-chat").innerText()).includes("Lantern story"),"Sidebar identifies the active chat by its saved name");
+  check(await sidebarPage.locator('.lpt-island [data-app="Settings"]').count()===0,"Phone has no Settings icon or settings screen");
+  const weatherRow=side.locator('[data-store-app="Weather"]');const oldWeather=await sidebarPage.evaluate(()=>(window as any).harness.getDocument().state.weather.value);
+  await weatherRow.getByRole("button",{name:"Remove Weather",exact:true}).click();await sidebarPage.waitForTimeout(120);
+  check(await sidebarPage.locator('.lpt-island [data-app="Weather"]').count()===0&&await sidebarPage.evaluate(()=>(window as any).harness.getDocument().state.weather.value)===oldWeather,"Remove hides the Home icon while retaining data");
+  await weatherRow.getByRole("button",{name:"Add Weather",exact:true}).click();await sidebarPage.waitForTimeout(120);
+  check(await sidebarPage.locator('.lpt-island [data-app="Weather"]').count()===1&&(await weatherRow.innerText()).includes("On phone"),"Add restores the app and its On phone label");
+  for(const app of ["Scene","Weather","Locations","Notes","Contacts","Messages"]){await side.getByRole("button",{name:`Remove ${app}`,exact:true}).click();await sidebarPage.waitForTimeout(80);}
+  check((await sidebarPage.locator(".lpt-island .lpt-content").innerText()).includes("No apps added. Add apps from the sidebar's Phone tab."),"Removing every app gives the requested Home empty state");
+  await sidebarPage.locator(".lpt-island").getByRole("button",{name:"Hide Home hint",exact:true}).click();await sidebarPage.waitForTimeout(80);await sidebarPage.evaluate(()=>(window as any).harness.reload());await ready(sidebarPage);await open(sidebarPage);
+  check(await sidebarPage.locator(".lpt-home-hint").count()===0,"Home hint dismissal survives a restart");
+  await sidebarPage.evaluate(()=>(window as any).harness.switchChat("b"));await sidebarPage.waitForTimeout(100);
+  check(await sidebarPage.locator(".lpt-island .lpt-app-button").count()===6&&(await side.locator(".lpt-side-chat").innerText()).includes("Other story"),"Switching chats restores only the other chat's apps and name");
+  await sidebarPage.evaluate(()=>(window as any).harness.switchChat("a"));await sidebarPage.waitForTimeout(100);
+  await side.locator(".lpt-side-advanced").evaluate((d:HTMLDetailsElement)=>{d.open=true;d.dispatchEvent(new Event("toggle"));});
+  await sidebarPage.evaluate(()=>(window as any).harness.updateDelay(150));await side.getByRole("switch",{name:"Let the AI write texts for my character",exact:true}).check();await sidebarPage.evaluate(()=>(window as any).harness.switchChat("b"));await sidebarPage.waitForTimeout(300);
+  check(await sidebarPage.evaluate(()=>(window as any).harness.getDocument("a").settings.aiPlayerTexts===true&&(window as any).harness.getDocument("b").settings.aiPlayerTexts===false),"Late sidebar save lands only in its original chat");
+  await sidebarPage.evaluate(()=>(window as any).harness.switchChat("a"));await sidebarPage.waitForTimeout(100);await settings(sidebarPage);
+  await sidebarPage.evaluate(()=>{(window as any).oldSideSwitch=document.querySelector('[data-setting="scene.date"] input');(window as any).harness.switchChat("b");});await sidebarPage.waitForTimeout(100);
+  await sidebarPage.evaluate(()=>{(window as any).oldSideSwitch.checked=false;(window as any).oldSideSwitch.dispatchEvent(new Event("change",{bubbles:true}));});await sidebarPage.waitForTimeout(100);
+  check(await sidebarPage.evaluate(()=>(window as any).harness.getDocument("b").settings.enabled["scene.date"]===true),"Detached old-chat switch cannot change the newly opened chat");
+  await sidebarPage.evaluate(()=>(window as any).harness.switchChat(null));await sidebarPage.waitForTimeout(100);
+  check((await side.locator(".lpt-side-chat").innerText())==="Open a chat to change tracker settings"&&await side.getByRole("button",{name:"Refresh tracker",exact:true}).isDisabled(),"No open chat clears stale settings and disables Refresh");
+  check(await side.getByRole("button",{name:"Reset appearance",exact:true}).isEnabled(),"Appearance Reset remains available with no chat");
+  await sidebarPage.setViewportSize({width:390,height:844});await side.evaluate(e=>{e.scrollTop=0;});
+  check(await side.isVisible()&&await side.evaluate(e=>e.clientWidth>0&&e.scrollWidth<=e.clientWidth),"Visible narrow sidebar has no horizontal overflow");
+  await side.evaluate(e=>{e.scrollTop=e.scrollHeight;});
+  check(await side.getByRole("button",{name:"Reset appearance",exact:true}).isVisible()&&await side.getByRole("button",{name:"Open phone",exact:true}).isVisible(),"Top recovery actions remain visible after scrolling the narrow sidebar");
+  await side.evaluate(e=>{e.scrollTop=0;});
+  await sidebarPage.screenshot({path:".test-artifacts/sidebar-narrow.png"});await sidebarPage.close();
   const placementPage = await browser.newPage({ viewport: { width: 1100, height: 850 } });
   await placementPage.goto(`http://127.0.0.1:${server.port}/?auto-root`); await ready(placementPage);
   const initialHeight = await placementPage.locator(".lpt-viewport").evaluate(e => e.getBoundingClientRect().height);
@@ -105,12 +141,12 @@ try {
   const page = await browser.newPage({ viewport: { width: 1100, height: 850 } });
   const errors: string[] = []; page.on("pageerror", e => errors.push(e.message));
   await page.goto(`http://127.0.0.1:${server.port}`); await ready(page); await open(page);
-  check(await ui(page).locator(".lpt-app-button").count() === 7, "Exactly seven home icons");
+  check(await ui(page).locator(".lpt-app-button").count() === 6, "Six added core apps and no Settings icon");
   check(await ui(page).locator(".lpt-app-icon").evaluateAll(icons => icons.every(icon => {
     const shape = icon.querySelector(".lpt-icon-path");
     return shape && getComputedStyle(shape).stroke === getComputedStyle(icon).color;
   })), "All seven inline Lucide icons inherit currentColor");
-  assert.deepEqual(await ui(page).locator(".lpt-app-label").allTextContents(), ["Scene", "Weather", "Locations", "Notes", "Contacts", "Messages", "Settings"]); checks++;
+  assert.deepEqual(await ui(page).locator(".lpt-app-label").allTextContents(), ["Scene", "Weather", "Locations", "Notes", "Contacts", "Messages"]); checks++;
   await page.locator(".harness-widget").screenshot({ path: ".test-artifacts/home-desktop.png" });
   await ui(page).locator('[data-app="Scene"]').click();
   check((await ui(page).locator(".lpt-scene").innerText()).includes("Lantern Cafe"), "Scene shows exact location");
@@ -155,18 +191,18 @@ try {
   await note.getByRole("button", { name: "Delete", exact: true }).click();
   await note.getByRole("button", { name: "Delete", exact: true }).click(); await page.waitForTimeout(100);
   check(await ui(page).locator('[data-section="misc"] .lpt-note').count() === 0, "Note delete confirmation saves");
-  await home(page); await ui(page).locator('[data-app="Settings"]').click();
-  const weatherSwitch = ui(page).locator(".lpt-setting").filter({ has: page.locator(".lpt-setting-label", { hasText: /^Weather$/ }) }).locator('input[type="checkbox"]');
-  await weatherSwitch.uncheck(); await page.waitForTimeout(120); await home(page); await ui(page).locator('[data-app="Weather"]').click();
+  if(await page.locator(".lpt-island .lpt-back").isVisible())await home(page); await settings(page);
+  const weatherSwitch = ui(page).locator(".lpt-side-setting").filter({ has: page.locator(".lpt-side-title", { hasText: /^Weather$/ }) }).locator('input[type="checkbox"]');
+  await weatherSwitch.uncheck(); await page.waitForTimeout(120); await ui(page).locator('[data-app="Weather"]').click();
   check(!(await ui(page).locator(".lpt-weather").innerText()).includes("Soft rain"), "Off switch hides tracked weather");
-  await home(page); await ui(page).locator('[data-app="Settings"]').click();
-  await ui(page).locator(".lpt-advanced > summary").click(); await ui(page).locator(".lpt-custom-css > summary").click();
-  const editor = ui(page).locator(".lpt-css-editor");
+  if(await page.locator(".lpt-island .lpt-back").isVisible())await home(page); await settings(page);
+  await pageAppearance(page);
+  const editor = ui(page).locator(".lpt-sidebar-css");
   await editor.fill('.lpt-root { --lpt-accent: rgb(100, 200, 150); --lpt-width: 500px; --lpt-frame-radius: 10px; }'); await page.waitForTimeout(700);
   check(await page.evaluate(() => (window as any).harness.getPreferences().css.includes("500px")), "Custom CSS is saved per user");
   check(await page.locator(".harness-widget").evaluate(e => e.getBoundingClientRect().width) >= 490, "Custom dimensions resize the placement");
   await editor.fill('.lpt-root {'); await page.waitForTimeout(120);
-  check((await ui(page).locator(".lpt-error").innerText()).includes("Finish"), "Broken CSS reports error without breaking UI");
+  check((await ui(page).locator(".lpt-side-status").innerText()).includes("Finish"), "Broken CSS reports error without breaking UI");
   await editor.fill('* { display: none !important; } :host { position: fixed !important; z-index: 2147483647 !important; width: 100000px !important; height: 100000px !important; }'); await page.waitForTimeout(700);
   const protectedReset = page.locator(".harness-drawer").getByRole("button", { name: "Reset appearance", exact: true });
   check(await protectedReset.isVisible(), "Sidebar Reset remains visible under hostile CSS");
@@ -177,8 +213,8 @@ try {
   check((await page.locator(".harness-drawer").innerText()).includes("Appearance reset."), "Reset confirmation stays in the sidebar");
   check(await page.locator(".lpt-recovery-actions").evaluate(row => {
     const buttons = row.querySelectorAll("button");
-    return buttons.length === 2 && Math.abs(buttons[0].getBoundingClientRect().top - buttons[1].getBoundingClientRect().top) < 1;
-  }), "Open phone and the single Reset appearance button share the sidebar row");
+    return Array.from(buttons).map(b=>b.textContent).join("|")==="Open phone|Refresh tracker|Reset appearance";
+  }), "Open, Refresh and Reset appear once in the required sidebar order");
   await page.evaluate(() => { (window as any).harness.setCSS(".lpt-root { display: none !important; }"); (window as any).harness.reload(); }); await ready(page);
   check(!(await ui(page).locator(".lpt-frame").isVisible()), "Regression fixture starts with hidden saved appearance");
   await page.evaluate(() => (window as any).harness.failAppearanceSave(true));
@@ -205,10 +241,10 @@ try {
   await addedContact.getByRole("button", { name: "Edit name", exact: true }).click();
   await addedContact.locator('.lpt-form [name="name"]').fill("Renamed contact"); await save(page);
   check(await ui(page).locator(".lpt-card-title", { hasText: /^Renamed contact$/ }).count() === 1, "Contact rename saves");
-  await home(page); await ui(page).locator('[data-app="Settings"]').click();
-  await ui(page).locator(".lpt-advanced > summary").click(); await ui(page).locator(".lpt-custom-css > summary").click();
-  await ui(page).locator(".lpt-css-editor").fill('.lpt-root { background: url(https://example.invalid/image); }'); await page.waitForTimeout(100);
-  check((await ui(page).locator(".lpt-error").innerText()).includes("local styles"), "Network-loading CSS is rejected");
+  if(await page.locator(".lpt-island .lpt-back").isVisible())await home(page); await settings(page);
+  await pageAppearance(page);
+  await ui(page).locator(".lpt-sidebar-css").fill('.lpt-root { background: url(https://example.invalid/image); }'); await page.waitForTimeout(100);
+  check((await ui(page).locator(".lpt-side-status").innerText()).includes("local styles"), "Network-loading CSS is rejected");
   await seed(page); await open(page, "Notes");
   await ui(page).locator('[data-section="misc"]').getByRole("button", { name: "+ Add", exact: true }).click();
   await ui(page).locator('.lpt-form [name="name"]').fill("Literal text");
@@ -236,7 +272,7 @@ try {
     document.documentElement.style.setProperty("--lumiverse-fill-subtle", "rgba(255,255,255,0.08)");
   });
   async function opaque(screen: string) {
-    const result = await ui(page).evaluate((host, screen) => {
+    const result = await page.locator(".lpt-island").evaluate((host, screen) => {
       const root = host.shadowRoot!; const canvas = document.createElement("canvas"); canvas.width=canvas.height=1; const ctx=canvas.getContext("2d")!;
       const nodes = [root.querySelector(".lpt-root"),root.querySelector(".lpt-frame"),root.querySelector(".lpt-header"),root.querySelector(".lpt-content"),root.querySelector(`.lpt-${screen}`),...Array.from(root.querySelectorAll(".lpt-card, .lpt-section, .lpt-field, .lpt-card-body, .lpt-form, .lpt-advanced, .lpt-custom-css"))].filter(Boolean) as Element[];
       return nodes.every(node => { ctx.clearRect(0,0,1,1); ctx.fillStyle=getComputedStyle(node).backgroundColor; ctx.fillRect(0,0,1,1); return ctx.getImageData(0,0,1,1).data[3]===255; });
@@ -244,7 +280,7 @@ try {
     check(result, `${screen} and its frame/content/cards have opaque backgrounds under translucent theme fills`);
   }
   await opaque("home");
-  for (const app of ["Scene","Weather","Locations","Notes","Contacts","Messages","Settings"]) {
+  for (const app of ["Scene","Weather","Locations","Notes","Contacts","Messages"]) {
     await ui(page).locator(`[data-app="${app}"]`).click(); await opaque(app.toLowerCase()); await home(page);
   }
   await page.evaluate(() => document.documentElement.style.setProperty("--lumiverse-fill", "initial"));
@@ -293,9 +329,9 @@ try {
   check(await adaTexts.locator(".lpt-manual-tag").isVisible() && await page.evaluate(() => (window as any).harness.composer().text) === "Original draft", "Unsupported composer shows a manual tag without touching the draft");
   await page.locator(".harness-widget").screenshot({path:".test-artifacts/messages-desktop.png"});
   await page.evaluate(() => (window as any).harness.composerSupported(true));
-  await home(page); await ui(page).locator('[data-app="Settings"]').click();
-  await ui(page).locator(".lpt-setting").filter({has:page.locator(".lpt-setting-label",{hasText:/^Messages$/})}).locator("input").uncheck(); await page.waitForTimeout(100);
-  if (await page.evaluate(() => (window as any).harness.getDocument().settings.enabled.messages)) throw new Error(`Messages switch save failed: ${await ui(page).locator(".lpt-error").innerText()}`);
+  if(await page.locator(".lpt-island .lpt-back").isVisible())await home(page); await settings(page);
+  await ui(page).locator(".lpt-side-setting").filter({has:page.locator(".lpt-side-title",{hasText:/^Messages$/})}).locator("input").uncheck(); await page.waitForTimeout(100);
+  if (await page.evaluate(() => (window as any).harness.getDocument().settings.enabled.messages)) throw new Error(`Messages switch save failed: ${await ui(page).locator(".lpt-side-status").innerText()}`);
   await home(page);
   check(await ui(page).locator('[data-app="Messages"] .lpt-unread-badge').isHidden(), "Messages OFF hides the unread badge");
   await ui(page).locator('[data-app="Messages"]').click();
@@ -320,12 +356,12 @@ try {
   await ui(page).locator(".lpt-update-now").click();await page.waitForTimeout(100);
   check(await ui(page).locator(".lpt-refresh-result").innerText()==="Refreshed"&&await page.evaluate(()=>(window as any).harness.helperCalls())===0,"Main Refresh reports Refreshed and makes no model request");
   await ui(page).locator(".lpt-helper-source").selectOption("helper");
-  check((await ui(page).locator(".lpt-helper-settings").innerText()).includes("Requests may cost money depending on the model chosen."), "Helper AI shows the plain cost note");
+  check((await ui(page).locator(".lpt-side-source").innerText()).includes("Requests may cost money depending on the model chosen."), "Helper AI shows the plain cost note");
   check(await page.evaluate(() => (window as any).harness.helperCalls()) === 0, "Choosing Helper AI without a connection makes no request");
   await ui(page).locator(".lpt-helper-connection").selectOption("small");
   await page.waitForFunction(() => (window as any).harness.getDocument().settings.source === "helper");
   check(await page.evaluate(() => (window as any).harness.getDocument().settings.connection_id) === "small", "Saved connection picker persists its connection ID");
-  const countInput=ui(page).locator(".lpt-setting").filter({has:page.locator(".lpt-setting-label",{hasText:/^Messages to read$/})}).locator("input");
+  const countInput=ui(page).locator(".lpt-side-setting").filter({has:page.locator(".lpt-side-title",{hasText:/^Messages to read$/})}).locator("input");
   await countInput.fill("5"); await countInput.press("Tab"); await page.waitForTimeout(100);
   check(await countInput.getAttribute("min") === "1" && await countInput.getAttribute("max") === "10" && await page.evaluate(() => (window as any).harness.getDocument().settings.helperMessages) === 5, "Helper AI recent-message count is editable and bounded");
   await page.evaluate(() => (window as any).harness.helperOutput('```text\nweather: Soft rain outside\ntime: unknown\n```'));
@@ -348,13 +384,13 @@ try {
   await page.evaluate(() => (window as any).harness.switchChat("b")); await page.waitForTimeout(300);
   check(await page.evaluate(() => (window as any).harness.getDocument("b").helperEntries.length) === 0 && await page.evaluate(() => (window as any).harness.getDocument("a").helperEntries.length) >= 3, "A late Helper AI result stays with the requesting chat after switching");
   await page.evaluate(() => { (window as any).harness.switchChat("a"); (window as any).harness.removeHelperConnection(); }); await page.waitForTimeout(100);
-  await ui(page).locator('[data-app="Settings"]').click(); await page.waitForTimeout(120);
+  await settings(page); await page.waitForTimeout(120);
   check(await page.evaluate(() => (window as any).harness.getDocument().settings.source) === "main" && (await ui(page).locator(".lpt-notice").allTextContents()).some(t=>t.includes("Connection not found")), "Missing connection shows Connection not found and falls back to Main AI");
   check(await ui(page).locator(".lpt-helper-source").inputValue() === "main" && await page.evaluate(() => (window as any).harness.helperCalls()) === 4, "Fallback is visible in Settings and makes no new paid call");
   await page.setViewportSize({ width: 390, height: 844 }); await seed(page); await open(page);
   const bounds = await page.locator(".harness-widget").boundingBox(); check(!!bounds && bounds.x >= 0 && bounds.x + bounds.width <= 390 && bounds.y + bounds.height <= 844, "Mobile phone fits screen");
   await page.locator(".harness-widget").screenshot({ path: ".test-artifacts/home-mobile.png" });
-  await ui(page).locator('[data-app="Settings"]').click(); await ui(page).locator(".lpt-content").evaluate(e => { e.scrollTop = e.scrollHeight; });
+  await settings(page); await page.locator(".lpt-island").locator(".lpt-content").evaluate(e => { e.scrollTop = e.scrollHeight; });
   await page.setViewportSize({ width: 390, height: 420 }); await page.waitForTimeout(100);
   const small = await page.locator(".harness-widget").boundingBox(); check(!!small && small.y + small.height <= 420, "Short viewport/keyboard layout remains within screen");
   check(errors.length === 0, `No browser errors: ${errors.join("; ")}`);

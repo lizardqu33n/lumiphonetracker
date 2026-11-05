@@ -27,15 +27,25 @@ var SWITCHES = [
   "weather",
   "messages"
 ];
+var CORE_APPS = ["Scene", "Weather", "Locations", "Notes", "Contacts", "Messages"];
+var APP_FIELDS = { Scene: SCENE_KEYS.map((k) => `scene.${k}`), Weather: ["weather"], Locations: ["locations"], Notes: SECTIONS.map((k) => `notes.${k}`), Contacts: CONTACT_KEYS.map((k) => `contacts.${k}`), Messages: ["messages"] };
 var normalize = (name) => name.normalize("NFKC").trim().toLocaleLowerCase("en-US").split(" ").filter(Boolean).join(" ");
+function effectiveDocument(doc) {
+  const enabled = { ...doc.settings.enabled };
+  for (const app of CORE_APPS)
+    if (!doc.settings.apps[app])
+      for (const key of APP_FIELDS[app])
+        enabled[key] = false;
+  return { ...doc, settings: { ...doc.settings, enabled } };
+}
 
 // src/preferences.ts
-var APPS = ["Scene", "Weather", "Locations", "Notes", "Contacts", "Messages", "Settings"];
+var APPS = CORE_APPS;
 var defaultPreferences = () => ({ revision: 0, css: "", dismissed: [] });
 function readPreferences(value) {
-  if (!isRecord(value) || typeof value.css !== "string" || value.css.length > 32000 || !Number.isSafeInteger(value.revision) || !Array.isArray(value.dismissed) || value.dismissed.some((a) => !APPS.includes(a)))
+  if (!isRecord(value) || typeof value.css !== "string" || value.css.length > 32000 || !Number.isSafeInteger(value.revision) || !Array.isArray(value.dismissed) || value.dismissed.some((a) => ![...APPS, "Home", "Settings"].includes(a)))
     throw new Error("Invalid appearance preferences");
-  return { revision: value.revision, css: value.css, dismissed: [...new Set(value.dismissed)] };
+  return { revision: value.revision, css: value.css, dismissed: [...new Set(value.dismissed)].filter((a) => a !== "Settings") };
 }
 
 // src/custom-css.ts
@@ -330,41 +340,6 @@ function addReplyDraft(ctx, chatId, from, to, text) {
   return { manual: false, tag };
 }
 
-// src/helper-status.ts
-var HELPER_FAILURES = ["permission missing", "no connection", "provider error", "timeout", "empty reply", "invalid output", "validation rejected"];
-
-class HelperFailure extends Error {
-  category;
-  constructor(category) {
-    super(category);
-    this.category = category;
-    this.name = "HelperFailure";
-  }
-}
-var failureLabel = (category) => category[0].toUpperCase() + category.slice(1);
-var isHelperNotice = (text) => text === "Connection not found" || text.startsWith("Connection not found. ") || text.startsWith("Tracker update failed");
-function failureCategory(error, fallback = "provider error") {
-  if (error instanceof HelperFailure)
-    return error.category;
-  const e = error;
-  const message = [e?.message, e?.code].filter((v) => typeof v === "string").join(" ");
-  if (/permission|userId is required|chat unavailable|allow chat access|unauthori[sz]ed|forbidden/i.test(message))
-    return "permission missing";
-  if (e?.name === "TimeoutError" || e?.name === "AbortError" || /timed? ?out|timeout/i.test(message))
-    return "timeout";
-  return fallback;
-}
-function readRefreshResult(value) {
-  if (value && typeof value === "object" && "ok" in value) {
-    const r = value;
-    if (r.ok === true)
-      return { ok: true };
-    if (r.ok === false && HELPER_FAILURES.includes(r.category))
-      return { ok: false, category: r.category };
-  }
-  return { ok: false, category: "invalid output" };
-}
-
 // src/phone-view.ts
 var DESCRIPTIONS = {
   Scene: "Where the story is happening right now.",
@@ -372,8 +347,7 @@ var DESCRIPTIONS = {
   Locations: "Places that matter in this story.",
   Notes: "People, items, rules, and plans worth remembering.",
   Contacts: "What the story has established about each character.",
-  Messages: "Texts actually sent in the story.",
-  Settings: "Choose what the phone shows and what the AI keeps track of."
+  Messages: "Texts actually sent in the story."
 };
 var FIELD_NAMES = {
   location: "Location",
@@ -458,7 +432,6 @@ class PhoneView {
   openState = false;
   editing = false;
   busy = false;
-  cssTimer;
   observer;
   selectedText = null;
   probe = el("div", "lpt-size-probe");
@@ -469,9 +442,6 @@ class PhoneView {
   manualDrafts = new Map;
   textNotice = el("p", "lpt-text-notice");
   noticeTimer;
-  connectionsInfo = { available: false, choices: [], note: "Loading connections…" };
-  helperChoice = false;
-  helperBusy = false;
   constructor(mount, customStyle, actions) {
     this.mount = mount;
     this.customStyle = customStyle;
@@ -515,15 +485,13 @@ class PhoneView {
   }
   receive(doc, reads) {
     const changedChat = doc?.chatId !== this.doc?.chatId;
-    if (this.doc?.settings.source === "helper" && doc?.settings.source === "main")
-      this.helperChoice = false;
     const previous = new Set(this.doc?.state.messages.filter((m) => m.direction === "incoming").map((m) => JSON.stringify([m.id, receipt(m)])) ?? []);
-    const arrived = !changedChat && this.doc && doc?.settings.enabled.messages ? doc.state.messages.filter((m) => m.direction === "incoming" && !previous.has(JSON.stringify([m.id, receipt(m)]))) : [];
+    const arrived = !changedChat && this.doc && doc?.settings.apps.Messages && doc.settings.enabled.messages ? doc.state.messages.filter((m) => m.direction === "incoming" && !previous.has(JSON.stringify([m.id, receipt(m)]))) : [];
     this.doc = doc;
+    if (this.app !== "Home" && !doc?.settings.apps[this.app])
+      this.app = "Home";
     if (changedChat) {
       this.chatEpoch++;
-      this.refreshPending = false;
-      this.refreshStatus = "";
       this.pendingReads.clear();
       this.reads = reads ?? emptyReads();
       this.replyDrafts.clear();
@@ -532,13 +500,9 @@ class PhoneView {
       this.editing = false;
       this.app = "Home";
       this.selectedText = null;
-      this.helperChoice = false;
-      this.helperBusy = false;
-      if (doc)
-        this.loadConnections();
     } else if (reads && reads.revision >= this.reads.revision)
       this.reads = reads;
-    if (!doc?.settings.enabled.messages)
+    if (!doc?.settings.apps.Messages || !doc.settings.enabled.messages)
       this.clearTextNotice();
     else if (arrived.length)
       this.showTextNotice(arrived.length === 1 ? `New text from ${arrived[0].from}` : `${arrived.length} new texts`);
@@ -554,32 +518,12 @@ class PhoneView {
       this.refreshBadges();
     }
   }
-  refreshPending = false;
-  refreshStatus = "";
-  receiveHelperBusy(busy) {
-    this.helperBusy = busy;
-    const button2 = this.root.querySelector(".lpt-update-now");
-    if (button2)
-      button2.disabled = busy || this.refreshPending || !!(this.helperChoice && this.doc?.settings.source !== "helper");
-  }
-  async loadConnections() {
-    const epoch = this.chatEpoch;
-    try {
-      const info = await this.actions.connections();
-      if (epoch !== this.chatEpoch)
-        return;
-      this.connectionsInfo = info;
-    } catch {
-      if (epoch !== this.chatEpoch)
-        return;
-      this.connectionsInfo = { available: false, choices: [], note: "Connections are unavailable. Main AI still works." };
-    }
-    if (this.app === "Settings" && !this.editing && !this.busy)
-      this.render();
-  }
   receivePreferences(prefs) {
-    if (prefs.revision >= this.prefs.revision)
+    if (prefs.revision >= this.prefs.revision) {
       this.prefs = prefs;
+      if (prefs.dismissed.includes(this.app))
+        this.root.querySelector(this.app === "Home" ? ".lpt-home-hint" : ".lpt-description")?.remove();
+    }
   }
   setError(message) {
     this.error.textContent = message;
@@ -597,12 +541,8 @@ class PhoneView {
     return css;
   }
   resetCSS() {
-    clearTimeout(this.cssTimer);
     this.customStyle.textContent = "";
     this.prefs = { ...this.prefs, css: "" };
-    const editor = this.root.querySelector(".lpt-css-editor");
-    if (editor)
-      editor.value = "";
     this.setOpen(true);
     requestAnimationFrame(() => this.measure());
   }
@@ -617,11 +557,8 @@ class PhoneView {
     this.launcher.focus();
   }
   destroy() {
-    clearTimeout(this.cssTimer);
     clearTimeout(this.noticeTimer);
     this.chatEpoch++;
-    this.refreshPending = false;
-    this.refreshStatus = "";
     this.observer.disconnect();
     this.root.remove();
   }
@@ -648,12 +585,10 @@ class PhoneView {
     this.actions.size(Math.max(48, width), Math.max(48, this.openState ? height : closedHeight), this.openState);
   }
   navigate(app) {
-    this.app = app;
+    this.app = app !== "Home" && !this.doc?.settings.apps[app] ? "Home" : app;
     this.editing = false;
     this.render();
     this.content.scrollTop = 0;
-    if (app === "Settings")
-      this.loadConnections();
   }
   render() {
     const focused = this.mount instanceof ShadowRoot ? this.mount.activeElement : document.activeElement;
@@ -669,7 +604,7 @@ class PhoneView {
     this.back.hidden = this.app === "Home";
     if (this.app === "Home") {
       const home = el("div", "lpt-home");
-      for (const app of APPS) {
+      for (const app of APPS.filter((a) => this.doc?.settings.apps[a])) {
         const b = button("", "lpt-app-button", () => this.navigate(app));
         b.dataset.app = app;
         const image = el("span", "lpt-app-icon");
@@ -680,12 +615,27 @@ class PhoneView {
         home.append(b);
       }
       this.content.append(home);
+      if (this.doc && !home.children.length)
+        this.empty("No apps added. Add apps from the sidebar's Phone tab.");
+      if (this.doc && !this.prefs.dismissed.includes("Home")) {
+        const hint = el("div", "lpt-description lpt-home-hint");
+        hint.append(el("p", "lpt-description-text", "Change what the phone tracks in the sidebar's Phone tab."));
+        const hide = button("×", "lpt-dismiss", () => {
+          this.actions.preferences({ dismiss: "Home" }).then((p) => {
+            this.receivePreferences(p);
+            hint.remove();
+          }).catch(() => this.setError("Could not hide the hint."));
+        });
+        hide.setAttribute("aria-label", "Hide Home hint");
+        hint.append(hide);
+        this.content.append(hint);
+      }
       if (!this.doc)
         this.content.append(el("p", "lpt-empty", "Open a chat to start keeping track of your story."));
     } else {
       if (!this.prefs.dismissed.includes(this.app))
         this.description(this.app);
-      if (!this.doc && this.app !== "Settings")
+      if (!this.doc && true)
         this.empty("Open a chat first. Each chat keeps its own story information.");
       else if (this.app === "Scene")
         this.scene();
@@ -699,8 +649,6 @@ class PhoneView {
         this.notes();
       else if (this.app === "Messages")
         this.messages();
-      else
-        this.settings();
     }
     if (this.doc)
       for (const text of this.doc.state.notices) {
@@ -708,11 +656,7 @@ class PhoneView {
         notice.append(el("span", "lpt-notice-text", text), button("Dismiss", "lpt-dismiss", () => {
           this.change({ dismissNotice: text });
         }));
-        const helperGroup = this.app === "Settings" && isHelperNotice(text) ? this.content.querySelector(".lpt-helper-settings") : null;
-        if (helperGroup)
-          helperGroup.insertBefore(notice, helperGroup.children.item(1));
-        else
-          this.content.append(notice);
+        this.content.append(notice);
       }
     this.error.setAttribute("role", "alert");
     this.status.setAttribute("aria-live", "polite");
@@ -744,7 +688,7 @@ class PhoneView {
     parent.append(el("p", "lpt-empty", text));
   }
   enabled(key) {
-    return this.doc?.settings.enabled[key] === true;
+    return !!this.doc && effectiveDocument(this.doc).settings.enabled[key] === true;
   }
   async change(change, revision = this.doc?.revision ?? -1) {
     if (!this.doc || this.busy)
@@ -759,8 +703,6 @@ class PhoneView {
       const doc = await this.actions.update(change, revision);
       this.editing = false;
       this.doc = doc;
-      if (isRecord(change.settings) && change.settings.source === "helper" && doc.settings.source === "main")
-        this.helperChoice = false;
       this.render();
       this.setStatus("Saved.");
     } catch (e) {
@@ -864,7 +806,7 @@ class PhoneView {
       if (this.enabled(`scene.${key}`))
         this.field(section, key, this.doc.state.scene[key], "scene");
     if (!section.children.length)
-      this.empty("Scene fields are off. Turn them on in Settings.", section);
+      this.empty("Scene fields are off. Turn them on in the sidebar's Phone tab.", section);
     this.content.append(section);
   }
   weather() {
@@ -872,7 +814,7 @@ class PhoneView {
     if (this.enabled("weather"))
       this.field(section, "weather", this.doc.state.weather, "weather");
     else
-      this.empty("Weather is off. Turn it on in Settings.", section);
+      this.empty("Weather is off. Turn it on in the sidebar's Phone tab.", section);
     this.content.append(section);
   }
   deleteAction(parent, edit) {
@@ -890,7 +832,7 @@ class PhoneView {
     this.content.append(section);
     const enabledFields = CONTACT_KEYS.filter((k) => this.enabled(`contacts.${k}`));
     if (!enabledFields.length) {
-      this.empty("Contact fields are off. Turn them on in Settings.", section);
+      this.empty("Contact fields are off. Turn them on in the sidebar's Phone tab.", section);
       return;
     }
     section.append(button("+ Add contact", "lpt-add", () => this.contactForm(section)));
@@ -930,7 +872,9 @@ class PhoneView {
       this.markVisibleConversation();
     });
     openTexts.append(this.unreadBadge(normalize(c.name)));
-    actions.append(button("Edit name", "lpt-button", () => this.contactForm(body, c)), openTexts);
+    actions.append(button("Edit name", "lpt-button", () => this.contactForm(body, c)));
+    if (this.enabled("messages"))
+      actions.append(openTexts);
     this.deleteAction(actions, { target: "contact", name: c.name });
     body.append(actions);
     card.append(summary, body);
@@ -952,7 +896,7 @@ class PhoneView {
     const section = el("section", "lpt-locations");
     this.content.append(section);
     if (!this.enabled("locations")) {
-      this.empty("Locations is off. Turn it on in Settings.", section);
+      this.empty("Locations is off. Turn it on in the sidebar's Phone tab.", section);
       return;
     }
     section.append(button("+ Add place", "lpt-add", () => this.locationForm(section)));
@@ -1032,7 +976,7 @@ class PhoneView {
       section.append(group);
     }
     if (!shown)
-      this.empty("All Notes sections are off. Turn one on in Settings.", section);
+      this.empty("All Notes sections are off. Turn one on in the sidebar's Phone tab.", section);
   }
   noteCard(parent, key, note) {
     const card = el("details", "lpt-card lpt-note");
@@ -1086,7 +1030,7 @@ class PhoneView {
     const section = el("section", "lpt-messages");
     this.content.append(section);
     if (!this.enabled("messages")) {
-      this.empty("Messages is off. Turn it on in Settings.", section);
+      this.empty("Messages is off. Turn it on in the sidebar's Phone tab.", section);
       return;
     }
     const threads = conversations(this.doc.state.messages, this.reads);
@@ -1237,174 +1181,6 @@ class PhoneView {
       this.measure();
     }, 5000);
     requestAnimationFrame(() => this.measure());
-  }
-  settings() {
-    const section = el("section", "lpt-settings");
-    this.content.append(section);
-    if (this.doc) {
-      this.helperSettings(section);
-      const groups = [
-        ["Scene", [["scene.location", "Location", "Exact place and known wider places."], ["scene.time", "Time", "The established story time."], ["scene.date", "Date", "The established story date."], ["scene.present", "Who is present", "Everyone here now, by name."]]],
-        ["Weather", [["weather", "Weather", "Only weather established by the story."]]],
-        ["Locations", [["locations", "Locations", "Meaningful places and their known details."]]],
-        ["Contacts", CONTACT_KEYS.map((k) => [`contacts.${k}`, FIELD_NAMES[k], { roles: "Ordered roles or affiliations.", physical: "Observable body condition, not emotions.", mood: "Established mood, NPCs only.", position: "Facing and position relative to others.", attire: "Complete worn items and recently removed items.", thoughts: "One short private line, NPCs only." }[k]])],
-        ["Notes", SECTIONS.map((k) => [`notes.${k}`, SECTION_NAMES[k], { people: "People with a clear reason to return.", items: "Items with a specific story function.", rules: "Explicit principles or restrictions.", plots: "Concrete promises, meetings, and pending events.", misc: "Your own notes; you choose what the AI sees." }[k]])],
-        ["Messages", [["messages", "Messages", "Texts actually sent in the story."]]]
-      ];
-      for (const [title, switches] of groups) {
-        const group = el("section", "lpt-settings-group lpt-section");
-        group.append(el("h2", "lpt-section-title", title));
-        for (const [key, label, description] of switches)
-          this.toggle(group, label, description, this.enabled(key), (value) => ({ enabled: { [key]: value } }));
-        if (title === "Contacts")
-          this.toggle(group, "Let the AI fill in missing details", "Off by default. New inferred contact values are marked.", this.doc.settings.inferMissing, (inferMissing) => ({ inferMissing }));
-        if (title === "Messages")
-          this.toggle(group, "Let the AI write texts for my character", "Off by default. Your own sent texts still count.", this.doc.settings.aiPlayerTexts, (aiPlayerTexts) => ({ aiPlayerTexts }));
-        section.append(group);
-      }
-    } else
-      this.empty("Open a chat to change what is tracked. Appearance can still be reset here.", section);
-    const advanced = el("details", "lpt-advanced");
-    advanced.append(el("summary", "lpt-summary", "Advanced"));
-    if (this.doc) {
-      this.number(advanced, "Recent messages to keep texts from", "Older text tags are left out of the AI's history.", "keepTexts", 1);
-      this.number(advanced, "Keep tracker blocks in the last N messages", "0 sends continuity through the phone summaries only.", "keepTrackers", 0);
-      this.number(advanced, "Notes per section", "Existing notes stay when you lower the limit.", "notesPerSection", 3, 30);
-      this.number(advanced, "Log lines sent to the AI", "The phone still shows every note.", "logLines", 1);
-    }
-    const cssGroup = el("details", "lpt-custom-css");
-    cssGroup.append(el("summary", "lpt-summary", "Custom CSS"));
-    const label = el("label", "lpt-label", "Custom CSS");
-    const input = el("textarea", "lpt-css-editor");
-    input.value = this.prefs.css;
-    input.maxLength = 32000;
-    input.spellcheck = false;
-    label.append(input);
-    cssGroup.append(label, el("p", "lpt-help", "Changes apply while you type. To restore the default look, use Reset appearance in the Phone sidebar entry."));
-    input.addEventListener("input", () => {
-      clearTimeout(this.cssTimer);
-      try {
-        this.applyCSS(input.value);
-        this.setError("");
-        this.cssTimer = setTimeout(() => {
-          this.actions.preferences({ css: input.value }).then((p) => {
-            this.receivePreferences(p);
-            this.setStatus("Appearance saved.");
-          }).catch(() => this.setError("Appearance could not be saved. Try again."));
-        }, 400);
-      } catch (e) {
-        this.setError(e instanceof Error ? e.message : "That CSS could not be applied.");
-      }
-    });
-    advanced.append(cssGroup);
-    section.append(advanced);
-  }
-  helperSettings(parent) {
-    const group = el("section", "lpt-section lpt-helper-settings");
-    group.append(el("h2", "lpt-section-title", "Tracker source"));
-    const sourceLabel = el("label", "lpt-label", "Who updates the tracker");
-    const source = el("select", "lpt-input lpt-helper-source");
-    for (const [value, label] of [["main", "Main AI"], ["helper", "Helper AI"]]) {
-      const option = el("option", "lpt-option", label);
-      option.value = value;
-      source.append(option);
-    }
-    source.value = this.doc.settings.source === "helper" || this.helperChoice ? "helper" : "main";
-    source.addEventListener("change", () => {
-      this.helperChoice = source.value === "helper";
-      if (source.value === "main")
-        this.change({ settings: { source: "main" } });
-      else if (this.doc.settings.connection_id && this.connectionsInfo.available)
-        this.change({ settings: { source: "helper" } });
-      else
-        this.render();
-    });
-    sourceLabel.append(source);
-    group.append(sourceLabel);
-    group.append(el("p", "lpt-help", "Main AI uses your normal reply. Helper AI makes a separate request."));
-    if (source.value === "helper") {
-      const label = el("label", "lpt-label", "Connection");
-      const select = el("select", "lpt-input lpt-helper-connection");
-      const empty = el("option", "lpt-option", "Choose a connection");
-      empty.value = "";
-      select.append(empty);
-      for (const choice of this.connectionsInfo.choices) {
-        const option = el("option", "lpt-option", choice.label);
-        option.value = choice.id;
-        select.append(option);
-      }
-      select.value = this.doc.settings.connection_id ?? "";
-      select.disabled = !this.connectionsInfo.available;
-      select.addEventListener("change", () => {
-        if (select.value)
-          this.change({ settings: { source: "helper", connection_id: select.value } });
-      });
-      label.append(select);
-      group.append(label);
-      if (this.connectionsInfo.note)
-        group.append(el("p", "lpt-help", this.connectionsInfo.note));
-      if (this.doc.settings.source !== "helper")
-        group.append(el("p", "lpt-help", "Choose a connection to turn Helper AI on."));
-      this.number(group, "Messages to read", "Only these recent messages and the compact tracker are sent.", "helperMessages", 1, 10);
-    }
-    if (source.value === "helper")
-      group.append(el("p", "lpt-help", "Requests may cost money depending on the model chosen."));
-    const update = button("Refresh tracker", "lpt-button lpt-update-now", () => {
-      const epoch = this.chatEpoch;
-      this.refreshPending = true;
-      this.refreshStatus = "";
-      update.disabled = true;
-      this.actions.updateNow().then((result) => {
-        if (epoch === this.chatEpoch)
-          this.refreshStatus = result.ok ? "Refreshed" : failureLabel(result.category ?? "invalid output");
-      }).catch((error) => {
-        if (epoch === this.chatEpoch)
-          this.refreshStatus = failureLabel(failureCategory(error, "validation rejected"));
-      }).finally(() => {
-        if (epoch === this.chatEpoch) {
-          this.refreshPending = false;
-          this.render();
-        }
-      });
-    });
-    update.disabled = this.helperBusy || this.refreshPending || source.value === "helper" && this.doc.settings.source !== "helper";
-    group.append(update);
-    const status = el("p", "lpt-status lpt-refresh-result", this.refreshStatus);
-    status.setAttribute("role", "status");
-    status.setAttribute("aria-live", "polite");
-    group.append(status);
-    parent.append(group);
-  }
-  toggle(parent, name, description, checked, update) {
-    const row = el("label", "lpt-setting");
-    const text = el("span", "lpt-setting-text");
-    text.append(el("span", "lpt-setting-label", name), el("span", "lpt-setting-description", description));
-    const input = el("input", "lpt-toggle");
-    input.type = "checkbox";
-    input.checked = checked;
-    input.addEventListener("change", () => {
-      this.change({ settings: update(input.checked) });
-    });
-    row.append(text, input);
-    parent.append(row);
-  }
-  number(parent, title, description, key, min, max) {
-    const row = el("label", "lpt-setting");
-    const text = el("span", "lpt-setting-text");
-    text.append(el("span", "lpt-setting-label", title), el("span", "lpt-setting-description", description));
-    const input = el("input", "lpt-number");
-    input.type = "number";
-    input.min = String(min);
-    input.step = "1";
-    if (max !== undefined)
-      input.max = String(max);
-    input.value = String(this.doc.settings[key]);
-    input.addEventListener("change", () => {
-      if (input.reportValidity())
-        this.change({ settings: { [key]: Number(input.value) } });
-    });
-    row.append(text, input);
-    parent.append(row);
   }
 }
 
@@ -1788,11 +1564,6 @@ var styles_default = `/* All phone defaults live on this one root[cite: 2]. Them
   gap: calc(var(--lpt-space) * 2.75) calc(var(--lpt-space) * 1.5);\r
   padding: calc(var(--lpt-space) * 2.5) calc(var(--lpt-space) * 0.5);\r
   box-sizing: border-box;\r
-}\r
-\r
-/* Center the 7th item (Settings) in the middle column of the last 3-column row */\r
-.lpt-app-button:last-child:nth-child(3n + 1) {\r
-  grid-column: 2;\r
 }\r
 \r
 .lpt-app-button {\r
@@ -2421,7 +2192,7 @@ var styles_default = `/* All phone defaults live on this one root[cite: 2]. Them
   resize: vertical;\r
 }\r
 \r
-/* Settings App: Grouped Sections & Clean Pill Toggle Switches */\r
+/* Legacy settings selectors retained for stylesheet compatibility; no phone Settings screen. */\r
 .lpt-settings-group,\r
 .lpt-helper-settings {\r
   background: var(--lpt-card-bg);\r
@@ -2554,17 +2325,393 @@ var styles_default = `/* All phone defaults live on this one root[cite: 2]. Them
 .lpt-transport { display: flex; flex-direction: column; height: 48px; width: 48px; overflow: hidden; }\r
 .lpt-viewport { flex: 1; min-height: 0; width: 100%; overflow: clip; contain: layout paint size; position: relative; }\r
 .lpt-island { display: block; width: 100%; height: 100%; }\r
-.lpt-recovery-actions { display: flex; gap: .5em; }\r
-.lpt-recovery-actions .lpt-recovery-button { flex: 1; min-width: 0; white-space: normal; }\r
-.lpt-recovery-button { font: inherit; color: inherit; min-height: 2em; padding: .2em .7em; background: var(--lumiverse-fill-subtle, Canvas); border: 1px solid var(--lumiverse-border, ButtonBorder); border-radius: var(--lumiverse-radius, 10px); cursor: pointer; }\r
-.lpt-recovery-status { font: inherit; color: var(--lumiverse-text-muted, GrayText); }\r
-.lpt-recovery-panel { padding: 1em; display: grid; gap: .75em; color: var(--lumiverse-text, CanvasText); font: inherit; }`;
+`;
 
 // src/message-reads.ts
 function readState(value) {
   if (!isRecord(value) || !Number.isSafeInteger(value.revision) || Number(value.revision) < 0 || !isRecord(value.seen) || Object.entries(value.seen).some(([k, v]) => k.length > 2000 || typeof v !== "string" || v.length > 20000))
     throw new Error("Invalid read history");
   return { revision: Number(value.revision), seen: { ...value.seen } };
+}
+
+// src/sidebar.ts
+var node = (tag, cls, text) => {
+  const n = document.createElement(tag);
+  n.className = cls;
+  if (text !== undefined)
+    n.textContent = text;
+  return n;
+};
+
+class Sidebar {
+  ctx;
+  actions;
+  root = node("div", "lpt-sidebar-settings");
+  doc = null;
+  name = "";
+  prefs;
+  epoch = 0;
+  saving = false;
+  open = new Set(["apps"]);
+  handles = [];
+  timer;
+  info = { available: false, choices: [], note: "Loading connections..." };
+  helperChoice = false;
+  status = node("p", "lpt-side-status");
+  cssText = "";
+  constructor(parent, ctx, actions, prefs) {
+    this.ctx = ctx;
+    this.actions = actions;
+    this.prefs = prefs;
+    this.cssText = prefs.css;
+    parent.append(this.root);
+    this.render();
+  }
+  receive(doc, name) {
+    const changed = doc?.chatId !== this.doc?.chatId;
+    if (this.doc?.settings.source === "helper" && doc?.settings.source === "main")
+      this.helperChoice = false;
+    this.doc = doc;
+    this.name = name;
+    if (changed) {
+      this.epoch++;
+      this.saving = false;
+      this.helperChoice = false;
+      this.info = { available: false, choices: [], note: "Loading connections..." };
+      if (doc)
+        this.connections();
+    }
+    this.render();
+  }
+  preferences(prefs) {
+    this.prefs = prefs;
+    this.cssText = prefs.css;
+    const input = this.root.querySelector(".lpt-sidebar-css");
+    if (input && document.activeElement !== input)
+      input.value = prefs.css;
+  }
+  reset() {
+    clearTimeout(this.timer);
+    this.cssText = "";
+    const input = this.root.querySelector(".lpt-sidebar-css");
+    if (input)
+      input.value = "";
+  }
+  destroy() {
+    clearTimeout(this.timer);
+    this.handles.forEach((h) => h.destroy());
+    this.root.remove();
+    this.epoch++;
+  }
+  async connections() {
+    const epoch = this.epoch;
+    try {
+      const info = await this.actions.connections();
+      if (epoch !== this.epoch)
+        return;
+      this.info = info;
+    } catch {
+      if (epoch !== this.epoch)
+        return;
+      this.info = { available: false, choices: [], note: "Connections unavailable. Main AI still works." };
+    }
+    this.render();
+  }
+  async save(settings) {
+    if (!this.doc || this.saving)
+      return;
+    const epoch = this.epoch, revision = this.doc.revision;
+    this.saving = true;
+    this.render();
+    try {
+      const doc = await this.actions.update(settings, revision);
+      if (epoch !== this.epoch)
+        return;
+      this.doc = doc;
+      if (doc.settings.source === "main")
+        this.helperChoice = false;
+      this.status.textContent = "Saved.";
+    } catch {
+      if (epoch === this.epoch)
+        this.status.textContent = "Could not save. Check this chat and try again.";
+    } finally {
+      if (epoch === this.epoch) {
+        this.saving = false;
+        const text = this.status.textContent;
+        this.render();
+        this.status.textContent = text;
+      }
+    }
+  }
+  section(key, title, scope) {
+    const details = node("details", `lpt-side-section lpt-side-${key}`);
+    details.dataset.section = key;
+    details.open = this.open.has(key);
+    details.append(node("summary", "lpt-side-summary", `${title} (${scope})`));
+    details.addEventListener("toggle", () => {
+      if (details.isConnected) {
+        if (details.open)
+          this.open.add(key);
+        else
+          this.open.delete(key);
+      }
+    });
+    this.root.append(details);
+    return details;
+  }
+  toggle(parent, key, title, help, on, change) {
+    const origin = this.epoch;
+    const row = node("div", "lpt-side-setting");
+    row.dataset.setting = key;
+    const label = node("div", "lpt-side-label");
+    label.append(node("span", "lpt-side-title", title), node("small", "lpt-side-help", help));
+    const slot = node("div", "lpt-side-switch");
+    row.append(label, slot);
+    parent.append(row);
+    if (typeof this.ctx.components?.mountSwitch === "function")
+      this.handles.push(this.ctx.components.mountSwitch(slot, { checked: on, disabled: this.saving || !this.doc, ariaLabel: title, onChange: (value) => {
+        if (origin === this.epoch)
+          this.save(change(value));
+      } }));
+    else {
+      const input = node("input", "lpt-side-checkbox");
+      input.type = "checkbox";
+      input.checked = on;
+      input.disabled = this.saving || !this.doc;
+      input.setAttribute("aria-label", title);
+      input.addEventListener("change", () => {
+        if (origin === this.epoch)
+          this.save(change(input.checked));
+      });
+      slot.append(input);
+    }
+  }
+  number(parent, key, title, help, min, max) {
+    const origin = this.epoch;
+    const row = node("label", "lpt-side-setting");
+    row.dataset.setting = key;
+    const label = node("span", "lpt-side-label");
+    label.append(node("span", "lpt-side-title", title), node("small", "lpt-side-help", help));
+    const input = node("input", "lpt-side-number");
+    input.type = "number";
+    input.min = String(min);
+    input.step = "1";
+    if (max)
+      input.max = String(max);
+    input.value = String(this.doc.settings[key]);
+    input.disabled = this.saving;
+    input.setAttribute("aria-label", title);
+    input.addEventListener("change", () => {
+      if (origin === this.epoch && input.reportValidity())
+        this.save({ [key]: Number(input.value) });
+    });
+    row.append(label, input);
+    parent.append(row);
+  }
+  render() {
+    const origin = this.epoch;
+    const active = document.activeElement;
+    const selection = active instanceof HTMLTextAreaElement && this.root.contains(active) ? { start: active.selectionStart, end: active.selectionEnd } : null;
+    this.handles.forEach((h) => h.destroy());
+    this.handles = [];
+    this.root.replaceChildren();
+    this.root.append(node("p", "lpt-side-chat", this.doc ? `Settings for this chat: ${this.name || "Unnamed chat"}` : "Open a chat to change tracker settings"));
+    const apps = this.section("apps", "App Store", "This chat");
+    apps.append(node("p", "lpt-side-help", "Choose which apps are on the phone. Removing an app only hides it. Your data comes back when you add it again."));
+    for (const app of CORE_APPS) {
+      const row = node("div", "lpt-store-row");
+      row.dataset.storeApp = app;
+      const image = node("span", "lpt-store-icon");
+      image.append(icon(app));
+      const label = node("div", "lpt-side-label");
+      label.append(node("strong", "lpt-store-name", app), node("small", "lpt-side-help", DESCRIPTIONS[app]));
+      const added = this.doc?.settings.apps[app] === true;
+      if (added)
+        label.append(node("small", "lpt-store-added", "On phone"));
+      const button = node("button", "lpt-store-button", added ? "Remove" : "Add");
+      button.type = "button";
+      button.disabled = !this.doc || this.saving;
+      button.setAttribute("aria-label", `${added ? "Remove" : "Add"} ${app}`);
+      button.addEventListener("click", () => {
+        if (origin === this.epoch)
+          this.save({ apps: { [app]: !added } });
+      });
+      row.append(image, label, button);
+      apps.append(row);
+    }
+    const track = this.section("tracking", "What to track", "This chat");
+    if (this.doc) {
+      for (const app of CORE_APPS) {
+        const group = node("fieldset", "lpt-side-group");
+        group.append(node("legend", "lpt-side-legend", app));
+        for (const key of APP_FIELDS[app]) {
+          const field = key.split(".").at(-1);
+          const titles = { location: "Location", time: "Time", date: "Date", present: "Who is present", roles: "Roles", physical: "Physical status", mood: "Mood", position: "Position", attire: "Attire", thoughts: "Inner thoughts", people: "People", items: "Key items", rules: "Rules", plots: "Plots", misc: "Misc", locations: "Locations", weather: "Weather", messages: "Messages" };
+          const hints = { location: "Exact place and wider area.", time: "Established story time.", date: "Established story date.", present: "Everyone present, by name.", roles: "Known roles and affiliations.", physical: "Observable physical condition.", mood: "Established mood, NPCs only.", position: "Known facing and relative position.", attire: "Worn and recently removed items.", thoughts: "Short private thoughts, NPCs only.", people: "People with a reason to return.", items: "Only items with a specific story function.", rules: "Stated principles or restrictions.", plots: "Promises, meetings and pending events.", misc: "Your own notes; you choose what the AI sees.", locations: "Meaningful places and known details.", weather: "Only weather established in the story.", messages: "Texts actually sent in the story." };
+          this.toggle(group, key, titles[field], hints[field], this.doc.settings.enabled[key], (on) => ({ enabled: { [key]: on } }));
+        }
+        track.append(group);
+      }
+    }
+    const source = this.section("source", "Tracker source", "This chat");
+    if (this.doc) {
+      const label = node("label", "lpt-side-label", "Who updates the tracker");
+      const select = node("select", "lpt-helper-source");
+      for (const [value, title] of [["main", "Main AI"], ["helper", "Helper AI"]]) {
+        const o = node("option", "", title);
+        o.value = value;
+        select.append(o);
+      }
+      select.value = this.doc.settings.source === "helper" || this.helperChoice ? "helper" : "main";
+      select.disabled = this.saving;
+      select.addEventListener("change", () => {
+        if (origin !== this.epoch)
+          return;
+        this.helperChoice = select.value === "helper";
+        if (!this.helperChoice)
+          this.save({ source: "main" });
+        else if (this.doc.settings.connection_id && this.info.available)
+          this.save({ source: "helper" });
+        else
+          this.render();
+      });
+      label.append(select);
+      source.append(label);
+      if (select.value === "helper") {
+        const label = node("label", "lpt-side-label", "Connection");
+        const connection = node("select", "lpt-helper-connection");
+        const empty = node("option", "", "Choose a connection");
+        empty.value = "";
+        connection.append(empty);
+        for (const c of this.info.choices) {
+          const o = node("option", "", c.label);
+          o.value = c.id;
+          connection.append(o);
+        }
+        connection.value = this.doc.settings.connection_id ?? "";
+        connection.disabled = !this.info.available || this.saving;
+        connection.addEventListener("change", () => {
+          if (origin === this.epoch && connection.value)
+            this.save({ source: "helper", connection_id: connection.value });
+        });
+        label.append(connection);
+        source.append(label, node("p", "lpt-side-help", this.info.note));
+        this.number(source, "helperMessages", "Messages to read", "Only recent messages and the compact tracker are sent.", 1, 10);
+        source.append(node("p", "lpt-side-help", "Requests may cost money depending on the model chosen."));
+      }
+    }
+    const appearance = this.section("appearance", "Appearance", "All my chats");
+    const label = node("label", "lpt-side-label", "Custom CSS");
+    const input = node("textarea", "lpt-sidebar-css");
+    input.value = this.cssText;
+    input.maxLength = 32000;
+    input.spellcheck = false;
+    input.setAttribute("aria-label", "Custom CSS");
+    label.append(input);
+    appearance.append(label, node("p", "lpt-side-help", "Applies live to the phone only. Reset appearance above restores the default look."));
+    input.addEventListener("input", () => {
+      clearTimeout(this.timer);
+      this.cssText = input.value;
+      try {
+        prepareCustomCSS(input.value);
+        this.actions.applyCSS(input.value);
+        this.status.textContent = "";
+        const text = input.value;
+        this.timer = setTimeout(() => {
+          this.actions.css(text).then((p) => {
+            this.prefs = p;
+            this.status.textContent = "Appearance saved.";
+          }).catch(() => {
+            this.status.textContent = "Appearance could not be saved.";
+          });
+        }, 400);
+      } catch (e) {
+        this.status.textContent = e instanceof Error ? e.message : "Check the CSS.";
+      }
+    });
+    const advanced = this.section("advanced", "Advanced", "This chat");
+    if (this.doc) {
+      this.number(advanced, "notesPerSection", "Notes per section", "Existing notes stay when you lower the limit.", 3, 30);
+      this.number(advanced, "logLines", "Log lines sent to the AI", "The phone still shows all notes.", 1);
+      this.number(advanced, "keepTrackers", "Keep tracker blocks in the last N messages", "0 uses continuity summaries only.", 0);
+      this.number(advanced, "keepTexts", "Recent messages to keep texts from", "Older text tags stay out of prompt history.", 1);
+      this.toggle(advanced, "aiPlayerTexts", "Let the AI write texts for my character", "Off by default. Your own sent texts still count.", this.doc.settings.aiPlayerTexts, (on) => ({ aiPlayerTexts: on }));
+      this.toggle(advanced, "inferMissing", "Let the AI fill in missing details", "Off by default. New inferred contact values are marked.", this.doc.settings.inferMissing, (on) => ({ inferMissing: on }));
+    }
+    this.status.setAttribute("role", "status");
+    this.status.setAttribute("aria-live", "polite");
+    this.root.append(this.status);
+    if (selection) {
+      input.focus({ preventScroll: true });
+      input.setSelectionRange(selection.start, selection.end);
+    }
+  }
+}
+
+// src/sidebar.css
+var sidebar_default = `/* Host sidebar only; never part of the phone's custom-CSS tree. */\r
+.lpt-sidebar {max-height:100dvh;overflow-y:auto;color:var(--lumiverse-text,CanvasText);font:inherit;padding:12px;box-sizing:border-box;max-width:100%;overflow-wrap:anywhere;}\r
+.lpt-sidebar * {box-sizing:border-box;}\r
+.lpt-recovery-actions {display:grid;gap:8px;position:sticky;top:0;background:var(--lumiverse-bg,var(--lumiverse-fill,Canvas));z-index:1;padding:8px 0;}\r
+.lpt-recovery-action {display:grid;grid-template-columns:minmax(0,1fr);gap:3px;}\r
+.lpt-recovery-button,.lpt-store-button {font:inherit;color:var(--lumiverse-text,CanvasText);background:var(--lumiverse-fill-subtle,ButtonFace);border:1px solid var(--lumiverse-border,ButtonBorder);border-radius:var(--lumiverse-radius,8px);padding:7px 10px;cursor:pointer;min-height:40px;white-space:normal;}\r
+.lpt-sidebar button:focus-visible,.lpt-sidebar input:focus-visible,.lpt-sidebar textarea:focus-visible,.lpt-sidebar select:focus-visible,.lpt-sidebar summary:focus-visible {outline:2px solid var(--lumiverse-accent,Highlight);outline-offset:2px;}\r
+.lpt-sidebar button:disabled {opacity:.55;cursor:default;}\r
+.lpt-recovery-status,.lpt-side-status,.lpt-side-help,.lpt-side-scope {font-size:.85em;line-height:1.4;margin:4px 0;color:var(--lumiverse-text-muted,GrayText);}\r
+.lpt-side-section {border-top:1px solid var(--lumiverse-border,ButtonBorder);padding:10px 0;}\r
+.lpt-side-summary {font-weight:600;cursor:pointer;padding:5px 0;}\r
+.lpt-side-scope {font-weight:600;}\r
+.lpt-store-row {display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;align-items:center;padding:10px 0;}\r
+.lpt-side-label {display:flex;flex-direction:column;gap:4px;min-width:0;}\r
+.lpt-store-added {color:var(--lumiverse-accent,Highlight);}\r
+.lpt-store-icon .lpt-icon {width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;}\r
+.lpt-side-setting {display:flex;gap:10px;align-items:center;justify-content:space-between;padding:9px 0;}\r
+.lpt-side-setting .lpt-side-label {flex:1;}\r
+.lpt-side-switch {flex:none;}\r
+.lpt-side-group {border:0;margin:8px 0;padding:0;min-width:0;}\r
+.lpt-side-legend {font-weight:600;}\r
+.lpt-side-number,.lpt-helper-source,.lpt-helper-connection,.lpt-sidebar-css {font:inherit;color:var(--lumiverse-text,CanvasText);background:var(--lumiverse-fill,Canvas);border:1px solid var(--lumiverse-border,ButtonBorder);border-radius:var(--lumiverse-radius,8px);padding:6px;max-width:100%;}\r
+.lpt-side-number {width:68px;flex:none;}\r
+.lpt-helper-source,.lpt-helper-connection {width:100%;}\r
+.lpt-sidebar-css {width:100%;min-height:160px;resize:vertical;}\r
+.lpt-side-chat {font-size:.9em;}\r
+@media(max-width:420px){.lpt-sidebar{padding:8px}.lpt-store-row{gap:5px}.lpt-store-button{padding:6px}.lpt-side-setting{gap:6px}}\r
+\r
+.lpt-recovery-status:empty,.lpt-side-status:empty {display:none;}\r
+`;
+
+// src/helper-status.ts
+var HELPER_FAILURES = ["permission missing", "no connection", "provider error", "timeout", "empty reply", "invalid output", "validation rejected"];
+
+class HelperFailure extends Error {
+  category;
+  constructor(category) {
+    super(category);
+    this.category = category;
+    this.name = "HelperFailure";
+  }
+}
+var failureLabel = (category) => category[0].toUpperCase() + category.slice(1);
+function failureCategory(error, fallback = "provider error") {
+  if (error instanceof HelperFailure)
+    return error.category;
+  const e = error;
+  const message = [e?.message, e?.code].filter((v) => typeof v === "string").join(" ");
+  if (/permission|userId is required|chat unavailable|allow chat access|unauthori[sz]ed|forbidden/i.test(message))
+    return "permission missing";
+  if (e?.name === "TimeoutError" || e?.name === "AbortError" || /timed? ?out|timeout/i.test(message))
+    return "timeout";
+  return fallback;
+}
+function readRefreshResult(value) {
+  if (value && typeof value === "object" && "ok" in value) {
+    const r = value;
+    if (r.ok === true)
+      return { ok: true };
+    if (r.ok === false && HELPER_FAILURES.includes(r.category))
+      return { ok: false, category: r.category };
+  }
+  return { ok: false, category: "invalid output" };
 }
 
 // src/frontend.ts
@@ -2578,6 +2725,9 @@ function setup(ctx) {
   let reads = emptyReads();
   let preferences = defaultPreferences();
   let view = null;
+  let chatName = "";
+  let sidebar = null;
+  let refreshPending = false;
   let widget = null;
   let lastSize = "";
   let widgetLoad = null;
@@ -2593,10 +2743,10 @@ function setup(ctx) {
   const busy = () => backendBusy || !!(activeChat && streaming.get(activeChat)?.size);
   const helperRequests = new Map;
   const removeHostStyle = ctx.dom.addStyle(styles_default);
-  disposers.push(removeHostStyle);
+  disposers.push(removeHostStyle, ctx.dom.addStyle(sidebar_default));
   const sendSync = () => {
     pendingSync = crypto.randomUUID();
-    ctx.sendToBackend({ type: "phone_sync", requestId: pendingSync, ...activeChat ? { chatId: activeChat } : {} });
+    ctx.sendToBackend({ type: "phone_sync", requestId: pendingSync, chatId: activeChat });
   };
   for (const tagName of [TRACKER_TAG, TEXT_TAG])
     disposers.push(ctx.messages.registerTagInterceptor({ tagName, removeFromMessage: true }, (payload) => {
@@ -2664,6 +2814,7 @@ function setup(ctx) {
     });
   };
   const reset = () => {
+    sidebar?.reset();
     const saving = prefsChange({ css: "" });
     const originalView = view;
     openRequested = true;
@@ -2687,14 +2838,14 @@ function setup(ctx) {
     title: EXTENSION_NAME,
     shortName: "Phone",
     headerTitle: EXTENSION_NAME,
-    description: "Open your story phone or reset its appearance",
+    description: "Story phone and tracker settings",
     keywords: ["phone", "tracker", "reset"]
   });
   const panel = document.createElement("section");
-  panel.className = "lpt-recovery-panel";
+  panel.className = "lpt-sidebar";
   const help = document.createElement("p");
   help.className = "lpt-recovery-status";
-  help.textContent = "Your story phone. Appearance controls here stay usable even if custom CSS hides the phone.";
+  help.textContent = "";
   const open = document.createElement("button");
   open.className = "lpt-recovery-button";
   open.type = "button";
@@ -2703,8 +2854,7 @@ function setup(ctx) {
     openRequested = true;
     ensureWidget().then(() => {
       view?.open();
-      if (!view)
-        help.textContent = "Allow floating panels in Extensions, then open the phone again.";
+      openStatus.textContent = view ? "Phone opened." : "Allow floating panels in Extensions, then try again.";
     });
   });
   const resetButton = document.createElement("button");
@@ -2714,13 +2864,58 @@ function setup(ctx) {
   resetButton.addEventListener("click", reset);
   const recoveryActions = document.createElement("div");
   recoveryActions.className = "lpt-recovery-actions";
-  recoveryActions.append(open, resetButton);
+  const openStatus = document.createElement("p");
+  openStatus.className = "lpt-recovery-status";
+  openStatus.setAttribute("aria-live", "polite");
   const recoveryStatus = document.createElement("p");
   recoveryStatus.className = "lpt-recovery-status";
   recoveryStatus.setAttribute("aria-live", "polite");
-  panel.append(help, recoveryActions, recoveryStatus);
+  const refreshStatus = document.createElement("p");
+  refreshStatus.className = "lpt-recovery-status lpt-refresh-result";
+  refreshStatus.setAttribute("aria-live", "polite");
+  const refreshButton = document.createElement("button");
+  refreshButton.type = "button";
+  refreshButton.className = "lpt-recovery-button lpt-update-now";
+  refreshButton.textContent = "Refresh tracker";
+  const updateBusy = () => {
+    refreshButton.disabled = !activeChat || !current || busy() || refreshPending;
+  };
+  refreshButton.addEventListener("click", () => {
+    const origin = epoch;
+    refreshPending = true;
+    refreshStatus.textContent = "";
+    updateBusy();
+    requestHelper("phone_helper_now").then((value) => {
+      if (origin !== epoch)
+        return;
+      const result = readRefreshResult(value);
+      refreshStatus.textContent = result.ok ? "Refreshed" : failureLabel(result.category ?? "invalid output");
+      sendSync();
+    }).catch((error) => {
+      if (origin === epoch)
+        refreshStatus.textContent = failureLabel(failureCategory(error, "validation rejected"));
+    }).finally(() => {
+      if (origin === epoch) {
+        refreshPending = false;
+        updateBusy();
+      }
+    });
+  });
+  for (const [button, status] of [[open, openStatus], [refreshButton, refreshStatus], [resetButton, recoveryStatus]]) {
+    const row = document.createElement("div");
+    row.className = "lpt-recovery-action";
+    row.append(button, status);
+    recoveryActions.append(row);
+  }
+  panel.append(recoveryActions, help);
   tab.root.append(panel);
-  disposers.push(() => tab.destroy());
+  sidebar = new Sidebar(panel, ctx, { update: async (settings, revision) => await update({ settings }, revision), connections: async () => await requestHelper("phone_connections"), css: (text) => prefsChange({ css: text }), applyCSS: (text) => {
+    appearanceEpoch++;
+    preferences = { ...preferences, css: text };
+    view?.applyCSS(text);
+  } }, preferences);
+  updateBusy();
+  disposers.push(() => sidebar?.destroy(), () => tab.destroy());
   disposers.push(tab.onActivate(() => {
     ensureWidget();
   }));
@@ -2790,14 +2985,8 @@ function setup(ctx) {
         update,
         preferences: prefsChange,
         markRead,
-        connections: async () => await requestHelper("phone_connections"),
-        updateNow: async () => {
-          const result = readRefreshResult(await requestHelper("phone_helper_now"));
-          sendSync();
-          return result;
-        },
         draft: (chatId, to, text) => {
-          if (disposed || activeChat !== chatId || current?.chatId !== chatId || !current.settings.enabled.messages)
+          if (disposed || activeChat !== chatId || current?.chatId !== chatId || (!current.settings.apps.Messages || !current.settings.enabled.messages))
             throw new Error("The chat changed. Reopen the original conversation.");
           return addReplyDraft(ctx, chatId, current.currentPlayer ?? "", to, text);
         },
@@ -2911,6 +3100,7 @@ function setup(ctx) {
           const prefs = readPreferences(payload.preferences);
           if (preferenceRequest.appearanceEpoch === appearanceEpoch && prefs.revision >= preferences.revision) {
             preferences = prefs;
+            sidebar?.preferences(prefs);
             view?.receivePreferences(prefs);
           }
           preferenceRequest.resolve(prefs);
@@ -2939,14 +3129,17 @@ function setup(ctx) {
         return;
       }
       current = payload.snapshot;
+      chatName = typeof payload.chatName === "string" ? payload.chatName : chatName;
+      sidebar?.receive(current, chatName);
       try {
         const value = readState(payload.reads);
         if (value.revision >= reads.revision)
           reads = value;
       } catch {}
+      view?.receive(current, reads);
       view?.receiveReads(reads);
       backendBusy = payload.helperBusy === true;
-      view?.receiveHelperBusy(busy());
+      updateBusy();
       edit.resolve(current);
       return;
     }
@@ -2967,18 +3160,26 @@ function setup(ctx) {
       if (value.revision >= reads.revision)
         reads = value;
     } catch {}
+    chatName = typeof payload.chatName === "string" ? payload.chatName : "";
+    sidebar?.receive(current, chatName);
     view?.receive(current, reads);
     backendBusy = payload.helperBusy === true;
-    view?.receiveHelperBusy(busy());
+    updateBusy();
   }));
   const switchChat = (chatId) => {
     epoch++;
+    refreshPending = false;
+    refreshStatus.textContent = "";
+    openStatus.textContent = "";
     backendBusy = false;
     pendingSync = "";
     activeChat = chatId;
     current = null;
     reads = emptyReads();
     view?.receive(null, reads);
+    chatName = "";
+    sidebar?.receive(null, "");
+    updateBusy();
     for (const [id, p] of readRequests) {
       clearTimeout(p.timer);
       p.reject(new Error("The chat changed."));
@@ -3020,7 +3221,7 @@ function setup(ctx) {
       else
         streaming.delete(payload.chatId);
       if (payload.chatId === activeChat) {
-        view?.receiveHelperBusy(busy());
+        updateBusy();
         if (name !== "GENERATION_STARTED")
           sendSync();
       }
@@ -3041,6 +3242,7 @@ function setup(ctx) {
     if (disposed || initialAppearanceEpoch !== appearanceEpoch || p.revision < preferences.revision)
       return;
     preferences = p;
+    sidebar?.preferences(p);
     view?.receivePreferences(p);
     try {
       view?.applyCSS(p.css);

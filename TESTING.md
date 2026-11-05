@@ -1,6 +1,49 @@
-# Verification report - 0.8.1 (Launcher fit)
+# Verification report - 0.9.0 (Part 3)
 
 Checked November 4, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **No live Lumiverse session or real model connection was used. A local Lumiverse build and its user-docs were inspected; that is not live-host verification. No paid model request was made.**
+
+## Part 3: sidebar settings and App Store (0.9.0)
+
+**143 code tests / 890 assertions; 148 browser checks pass.** Type checking,
+built-source comparison and manifest/package checks are included in packaging.
+
+New code tests verify all six core apps start added; old on/off field switches
+migrate app membership without losing state/edits; Remove/Add preserves saved
+data and choices; invalid membership is rejected; removed apps suppress macros
+and instructions; all removed means no Helper model request; separate user/chat
+settings stay authorized; Home dismissal is per user; old Settings dismissal
+migrates safely; Scene and Contacts retain independent combined continuity.
+The strict backend operator mock still enforces trusted userId, including the
+new chats.get(chatId,userId) name lookup. Earlier Helper, receipt and generation
+safety tests pass.
+
+New browser cases cover visible section scopes, only App Store expanded by
+default, six current built-ins, no phone Settings/App Store icon, Remove/Add,
+data retention, exact empty Home text, persisted hint, correct chat name/apps
+on switch, no-chat state, appearance availability, original-chat late saves and
+ignored detached old controls. Narrow tests use a visible 250px mock drawer
+inside a 390px viewport, check horizontal overflow and sticky top recovery
+actions, and capture sidebar-narrow.png. The old harness's hide-drawer-on-mobile
+shortcut was removed so this check cannot silently pass on an invisible drawer.
+Existing story editing/drafting, source/streaming, opaque-screen, launcher 1x/2x,
+hostile CSS and failed-placement Reset regressions pass after the move.
+
+Shared switches are mocked implementations of the documented mountSwitch
+contract. The actual host's React tree, theme and mount ownership were not run.
+CSS and top actions are outside the phone's Shadow DOM and custom-style clip;
+Reset still restores it without refresh, even when phone creation fails.
+
+**Still unverified:** real multi-user sessions and any shared-chat participant
+preference expectation (the existing settings remain chat-scoped, not a new
+participant layer); real mobile drawer attachment, keyboard, scrolling and UI
+scale; real shared React controls, theme/host overlay order, permission changes,
+concurrent workers/tabs, Helper connections/providers and final outgoing prompt
+stripping. A mock drawer is not a real Lumiverse install. The hosted shared-
+components docs timed out; the local developer-docs copy and installed types
+0.6.77 were checked. No general shared button API was documented there.
+
+See [PART-3.md](docs/PART-3.md) for scope, migration, API evidence and the reported
+(but unimplemented) tab.activate idea. Historical checkpoints follow.
 
 ## Launcher fit / transparency (0.8.1)
 

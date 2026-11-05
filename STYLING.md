@@ -2,13 +2,13 @@
 
 Version 0.6.1 uses the supplied stylesheet as the default look: a notch and home bar, individual app tints, solid cards, message bubbles and pill switches. Class names, navigation and tracker behavior are unchanged.
 
-Open **Settings > Advanced > Custom CSS** to override the defaults live. Your saved custom CSS still overrides a new default after an update; it is not deleted automatically. To see the new default alone, use **Reset appearance** beside **Open phone** in the Phone sidebar tab.
+Open **sidebar > Phone > Appearance > Custom CSS** to override the defaults live. Your saved custom CSS still overrides a new default after an update; it is not deleted automatically. To see the new default alone, use **Reset appearance** at the top of the Phone sidebar in the Phone sidebar tab.
 
 That single Reset and its confirmation stay outside the phone's Shadow DOM. Custom phone CSS cannot style them or escape the protected clipping area. Reset clears only appearance and reopens the phone without a page refresh, even after hostile CSS. It never deletes story data. If saving fails, the current view is restored and the sidebar tells you to try saving again.
 
 All default rules are in [src/styles.css](src/styles.css). All declared --lpt- variables live on the same .lpt-root element. Some small decorative details are fixed CSS values; use the stable class selectors below to change those. There are no inline style attributes, external fonts, icon downloads or CDN requests. The frame, launcher and app content remain separate.
 
-Version 0.8.1 embeds the new tight-cropped 88 x 128 transparent PNG unchanged. The default is **A: a transparent 50 x 50 launcher**, with artwork about 34 x 50, centered and touching top and bottom. It keeps its proportions, with no cropping, stretching or inner padding. Side space is required by the taller artwork's shape. Smooth scaling is used. Only the image has a soft drop shadow; the box has no background, border or box shadow, even on hover. PNG colors stay as drawn; the seven Home icons still use currentColor.
+Version 0.8.1 embeds the new tight-cropped 88 x 128 transparent PNG unchanged. The default is **A: a transparent 50 x 50 launcher**, with artwork about 34 x 50, centered and touching top and bottom. It keeps its proportions, with no cropping, stretching or inner padding. Side space is required by the taller artwork's shape. Smooth scaling is used. Only the image has a soft drop shadow; the box has no background, border or box shadow, even on hover. PNG colors stay as drawn; the built-in Home icons still use currentColor.
 
 The visible box in earlier versions came from `.lpt-launcher` in our stylesheet. Lumiverse's documented [chromeless float widget](https://docs.lumiverse.chat/frontend-api/ui-placement/#spindlefloatwidgetoptions) is already enabled and removes host background/border/shadow. No host-private selector or new API is used. Native desktop window behavior still needs a real-host check.
 
@@ -20,6 +20,64 @@ The visible box in earlier versions came from `.lpt-launcher` in our stylesheet.
 ```
 
 `.lpt-launcher-image` is the stable artwork class. The native button keeps the **Open phone** label, keyboard activation and a visible focus ring inside its bounds, so placement clipping cannot cut the ring off. The direct `.lpt-unread-badge` stays above the image and inside the target. Existing dragging and sidebar Reset protection are unchanged. The existing protected placement still clips to its own bounds; a large custom shadow can be cut off at those edges. Increasing shadow blur does not enlarge the tap area. Open phone screens, frame and cards remain opaque.
+
+## Sidebar settings (0.9.0)
+
+All settings are now in the existing **Phone** sidebar. Only App Store opens by
+default. The scope is visible in each section heading. The phone keeps story
+screens, editing, replies and dismissible descriptions, plus `.lpt-home-hint`.
+Home has only added apps; it has no Settings or App Store icon.
+
+Sidebar rules live in [src/sidebar.css](src/sidebar.css), outside the phone's
+Shadow DOM. The phone CSS editor cannot style the sidebar, its controls or Reset.
+Do not put sidebar rules in that editor; it intentionally changes only the phone.
+The sidebar follows host theme variables, and uses Lumiverse's shared switches
+when available. Shared switches own their internal classes; use their documented
+host options rather than styling private children. General shared buttons are
+not documented, so these buttons are native elements with small themed styles.
+
+| Sidebar class | What it is |
+| --- | --- |
+| `.lpt-sidebar` | Host sidebar root, with vertical scrolling and no phone style variables. |
+| `.lpt-sidebar-settings` | Chat label and the five collapsible sections. |
+| `.lpt-recovery-actions` | Sticky Open / Refresh / Reset area. |
+| `.lpt-recovery-action` | One top button and its own short result. |
+| `.lpt-recovery-button` | Top action button. |
+| `.lpt-recovery-status` | Short confirmation or recovery explanation. |
+| `.lpt-refresh-result` | Refresh result, kept with the top Refresh button. |
+| `.lpt-side-chat` | Name of the chat these settings affect, or the no-chat message. |
+| `.lpt-side-section` | Collapsible section. |
+| `.lpt-side-summary` | Section title and visible scope label. |
+| `.lpt-side-apps` | App Store, the only section expanded initially. |
+| `.lpt-side-tracking` | Grouped field switches for this chat. |
+| `.lpt-side-source` | Main AI / Helper AI controls for this chat. |
+| `.lpt-side-appearance` | User-wide live phone CSS editor. |
+| `.lpt-side-advanced` | Existing numeric settings and two optional AI switches. |
+| `.lpt-store-row` | Built-in app row, identified by data-store-app. |
+| `.lpt-store-icon` | Static bundled Lucide app icon, using currentColor. |
+| `.lpt-store-name` | App's plain name. |
+| `.lpt-store-added` | On phone label. |
+| `.lpt-store-button` | Add or Remove button. |
+| `.lpt-side-group` | Group of tracking switches for one app. |
+| `.lpt-side-legend` | App name above its switches. |
+| `.lpt-side-setting` | One switch or numeric setting, identified by data-setting. |
+| `.lpt-side-label` | Label and short explanation. |
+| `.lpt-side-title` | Short setting name. |
+| `.lpt-side-help` | One-sentence explanation. |
+| `.lpt-side-switch` | Mount target for the documented shared switch. |
+| `.lpt-side-checkbox` | Native checkbox fallback for older hosts. |
+| `.lpt-side-number` | Existing bounded whole-number input. |
+| `.lpt-helper-source` | Moved Main AI / Helper AI picker. |
+| `.lpt-helper-connection` | Moved saved-connection picker. |
+| `.lpt-sidebar-css` | Moved live phone CSS text area. |
+| `.lpt-side-status` | Save result or CSS validation message. |
+
+The old `.lpt-settings`, `.lpt-settings-group`, `.lpt-setting*`, `.lpt-toggle`,
+`.lpt-number`, `.lpt-advanced`, `.lpt-custom-css`, `.lpt-css-editor` and
+`.lpt-helper-settings` entries below are legacy stylesheet hooks; there is no
+phone Settings screen using them. `.lpt-update-now` remains the Refresh button's
+compatibility class, now in the sidebar. The standard phone editor, card, form
+and button classes still apply to story controls inside the phone.
 
 ## Variables
 
@@ -89,14 +147,14 @@ Set these inside `.lpt-root { ... }`. Sizes need units such as px; counts, weigh
 | `--lpt-focus-size` | `2px` | Keyboard focus outline thickness and offset. |
 | `--lpt-opacity-disabled` | `0.5` | Disabled control opacity. |
 | `--lpt-grid-columns` | `3` | Home icon columns. |
-| `--lpt-max-label-width` | `17rem` | Maximum Settings label width. |
+| `--lpt-max-label-width` | `17rem` | Legacy phone settings label width; sidebar does not use this token. |
 | `--lpt-shadow` | `Three-layer shadow; see styles.css` | Layered outer phone shadow and inset frame highlight; does not affect launcher. |
 | `--lpt-icon-fill` | `color-mix(in srgb, var(--lpt-accent) 16%, var(--lpt-card-bg))` | Fallback tile fill; per-app tint rules take priority on Home. |
 | `--lpt-transition` | `150ms cubic-bezier(0.22, 1, 0.36, 1)` | Hover, press and switch animation timing. |
 
 The documented Lumiverse sources are --lumiverse-fill, --lumiverse-fill-subtle, text, muted text, accent, accent foreground and radius. When relative-color calculations are supported, translucent fills are composited over the dark phone/screen/card bases with final alpha 1. Elevated surfaces, borders, frame edge and bubble colors are also derived. Without that browser support, the explicit dark base colors apply. Custom CSS may deliberately override them, including making them transparent.
 
-At screen widths of **420px or less**, defaults change to frame radius 28px, app tile size 58px, title size 17px and location size 21px; content padding and grid gaps also tighten. Preferred phone dimensions still clamp to the screen. The last Settings tile is centered for the default three-column Home grid; override its grid-column rule if making a different grid.
+At screen widths of **420px or less**, defaults change to frame radius 28px, app tile size 58px, title size 17px and location size 21px; content padding and grid gaps also tighten. Preferred phone dimensions still clamp to the screen. Home now flows only added apps through the grid; no fixed seventh tile is centered.
 
 ## Stable classes
 
@@ -144,6 +202,7 @@ These remain the existing UI hooks, not extra screens or settings. `.lpt-root[da
 | `.lpt-helper-connection` | Saved-connection picker, shown for Helper AI. |
 | `.lpt-helper-settings` | Tracker source group in the existing Settings app. |
 | `.lpt-helper-source` | Main AI / Helper AI selector. |
+| `.lpt-home-hint` | Persistent dismissible Home hint directing users to the Phone sidebar. |
 | `.lpt-home` | Home icon grid. |
 | `.lpt-icon` | SVG icon artwork. |
 | `.lpt-icon-path` | Line shapes within the SVG icon. |

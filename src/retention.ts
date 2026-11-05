@@ -26,7 +26,7 @@ export function trimPhoneHistory(messages: LlmMessageDTO[], settings: Settings, 
           const admitted = !!attrs && !!document?.state.messages.some(t =>
             (message.sourceMessageId ? t.at.id === message.sourceMessageId : Number.isInteger(message.sourceIndexInChat) && t.at.index === message.sourceIndexInChat) &&
             normalize(t.from) === normalize(attrs.from ?? "") && t.text === body && (t.to ?? "") === (attrs.to ?? ""));
-          keep = keep && settings.enabled.messages && recent(message, index, settings.keepTexts) && admitted;
+          keep = keep && settings.apps.Messages && settings.enabled.messages && recent(message, index, settings.keepTexts) && admitted;
         } else keep = false;
         if (keep) out += text.slice(span.start, span.end);
         offset = span.end;

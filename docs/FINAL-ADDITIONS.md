@@ -1,17 +1,26 @@
 # Final additions: authoritative specification
 
+Current Part 3 override (0.9.0): Home contains only added story apps, each labelled.
+There is no fixed seven-icon layout, phone Settings screen or App Store icon.
+App Store and all settings are in the existing Phone sidebar. Story controls,
+replies and dismissible app descriptions stay in the phone. The Home hint is
+"Change what the phone tracks in the sidebar's Phone tab." Its empty state is
+"No apps added. Add apps from the sidebar's Phone tab." See [PART-3.md](PART-3.md).
+
+The original accepted text below is historical where this override differs.
+
 Status: accepted plan; not implemented in the Step 2 checkpoint.
 The text below is preserved from the user's final request.
 
 FINAL ADDITIONS (these replace my earlier CHANGE 10 to 14). Add to the accepted plan. Data and macros go in Step 3, the screens in Step 4. Pause after each step. Do not invent APIs.
 
 A. HOME SCREEN AND CLARITY RULES (these override any design choice that makes the UI harder to understand)
-- Exactly 7 icons, each with a text label under it: Scene, Weather, Locations, Notes, Contacts, Messages, Settings.
+- Current rule: only added Scene, Weather, Locations, Notes, Contacts and Messages icons, each with a text label. Future apps wait for their own step. No fixed icon count or Settings icon.
 - Navigation is one level: Home -> app, with a back button to Home. No tabs, no nested menus, no pop-up chains. Details expand inside the same screen.
 - Every app starts with a one-line plain description (for example "Where the story is happening right now."). The user can dismiss it, and it stays dismissed.
 - Every empty screen explains itself (for example "Nothing here yet. This fills in when the story mentions a place."). Never show fake or example data.
 - Plain words only. No technical terms in the UI. Call the sidecar "Helper AI".
-- Settings: grouped by app, a short label and one line for each switch. Technical options go in a collapsed Advanced section. Defaults must work without opening Advanced.
+- Sidebar settings: grouped by app, a short label and one line for each switch. Technical options go in a collapsed Advanced section. Defaults must work without opening Advanced.
 - Show an "edited by you" marker on anything the user changed. Secondary details stay in collapsed sections.
 - Do not add apps, tabs, settings, or fields beyond this plan. Mention ideas in your report instead.
 - TESTING.md manual test: someone who has never seen it should be able to say what each app does within about 5 seconds.

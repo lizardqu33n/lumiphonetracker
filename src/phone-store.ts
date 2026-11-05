@@ -1,7 +1,7 @@
 import { isHelperNotice } from "./helper-status";
 import { isRecord } from "./shared";
 import { chatPath } from "./store";
-import { emptyDocument, emptyState, readSettings, SECTIONS, normalize, type Document, type ManualEdit, type HelperEntry } from "./model";
+import { effectiveDocument, emptyDocument, emptyState, readSettings, SECTIONS, normalize, type Document, type ManualEdit, type HelperEntry } from "./model";
 import { applyManual, replay, rowSignature, helperSourceSignature, type StoryRow } from "./engine";
 import { validateExpanded, short } from "./schema";
 import { readSnapshot } from "./history";
@@ -139,9 +139,11 @@ export class PhoneStore {
       if (JSON.stringify(doc.accepted) !== JSON.stringify(saved.accepted) && raw) throw new Error("The story changed. Reopen the tracker and try again.");
       if (update.settings !== undefined) {
         if (!isRecord(update.settings)) throw new Error("Invalid settings");
+        if(update.settings.apps!==undefined&&!isRecord(update.settings.apps))throw new Error("Invalid apps");
         const enabled = update.settings.enabled;
         if (enabled !== undefined && !isRecord(enabled)) throw new Error("Invalid switches");
         doc.settings = readSettings({ ...doc.settings, ...update.settings,
+          apps: { ...doc.settings.apps, ...(isRecord(update.settings.apps)?update.settings.apps:{}) },
           enabled: { ...doc.settings.enabled, ...(isRecord(enabled) ? enabled : {}) } });
         if (update.settings.source === "helper") doc.helperOwner = userId;
       }
@@ -172,7 +174,7 @@ export class PhoneStore {
       if (!userId || !(await this.io.authorize(chatId,userId))) throw new Error("Chat unavailable");
       const { doc, rows } = await this.build(chatId,userId);
       if (doc.settings.source !== "helper" || doc.helperOwner !== userId || doc.helperAttempts.includes(attempt)) return null;
-      if(!Object.entries(doc.settings.enabled).some(([key,on])=>on&&key!=="messages"&&key!=="notes.misc"))return null;
+      if(!Object.entries(effectiveDocument(doc).settings.enabled).some(([key,on])=>on&&key!=="messages"&&key!=="notes.misc"))return null;
       if (expected && !rows.some(r => r.id === expected.id && r.role === "assistant" && r.content === expected.content)) return null;
       const recent = [...rows].sort((a,b)=>a.index_in_chat-b.index_in_chat).filter(r=>r.role !== "system").slice(-doc.settings.helperMessages);
       if (!recent.length) return null;

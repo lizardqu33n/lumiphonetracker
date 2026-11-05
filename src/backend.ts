@@ -168,7 +168,7 @@ spindle.onFrontendMessage((payload, userId) => {
   if (payload.type === "phone_update" && (typeof payload.chatId !== "string" || !payload.chatId)) return;
   void (async () => {
     requireReadPermissions();
-    const chatId = typeof payload.chatId === "string" ? payload.chatId : (await spindle.chats.getActive(userId))?.id;
+    const chatId = typeof payload.chatId === "string" ? payload.chatId : payload.chatId===null?null:(await spindle.chats.getActive(userId))?.id;
     if (!chatId) { spindle.sendToFrontend({ type: "phone_snapshot", requestId, chatId: null }, userId); return; }
     let snapshot = payload.type === "phone_update" ? await store.update(userId, chatId,
       typeof payload.revision === "number" ? payload.revision : -1, { settings: payload.settings, edit: payload.edit, dismissNotice: payload.dismissNotice }) : await store.sync(userId, chatId);
@@ -177,7 +177,8 @@ spindle.onFrontendMessage((payload, userId) => {
       if(snapshot.settings.source==="helper" && snapshot.helperOwner===userId) { await helper.connections(userId,chatId); snapshot=await store.sync(userId,chatId); }
     }
     const reads = await messageReads.read(userId, chatId);
-    spindle.sendToFrontend({ type: "phone_snapshot", requestId, chatId, snapshot, reads, helperBusy:helper.busy(chatId) }, userId);
+    const chatName=(await spindle.chats.get(chatId,userId))?.name??"";
+    spindle.sendToFrontend({ type: "phone_snapshot", requestId, chatId, chatName, snapshot, reads, helperBusy:helper.busy(chatId) }, userId);
   })().catch(error => {
     const reason = error instanceof Error ? error.message : "";
     const known = ["The tracker changed.", "The story changed.", "This section is full.", "Contacts is full", "Locations is full", "A contact with that name", "A place with that name", "A note with that name"];

@@ -25,7 +25,7 @@ let helperProfiles=[{id:"small",name:"Saved small connection",model:"Small test 
 const helper=new HelperAI(store,{allowed:()=>granted.includes("generation"),connections:async()=>helperProfiles,generate:async input=>{helperCalls.push(input);await new Promise(resolve=>setTimeout(resolve,helperDelay));return {content:helperOutput,finish_reason:"stop"};},changed:(_,chatId)=>onBackend({type:"phone_helper_changed",chatId}),warn:()=>{}});
 const sendToBackend = (payload: unknown) => {
   if (!isRecord(payload)) return;
-  const id = payload.requestId; const chat = String(payload.chatId ?? activeChat ?? ""); const reply = onBackend;
+  const id = payload.requestId; const chat = payload.chatId===null?"":String(payload.chatId ?? activeChat ?? ""); const reply = onBackend;
   const run = async () => {
     try {
       if (payload.type === "phone_preferences" || payload.type === "phone_preferences_update") {
@@ -46,12 +46,15 @@ const sendToBackend = (payload: unknown) => {
       }
       let snapshot = payload.type === "phone_update" ? await store.update(`owner-${chat}`, chat, Number(payload.revision), { edit: payload.edit, settings: payload.settings, dismissNotice: payload.dismissNotice }) : await store.sync(`owner-${chat}`, chat);
       if(payload.type==="phone_update"){helper.cancel(chat);if(snapshot.settings.source==="helper"){await helper.connections(`owner-${chat}`,chat);snapshot=await store.sync(`owner-${chat}`,chat);}}
-      reply({ type: "phone_snapshot", requestId: id, chatId: chat, snapshot, reads: await readStore.read("user",chat),helperBusy:helper.busy(chat) });
+      reply({ type: "phone_snapshot", requestId: id, chatId: chat, chatName:chat==="a"?"Lantern story":"Other story", snapshot, reads: await readStore.read("user",chat),helperBusy:helper.busy(chat) });
     } catch (e) { reply({ type: payload.type === "phone_mark_read" ? "phone_reads_error" : "phone_error", requestId: id, chatId:chat, message: e instanceof Error ? e.message : "Failed" }); }
   };
   setTimeout(() => { void run(); }, payload.type === "phone_update" ? updateDelay : 0);
 };
 const ctx = {
+  components:{mountSwitch:(target:HTMLElement,options:{checked:boolean;disabled:boolean;ariaLabel:string;onChange:(v:boolean)=>void})=>{
+    const input=document.createElement("input");input.type="checkbox";input.checked=options.checked;input.disabled=options.disabled;input.setAttribute("role","switch");input.setAttribute("aria-label",options.ariaLabel);input.addEventListener("change",()=>options.onChange(input.checked));target.append(input);return {destroy:()=>input.remove(),update:()=>{},getValue:()=>input.checked};
+  }},
   host: { capabilities: { "composer-v1": 1 } },
   composer: {
     getState: () => ({ ...composerState }),

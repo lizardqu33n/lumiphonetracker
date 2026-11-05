@@ -1,10 +1,10 @@
 # Lumi Phone Tracker
 
-A small phone for keeping track of story facts. Each chat has its own Scene, Weather, Locations, Notes, Contacts and Messages. Settings controls what is shown and what the AI is asked to track.
+A small phone for keeping track of story facts. Each chat has its own Scene, Weather, Locations, Notes, Contacts and Messages. The existing Phone sidebar tab controls apps, tracking and appearance.
 
-**Version 0.8.1: all six build steps are delivered.** Source, manifest, built frontend/backend, tests and guides are included. The new Helper AI has been tested with mocks, not a real paid connection.
+**Version 0.9.0: all six build steps are delivered.** Source, manifest, built frontend/backend, tests and guides are included. The new Helper AI has been tested with mocks, not a real paid connection.
 
-Version 0.8.1 changes only the launcher fit: tight-cropped PNG, transparent box, image-only shadow and the same minimum tap target.
+Version 0.9.0 moves all settings out of the phone and adds the built-in App Store in the existing Phone sidebar. Removed apps keep their data. The tight-cropped launcher, transparent box and minimum tap target are retained. See [Part 3](docs/PART-3.md).
 
 Part 1 adds compact shorthand with old saved JSON support. Part 2 adds Refresh tracker in both modes, category-only Helper failure warnings and safer small-model parsing. Main refresh makes no model request. See [block format](docs/BLOCK-FORMAT.md), [token report](docs/TOKEN-REPORT.md) and [user-docs review](docs/USER-DOCS-REVIEW.md).
 
@@ -28,7 +28,7 @@ Texts actually sent in the story appear in Messages, grouped by sender. Read bad
 
 Tap Scene/Weather fields to correct them. Contacts, Locations and all five Notes sections support adding, editing and deleting. User edits are confirmed and protected by newer-story quote checks. The player card excludes private mood/thoughts/roles.
 
-The phone has solid theme-based backgrounds and seven bundled Lucide Home icons. [STYLING.md](STYLING.md) documents all CSS variables/classes. Custom CSS stays in the phone's Shadow DOM. The single protected Reset appearance button remains next to Open phone in the sidebar and works independently of floating placement.
+The phone has solid theme-based backgrounds and bundled Lucide icons for added apps. [STYLING.md](STYLING.md) documents all CSS variables/classes. Custom CSS stays in the phone's Shadow DOM. The single protected Reset appearance button stays with Open phone and Refresh tracker at the top of the sidebar and works independently of floating placement.
 
 ## Files and limits
 

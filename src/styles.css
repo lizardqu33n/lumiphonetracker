@@ -379,11 +379,6 @@
   box-sizing: border-box;
 }
 
-/* Center the 7th item (Settings) in the middle column of the last 3-column row */
-.lpt-app-button:last-child:nth-child(3n + 1) {
-  grid-column: 2;
-}
-
 .lpt-app-button {
   display: flex;
   flex-direction: column;
@@ -1010,7 +1005,7 @@
   resize: vertical;
 }
 
-/* Settings App: Grouped Sections & Clean Pill Toggle Switches */
+/* Legacy settings selectors retained for stylesheet compatibility; no phone Settings screen. */
 .lpt-settings-group,
 .lpt-helper-settings {
   background: var(--lpt-card-bg);
@@ -1143,8 +1138,3 @@
 .lpt-transport { display: flex; flex-direction: column; height: 48px; width: 48px; overflow: hidden; }
 .lpt-viewport { flex: 1; min-height: 0; width: 100%; overflow: clip; contain: layout paint size; position: relative; }
 .lpt-island { display: block; width: 100%; height: 100%; }
-.lpt-recovery-actions { display: flex; gap: .5em; }
-.lpt-recovery-actions .lpt-recovery-button { flex: 1; min-width: 0; white-space: normal; }
-.lpt-recovery-button { font: inherit; color: inherit; min-height: 2em; padding: .2em .7em; background: var(--lumiverse-fill-subtle, Canvas); border: 1px solid var(--lumiverse-border, ButtonBorder); border-radius: var(--lumiverse-radius, 10px); cursor: pointer; }
-.lpt-recovery-status { font: inherit; color: var(--lumiverse-text-muted, GrayText); }
-.lpt-recovery-panel { padding: 1em; display: grid; gap: .75em; color: var(--lumiverse-text, CanvasText); font: inherit; }

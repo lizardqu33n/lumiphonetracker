@@ -1,28 +1,23 @@
-import type { Cell, Contact, Document as PhoneDocument, ManualEdit, Note, Section, Settings } from "./model";
-import { CONTACT_KEYS, SCENE_KEYS, SECTIONS, normalize } from "./model";
+import type { Cell, Contact, Document as PhoneDocument, ManualEdit, Note, Section } from "./model";
+import { effectiveDocument, CONTACT_KEYS, SCENE_KEYS, SECTIONS, normalize } from "./model";
 import { APPS, defaultPreferences, type App, type Preferences } from "./preferences";
 import { prepareCustomCSS } from "./custom-css";
 import { LAUNCHER_ICON } from "./launcher-icon";
 import { HOME_ICONS, type IconNode } from "./icons";
 import { conversations, emptyReads, isUnread, receipt, threadKey, type Conversation, type ReadState } from "./messages";
-import type { ConnectionsInfo } from "./helper";
-import { failureCategory, failureLabel, isHelperNotice, type RefreshResult } from "./helper-status";
 import { isRecord } from "./shared";
 
 export interface ViewActions {
   update(change: { edit?: Partial<ManualEdit>; settings?: unknown; dismissNotice?: string }, revision: number): Promise<PhoneDocument>;
-  preferences(change: { css?: string; dismiss?: App }): Promise<Preferences>;
+  preferences(change: { css?: string; dismiss?: App|"Home" }): Promise<Preferences>;
   markRead(chatId: string, key: string, observed: { id: string; receipt: string }[]): Promise<ReadState>;
   draft(chatId: string, to: string, text: string): { manual: boolean; tag: string };
-  connections():Promise<ConnectionsInfo>;
-  updateNow():Promise<RefreshResult>;
   size(width: number, height: number, open: boolean): void;
 }
-const DESCRIPTIONS: Record<App, string> = {
+export const DESCRIPTIONS: Record<App, string> = {
   Scene: "Where the story is happening right now.", Weather: "Only the weather the story has established.",
   Locations: "Places that matter in this story.", Notes: "People, items, rules, and plans worth remembering.",
   Contacts: "What the story has established about each character.", Messages: "Texts actually sent in the story.",
-  Settings: "Choose what the phone shows and what the AI keeps track of.",
 };
 const FIELD_NAMES: Record<string, string> = { location: "Location", time: "Time", date: "Date", present: "Here now",
   roles: "Roles", physical: "Physical status", mood: "Mood", position: "Position", attire: "Attire", thoughts: "Inner thoughts" };
@@ -38,7 +33,7 @@ const CONTROL_PATHS: Record<string, string[]> = {
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag); node.className = cls; if (text !== undefined) node.textContent = text; return node;
 }
-function icon(name: string): SVGSVGElement {
+export function icon(name: string): SVGSVGElement {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("class", "lpt-icon"); svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("aria-hidden", "true");
   const nodes: readonly IconNode[] = HOME_ICONS[name] ?? (CONTROL_PATHS[name] ?? CONTROL_PATHS.Phone).map(d => ["path", { d }] as const);
@@ -77,7 +72,6 @@ export class PhoneView {
   private openState = false;
   private editing = false;
   private busy = false;
-  private cssTimer: ReturnType<typeof setTimeout> | undefined;
   private observer: ResizeObserver;
   private selectedText: string | null = null;
   private probe = el("div", "lpt-size-probe");
@@ -88,9 +82,6 @@ export class PhoneView {
   private manualDrafts = new Map<string, string>();
   private textNotice = el("p", "lpt-text-notice");
   private noticeTimer: ReturnType<typeof setTimeout> | undefined;
-  private connectionsInfo:ConnectionsInfo={available:false,choices:[],note:"Loading connections…"};
-  private helperChoice=false;
-  private helperBusy=false;
   constructor(private mount: ShadowRoot | HTMLElement, private customStyle: HTMLStyleElement, private actions: ViewActions) {
     this.launcher.setAttribute("aria-label", "Open phone");
     const launcherImage=el("img","lpt-launcher-image");
@@ -109,35 +100,24 @@ export class PhoneView {
   }
   receive(doc: PhoneDocument | null, reads?: ReadState): void {
     const changedChat = doc?.chatId !== this.doc?.chatId;
-    if(this.doc?.settings.source==="helper"&&doc?.settings.source==="main")this.helperChoice=false;
+
     const previous = new Set(this.doc?.state.messages.filter(m => m.direction === "incoming").map(m => JSON.stringify([m.id, receipt(m)])) ?? []);
-    const arrived = !changedChat && this.doc && doc?.settings.enabled.messages ? doc.state.messages.filter(m => m.direction === "incoming" && !previous.has(JSON.stringify([m.id, receipt(m)]))) : [];
+    const arrived = !changedChat && this.doc && doc?.settings.apps.Messages&&doc.settings.enabled.messages ? doc.state.messages.filter(m => m.direction === "incoming" && !previous.has(JSON.stringify([m.id, receipt(m)]))) : [];
     this.doc = doc;
+    if(this.app!=="Home"&&!doc?.settings.apps[this.app])this.app="Home";
     if (changedChat) {
-      this.chatEpoch++;this.refreshPending=false;this.refreshStatus=""; this.pendingReads.clear(); this.reads = reads ?? emptyReads(); this.replyDrafts.clear(); this.manualDrafts.clear();
+      this.chatEpoch++; this.pendingReads.clear(); this.reads = reads ?? emptyReads(); this.replyDrafts.clear(); this.manualDrafts.clear();
       this.clearTextNotice(); this.editing = false; this.app = "Home"; this.selectedText = null;
-      this.helperChoice=false; this.helperBusy=false;
-      if(doc)void this.loadConnections();
+
+
     } else if (reads && reads.revision >= this.reads.revision) this.reads = reads;
-    if (!doc?.settings.enabled.messages) this.clearTextNotice();
+    if (!doc?.settings.apps.Messages||!doc.settings.enabled.messages) this.clearTextNotice();
     else if (arrived.length) this.showTextNotice(arrived.length === 1 ? `New text from ${arrived[0].from}` : `${arrived.length} new texts`);
     if (!this.editing || changedChat) this.render(); else this.refreshBadges();
     this.markVisibleConversation();
   }
   receiveReads(reads: ReadState): void { if (reads.revision >= this.reads.revision) { this.reads = reads; this.refreshBadges(); } }
-  private refreshPending=false;
-  private refreshStatus="";
-  receiveHelperBusy(busy:boolean):void {
-    this.helperBusy=busy;const button=this.root.querySelector<HTMLButtonElement>(".lpt-update-now");
-    if(button)button.disabled=busy||this.refreshPending||!!(this.helperChoice&&this.doc?.settings.source!=="helper");
-  }
-  private async loadConnections():Promise<void> {
-    const epoch=this.chatEpoch;
-    try{const info=await this.actions.connections();if(epoch!==this.chatEpoch)return;this.connectionsInfo=info;}
-    catch{if(epoch!==this.chatEpoch)return;this.connectionsInfo={available:false,choices:[],note:"Connections are unavailable. Main AI still works."};}
-    if(this.app==="Settings"&&!this.editing&&!this.busy)this.render();
-  }
-  receivePreferences(prefs: Preferences): void { if (prefs.revision >= this.prefs.revision) this.prefs = prefs; }
+  receivePreferences(prefs: Preferences): void { if (prefs.revision >= this.prefs.revision) {this.prefs=prefs;if(prefs.dismissed.includes(this.app))this.root.querySelector(this.app==="Home"?".lpt-home-hint":".lpt-description")?.remove();} }
   setError(message: string): void { this.error.textContent = message; }
   setStatus(message: string): void { this.status.textContent = message; }
   fit(): void { this.measure(); }
@@ -146,13 +126,12 @@ export class PhoneView {
     requestAnimationFrame(() => this.measure()); return css;
   }
   resetCSS(): void {
-    clearTimeout(this.cssTimer); this.customStyle.textContent = ""; this.prefs = { ...this.prefs, css: "" };
-    const editor = this.root.querySelector<HTMLTextAreaElement>(".lpt-css-editor"); if (editor) editor.value = "";
+    this.customStyle.textContent = ""; this.prefs = { ...this.prefs, css: "" };
     this.setOpen(true); requestAnimationFrame(() => this.measure());
   }
   open(app?: App): void { if (app) this.navigate(app); this.setOpen(true); this.back.hidden ? this.frame.querySelector<HTMLElement>(".lpt-app-button, .lpt-close")?.focus() : this.back.focus(); }
   close(): void { this.setOpen(false); this.launcher.focus(); }
-  destroy(): void { clearTimeout(this.cssTimer); clearTimeout(this.noticeTimer); this.chatEpoch++;this.refreshPending=false;this.refreshStatus=""; this.observer.disconnect(); this.root.remove(); }
+  destroy(): void { clearTimeout(this.noticeTimer); this.chatEpoch++; this.observer.disconnect(); this.root.remove(); }
   private setOpen(open: boolean): void {
     this.openState = open; this.root.dataset.open = String(open); this.frame.hidden = !open; this.launcher.hidden = open;
     if (open) this.frame.insertBefore(this.textNotice, this.content); else this.root.insertBefore(this.textNotice, this.frame);
@@ -168,7 +147,7 @@ export class PhoneView {
     const closedHeight = this.textNotice.hidden ? height : Math.max(48, Math.ceil(this.root.getBoundingClientRect().height));
     this.actions.size(Math.max(48, width), Math.max(48, this.openState ? height : closedHeight), this.openState);
   }
-  private navigate(app: App | "Home"): void { this.app = app; this.editing = false; this.render(); this.content.scrollTop = 0; if(app==="Settings")void this.loadConnections(); }
+  private navigate(app: App | "Home"): void { this.app = app!=="Home"&&!this.doc?.settings.apps[app]?"Home":app; this.editing = false; this.render(); this.content.scrollTop = 0; }
   private render(): void {
     const focused = this.mount instanceof ShadowRoot ? this.mount.activeElement : document.activeElement;
     const replyFocus = focused instanceof HTMLTextAreaElement && focused.classList.contains("lpt-reply-input") ? {
@@ -179,30 +158,34 @@ export class PhoneView {
     this.back.hidden = this.app === "Home";
     if (this.app === "Home") {
       const home = el("div", "lpt-home");
-      for (const app of APPS) {
+      for (const app of APPS.filter(a=>this.doc?.settings.apps[a])) {
         const b = button("", "lpt-app-button", () => this.navigate(app)); b.dataset.app = app;
         const image = el("span", "lpt-app-icon"); image.append(icon(app));
         b.append(image, el("span", "lpt-app-label", app));
         if (app === "Messages") image.append(this.unreadBadge("*")); home.append(b);
       }
       this.content.append(home);
+      if(this.doc&&!home.children.length)this.empty("No apps added. Add apps from the sidebar's Phone tab.");
+      if(this.doc&&!this.prefs.dismissed.includes("Home")) {
+        const hint=el("div","lpt-description lpt-home-hint");hint.append(el("p","lpt-description-text","Change what the phone tracks in the sidebar's Phone tab."));
+        const hide=button("×","lpt-dismiss",()=>{void this.actions.preferences({dismiss:"Home"}).then(p=>{this.receivePreferences(p);hint.remove();}).catch(()=>this.setError("Could not hide the hint."));});hide.setAttribute("aria-label","Hide Home hint");hint.append(hide);this.content.append(hint);
+      }
       if (!this.doc) this.content.append(el("p", "lpt-empty", "Open a chat to start keeping track of your story."));
     } else {
       if (!this.prefs.dismissed.includes(this.app)) this.description(this.app);
-      if (!this.doc && this.app !== "Settings") this.empty("Open a chat first. Each chat keeps its own story information.");
+      if (!this.doc && true) this.empty("Open a chat first. Each chat keeps its own story information.");
       else if (this.app === "Scene") this.scene();
       else if (this.app === "Weather") this.weather();
       else if (this.app === "Contacts") this.contacts();
       else if (this.app === "Locations") this.locations();
       else if (this.app === "Notes") this.notes();
       else if (this.app === "Messages") this.messages();
-      else this.settings();
+
     }
     if (this.doc) for (const text of this.doc.state.notices) {
       const notice = el("div", "lpt-notice");
       notice.append(el("span", "lpt-notice-text", text), button("Dismiss", "lpt-dismiss", () => { void this.change({ dismissNotice: text }); }));
-      const helperGroup=this.app==="Settings"&&isHelperNotice(text)?this.content.querySelector(".lpt-helper-settings"):null;
-      if(helperGroup)helperGroup.insertBefore(notice,helperGroup.children.item(1));else this.content.append(notice);
+      this.content.append(notice);
     }
     this.error.setAttribute("role", "alert"); this.status.setAttribute("aria-live", "polite"); this.content.append(this.error, this.status);
     this.refreshBadges();
@@ -221,7 +204,7 @@ export class PhoneView {
     dismiss.setAttribute("aria-label", `Hide ${app} explanation`); row.append(el("p", "lpt-description-text", DESCRIPTIONS[app]), dismiss); this.content.append(row);
   }
   private empty(text: string, parent: HTMLElement = this.content): void { parent.append(el("p", "lpt-empty", text)); }
-  private enabled(key: string): boolean { return this.doc?.settings.enabled[key] === true; }
+  private enabled(key: string): boolean { return !!this.doc&&effectiveDocument(this.doc).settings.enabled[key]===true; }
   private async change(change: Parameters<ViewActions["update"]>[0], revision = this.doc?.revision ?? -1): Promise<void> {
     if (!this.doc || this.busy) return;
     this.busy = true; this.setStatus("Saving…");
@@ -229,7 +212,7 @@ export class PhoneView {
     controls.forEach(control => { control.disabled = true; });
     try {
       const doc = await this.actions.update(change, revision); this.editing = false; this.doc = doc;
-      if(isRecord(change.settings)&&change.settings.source==="helper"&&doc.settings.source==="main")this.helperChoice=false;
+
       this.render();
       this.setStatus("Saved.");
     } catch (e) { this.setStatus(""); this.setError(e instanceof Error ? e.message : "Could not save. Your changes are still here."); }
@@ -292,13 +275,13 @@ export class PhoneView {
   private scene(): void {
     const section = el("section", "lpt-scene");
     for (const key of SCENE_KEYS) if (this.enabled(`scene.${key}`)) this.field(section, key, this.doc!.state.scene[key], "scene");
-    if (!section.children.length) this.empty("Scene fields are off. Turn them on in Settings.", section);
+    if (!section.children.length) this.empty("Scene fields are off. Turn them on in the sidebar's Phone tab.", section);
     this.content.append(section);
   }
   private weather(): void {
     const section = el("section", "lpt-weather");
     if (this.enabled("weather")) this.field(section, "weather", this.doc!.state.weather, "weather");
-    else this.empty("Weather is off. Turn it on in Settings.", section);
+    else this.empty("Weather is off. Turn it on in the sidebar's Phone tab.", section);
     this.content.append(section);
   }
   private deleteAction(parent: HTMLElement, edit: Partial<ManualEdit>): void {
@@ -311,7 +294,7 @@ export class PhoneView {
   private contacts(): void {
     const section = el("section", "lpt-contacts"); this.content.append(section);
     const enabledFields = CONTACT_KEYS.filter(k => this.enabled(`contacts.${k}`));
-    if (!enabledFields.length) { this.empty("Contact fields are off. Turn them on in Settings.", section); return; }
+    if (!enabledFields.length) { this.empty("Contact fields are off. Turn them on in the sidebar's Phone tab.", section); return; }
     section.append(button("+ Add contact", "lpt-add", () => this.contactForm(section)));
     const v = this.doc!.state.scene.present?.value; const present = new Set((Array.isArray(v) ? v : []).map(normalize));
     const contacts = this.doc!.state.contacts;
@@ -334,7 +317,7 @@ export class PhoneView {
     const actions = el("div", "lpt-actions");
     const openTexts = button("Open texts", "lpt-open-texts", () => { this.selectedText = normalize(c.name); this.navigate("Messages"); this.markVisibleConversation(); });
     openTexts.append(this.unreadBadge(normalize(c.name)));
-    actions.append(button("Edit name", "lpt-button", () => this.contactForm(body, c)), openTexts);
+    actions.append(button("Edit name", "lpt-button", () => this.contactForm(body, c)));if(this.enabled("messages"))actions.append(openTexts);
     this.deleteAction(actions, { target: "contact", name: c.name }); body.append(actions); card.append(summary, body); parent.append(card);
   }
   private contactForm(parent: HTMLElement, contact?: Contact): void {
@@ -345,7 +328,7 @@ export class PhoneView {
   }
   private locations(): void {
     const section = el("section", "lpt-locations"); this.content.append(section);
-    if (!this.enabled("locations")) { this.empty("Locations is off. Turn it on in Settings.", section); return; }
+    if (!this.enabled("locations")) { this.empty("Locations is off. Turn it on in the sidebar's Phone tab.", section); return; }
     section.append(button("+ Add place", "lpt-add", () => this.locationForm(section)));
     const current = this.doc!.state.scene.location?.value; const currentName = current && typeof current === "object" && "name" in current ? current.name : "";
     const places = this.doc!.state.locations;
@@ -389,7 +372,7 @@ export class PhoneView {
       }
       section.append(group);
     }
-    if (!shown) this.empty("All Notes sections are off. Turn one on in Settings.", section);
+    if (!shown) this.empty("All Notes sections are off. Turn one on in the sidebar's Phone tab.", section);
   }
   private noteCard(parent: HTMLElement, key: Section, note: Note): void {
     const card = el("details", "lpt-card lpt-note"); const summary = el("summary", "lpt-summary");
@@ -417,7 +400,7 @@ export class PhoneView {
   }
   private messages(): void {
     const section = el("section", "lpt-messages"); this.content.append(section);
-    if (!this.enabled("messages")) { this.empty("Messages is off. Turn it on in Settings.", section); return; }
+    if (!this.enabled("messages")) { this.empty("Messages is off. Turn it on in the sidebar's Phone tab.", section); return; }
     const threads = conversations(this.doc!.state.messages, this.reads);
     if (this.selectedText !== null && !threads.some(t => t.key === this.selectedText)) {
       const contact = this.doc!.state.contacts.find(c => normalize(c.name) === this.selectedText);
@@ -497,89 +480,5 @@ export class PhoneView {
   private showTextNotice(text: string): void {
     this.clearTextNotice(); this.textNotice.textContent = text; this.textNotice.hidden = false; this.root.dataset.notice = "true";
     this.noticeTimer = setTimeout(() => { this.clearTextNotice(); this.measure(); }, 5000); requestAnimationFrame(() => this.measure());
-  }
-  private settings(): void {
-    const section = el("section", "lpt-settings"); this.content.append(section);
-    if (this.doc) {
-      this.helperSettings(section);
-      const groups: [string, [string, string, string][]][] = [
-        ["Scene", [["scene.location", "Location", "Exact place and known wider places."], ["scene.time", "Time", "The established story time."], ["scene.date", "Date", "The established story date."], ["scene.present", "Who is present", "Everyone here now, by name."]]],
-        ["Weather", [["weather", "Weather", "Only weather established by the story."]]],
-        ["Locations", [["locations", "Locations", "Meaningful places and their known details."]]],
-        ["Contacts", CONTACT_KEYS.map(k => [`contacts.${k}`, FIELD_NAMES[k], ({ roles: "Ordered roles or affiliations.", physical: "Observable body condition, not emotions.", mood: "Established mood, NPCs only.", position: "Facing and position relative to others.", attire: "Complete worn items and recently removed items.", thoughts: "One short private line, NPCs only." })[k]])],
-        ["Notes", SECTIONS.map(k => [`notes.${k}`, SECTION_NAMES[k], ({ people: "People with a clear reason to return.", items: "Items with a specific story function.", rules: "Explicit principles or restrictions.", plots: "Concrete promises, meetings, and pending events.", misc: "Your own notes; you choose what the AI sees." })[k]])],
-        ["Messages", [["messages", "Messages", "Texts actually sent in the story."]]],
-      ];
-      for (const [title, switches] of groups) {
-        const group = el("section", "lpt-settings-group lpt-section"); group.append(el("h2", "lpt-section-title", title));
-        for (const [key, label, description] of switches) this.toggle(group, label, description, this.enabled(key), value => ({ enabled: { [key]: value } }));
-        if (title === "Contacts") this.toggle(group, "Let the AI fill in missing details", "Off by default. New inferred contact values are marked.", this.doc.settings.inferMissing, inferMissing => ({ inferMissing }));
-        if (title === "Messages") this.toggle(group, "Let the AI write texts for my character", "Off by default. Your own sent texts still count.", this.doc.settings.aiPlayerTexts, aiPlayerTexts => ({ aiPlayerTexts }));
-        section.append(group);
-      }
-    } else this.empty("Open a chat to change what is tracked. Appearance can still be reset here.", section);
-    const advanced = el("details", "lpt-advanced"); advanced.append(el("summary", "lpt-summary", "Advanced"));
-    if (this.doc) {
-      this.number(advanced, "Recent messages to keep texts from", "Older text tags are left out of the AI's history.", "keepTexts", 1);
-      this.number(advanced, "Keep tracker blocks in the last N messages", "0 sends continuity through the phone summaries only.", "keepTrackers", 0);
-      this.number(advanced, "Notes per section", "Existing notes stay when you lower the limit.", "notesPerSection", 3, 30);
-      this.number(advanced, "Log lines sent to the AI", "The phone still shows every note.", "logLines", 1);
-    }
-    const cssGroup = el("details", "lpt-custom-css"); cssGroup.append(el("summary", "lpt-summary", "Custom CSS"));
-    const label = el("label", "lpt-label", "Custom CSS"); const input = el("textarea", "lpt-css-editor"); input.value = this.prefs.css; input.maxLength = 32000; input.spellcheck = false;
-    label.append(input); cssGroup.append(label, el("p", "lpt-help", "Changes apply while you type. To restore the default look, use Reset appearance in the Phone sidebar entry."));
-    input.addEventListener("input", () => {
-      clearTimeout(this.cssTimer);
-      try {
-        this.applyCSS(input.value); this.setError("");
-        this.cssTimer = setTimeout(() => { void this.actions.preferences({ css: input.value }).then(p => { this.receivePreferences(p); this.setStatus("Appearance saved."); }).catch(() => this.setError("Appearance could not be saved. Try again.")); }, 400);
-      } catch (e) { this.setError(e instanceof Error ? e.message : "That CSS could not be applied."); }
-    });
-    advanced.append(cssGroup); section.append(advanced);
-  }
-  private helperSettings(parent:HTMLElement):void {
-    const group=el("section","lpt-section lpt-helper-settings"); group.append(el("h2","lpt-section-title","Tracker source"));
-    const sourceLabel=el("label","lpt-label","Who updates the tracker");const source=el("select","lpt-input lpt-helper-source");
-    for(const [value,label]of [["main","Main AI"],["helper","Helper AI"]]){const option=el("option","lpt-option",label);option.value=value;source.append(option);}
-    source.value=this.doc!.settings.source==="helper"||this.helperChoice?"helper":"main";
-    source.addEventListener("change",()=>{
-      this.helperChoice=source.value==="helper";
-      if(source.value==="main")void this.change({settings:{source:"main"}});
-      else if(this.doc!.settings.connection_id && this.connectionsInfo.available)void this.change({settings:{source:"helper"}});
-      else this.render();
-    });sourceLabel.append(source);group.append(sourceLabel);
-    group.append(el("p","lpt-help","Main AI uses your normal reply. Helper AI makes a separate request."));
-    if(source.value==="helper") {
-      const label=el("label","lpt-label","Connection");const select=el("select","lpt-input lpt-helper-connection");
-      const empty=el("option","lpt-option","Choose a connection");empty.value="";select.append(empty);
-      for(const choice of this.connectionsInfo.choices){const option=el("option","lpt-option",choice.label);option.value=choice.id;select.append(option);}
-      select.value=this.doc!.settings.connection_id??"";select.disabled=!this.connectionsInfo.available;
-      select.addEventListener("change",()=>{if(select.value)void this.change({settings:{source:"helper",connection_id:select.value}});});label.append(select);group.append(label);
-      if(this.connectionsInfo.note)group.append(el("p","lpt-help",this.connectionsInfo.note));
-      if(this.doc!.settings.source!=="helper")group.append(el("p","lpt-help","Choose a connection to turn Helper AI on."));
-      this.number(group,"Messages to read","Only these recent messages and the compact tracker are sent.","helperMessages",1,10);
-    }
-    if(source.value==="helper")group.append(el("p","lpt-help","Requests may cost money depending on the model chosen."));
-    const update=button("Refresh tracker","lpt-button lpt-update-now",()=>{
-      const epoch=this.chatEpoch;this.refreshPending=true;this.refreshStatus="";update.disabled=true;
-      void this.actions.updateNow().then(result=>{
-        if(epoch===this.chatEpoch)this.refreshStatus=result.ok?"Refreshed":failureLabel(result.category??"invalid output");
-      }).catch(error=>{if(epoch===this.chatEpoch)this.refreshStatus=failureLabel(failureCategory(error,"validation rejected"));})
-        .finally(()=>{if(epoch===this.chatEpoch){this.refreshPending=false;this.render();}});
-    });
-    update.disabled=this.helperBusy||this.refreshPending||(source.value==="helper"&&this.doc!.settings.source!=="helper");group.append(update);
-    const status=el("p","lpt-status lpt-refresh-result",this.refreshStatus);status.setAttribute("role","status");status.setAttribute("aria-live","polite");group.append(status);
-    parent.append(group);
-  }
-  private toggle(parent: HTMLElement, name: string, description: string, checked: boolean, update: (v: boolean) => unknown): void {
-    const row = el("label", "lpt-setting"); const text = el("span", "lpt-setting-text");
-    text.append(el("span", "lpt-setting-label", name), el("span", "lpt-setting-description", description));
-    const input = el("input", "lpt-toggle"); input.type = "checkbox"; input.checked = checked;
-    input.addEventListener("change", () => { void this.change({ settings: update(input.checked) }); }); row.append(text, input); parent.append(row);
-  }
-  private number(parent: HTMLElement, title: string, description: string, key: keyof Settings, min: number, max?: number): void {
-    const row = el("label", "lpt-setting"); const text = el("span", "lpt-setting-text"); text.append(el("span", "lpt-setting-label", title), el("span", "lpt-setting-description", description));
-    const input = el("input", "lpt-number"); input.type = "number"; input.min = String(min); input.step = "1"; if (max !== undefined) input.max = String(max); input.value = String(this.doc!.settings[key]);
-    input.addEventListener("change", () => { if (input.reportValidity()) void this.change({ settings: { [key]: Number(input.value) } }); }); row.append(text, input); parent.append(row);
   }
 }

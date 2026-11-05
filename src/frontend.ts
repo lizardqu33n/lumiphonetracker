@@ -7,6 +7,9 @@ import css from "./styles.css" with { type: "text" };
 import { addReplyDraft, emptyReads, type ReadState } from "./messages";
 import { readState } from "./message-reads";
 import type { ConnectionsInfo } from "./helper";
+import { Sidebar } from "./sidebar";
+import sidebarCSS from "./sidebar.css" with {type:"text"};
+import { failureCategory, failureLabel } from "./helper-status";
 import { HelperFailure, readRefreshResult } from "./helper-status";
 
 export function setup(ctx: SpindleFrontendContext): () => void {
@@ -19,6 +22,9 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   let reads = emptyReads();
   let preferences = defaultPreferences();
   let view: PhoneView | null = null;
+  let chatName="";
+  let sidebar:Sidebar|null=null;
+  let refreshPending=false;
   let widget: ReturnType<SpindleFrontendContext["ui"]["createFloatWidget"]> | null = null;
   let lastSize = "";
   let widgetLoad: Promise<void> | null = null;
@@ -34,11 +40,11 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   const busy=()=>backendBusy||!!(activeChat&&streaming.get(activeChat)?.size);
   const helperRequests = new Map<string, { chatId:string; epoch:number; resolve:(value:unknown)=>void; reject:(error:Error)=>void; timer:ReturnType<typeof setTimeout> }>();
   const removeHostStyle = ctx.dom.addStyle(css);
-  disposers.push(removeHostStyle);
+  disposers.push(removeHostStyle,ctx.dom.addStyle(sidebarCSS));
 
   const sendSync = () => {
     pendingSync = crypto.randomUUID();
-    ctx.sendToBackend({ type: "phone_sync", requestId: pendingSync, ...(activeChat ? { chatId: activeChat } : {}) });
+    ctx.sendToBackend({ type: "phone_sync", requestId: pendingSync, chatId:activeChat });
   };
   // These attach before any asynchronous UI initialization or DOM work.
   for (const tagName of [TRACKER_TAG, TEXT_TAG]) disposers.push(ctx.messages.registerTagInterceptor({ tagName, removeFromMessage: true }, payload => {
@@ -46,7 +52,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     if (payload.isUser === false || (tagName === TEXT_TAG && payload.isUser === true)) sendSync();
   }));
 
-  const prefsChange = (change?: { css?: string; dismiss?: import("./preferences").App }): Promise<Preferences> => {
+  const prefsChange = (change?: { css?: string; dismiss?: import("./preferences").App|"Home" }): Promise<Preferences> => {
     const requestId = crypto.randomUUID();
     if (change?.css !== undefined) { appearanceEpoch++; preferences = { ...preferences, css: change.css }; }
     return new Promise((resolve, reject) => {
@@ -84,6 +90,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   };
   const reset = () => {
     // Clear the local preference before mounting/reopening, without waiting for storage.
+    sidebar?.reset();
     const saving = prefsChange({ css: "" });
     const originalView = view;
     openRequested = true; lastSize = ""; view?.resetCSS(); view?.open();
@@ -93,15 +100,23 @@ export function setup(ctx: SpindleFrontendContext): () => void {
       .catch(() => { recoveryStatus.textContent = "Reset for now. Could not save; try again."; });
   };
   const tab = ctx.ui.registerDrawerTab({ id: "phone", title: EXTENSION_NAME, shortName: "Phone", headerTitle: EXTENSION_NAME,
-    description: "Open your story phone or reset its appearance", keywords: ["phone", "tracker", "reset"] });
-  const panel = document.createElement("section"); panel.className = "lpt-recovery-panel";
-  const help = document.createElement("p"); help.className = "lpt-recovery-status"; help.textContent = "Your story phone. Appearance controls here stay usable even if custom CSS hides the phone.";
+    description: "Story phone and tracker settings", keywords: ["phone", "tracker", "reset"] });
+  const panel = document.createElement("section"); panel.className = "lpt-sidebar";
+  const help = document.createElement("p"); help.className = "lpt-recovery-status"; help.textContent = "";
   const open = document.createElement("button"); open.className = "lpt-recovery-button"; open.type = "button"; open.textContent = "Open phone";
-  open.addEventListener("click", () => { openRequested = true; void ensureWidget().then(() => { view?.open(); if (!view) help.textContent = "Allow floating panels in Extensions, then open the phone again."; }); });
+  open.addEventListener("click", () => { openRequested = true; void ensureWidget().then(() => { view?.open(); openStatus.textContent=view?"Phone opened.":"Allow floating panels in Extensions, then try again."; }); });
   const resetButton = document.createElement("button"); resetButton.className = "lpt-recovery-button"; resetButton.type = "button"; resetButton.textContent = "Reset appearance"; resetButton.addEventListener("click", reset);
-  const recoveryActions = document.createElement("div"); recoveryActions.className = "lpt-recovery-actions"; recoveryActions.append(open, resetButton);
-  const recoveryStatus = document.createElement("p"); recoveryStatus.className = "lpt-recovery-status"; recoveryStatus.setAttribute("aria-live", "polite");
-  panel.append(help, recoveryActions, recoveryStatus); tab.root.append(panel); disposers.push(() => tab.destroy());
+  const recoveryActions=document.createElement("div");recoveryActions.className="lpt-recovery-actions";
+  const openStatus=document.createElement("p");openStatus.className="lpt-recovery-status";openStatus.setAttribute("aria-live","polite");
+  const recoveryStatus=document.createElement("p");recoveryStatus.className="lpt-recovery-status";recoveryStatus.setAttribute("aria-live","polite");
+  const refreshStatus=document.createElement("p");refreshStatus.className="lpt-recovery-status lpt-refresh-result";refreshStatus.setAttribute("aria-live","polite");
+  const refreshButton=document.createElement("button");refreshButton.type="button";refreshButton.className="lpt-recovery-button lpt-update-now";refreshButton.textContent="Refresh tracker";
+  const updateBusy=()=>{refreshButton.disabled=!activeChat||!current||busy()||refreshPending;};
+  refreshButton.addEventListener("click",()=>{const origin=epoch;refreshPending=true;refreshStatus.textContent="";updateBusy();void requestHelper("phone_helper_now").then(value=>{if(origin!==epoch)return;const result=readRefreshResult(value);refreshStatus.textContent=result.ok?"Refreshed":failureLabel(result.category??"invalid output");sendSync();}).catch(error=>{if(origin===epoch)refreshStatus.textContent=failureLabel(failureCategory(error,"validation rejected"));}).finally(()=>{if(origin===epoch){refreshPending=false;updateBusy();}});});
+  for(const [button,status]of [[open,openStatus],[refreshButton,refreshStatus],[resetButton,recoveryStatus]]){const row=document.createElement("div");row.className="lpt-recovery-action";row.append(button,status);recoveryActions.append(row);}
+  panel.append(recoveryActions,help);tab.root.append(panel);
+  sidebar=new Sidebar(panel,ctx,{update:async(settings,revision)=>await update({settings},revision),connections:async()=>await requestHelper("phone_connections") as ConnectionsInfo,css:text=>prefsChange({css:text}),applyCSS:text=>{appearanceEpoch++;preferences={...preferences,css:text};view?.applyCSS(text);}},preferences);
+  updateBusy();disposers.push(()=>sidebar?.destroy(),()=>tab.destroy());
   disposers.push(tab.onActivate(() => { void ensureWidget(); }));
 
   async function ensureWidget(): Promise<void> {
@@ -136,10 +151,8 @@ export function setup(ctx: SpindleFrontendContext): () => void {
       const custom = document.createElement("style"); shadow.append(base, custom);
       viewport.append(island); transport.append(viewport); widget.root.append(placementStyle, transport);
       view = new PhoneView(shadow, custom, { update, preferences: prefsChange, markRead,
-        connections: async()=>await requestHelper("phone_connections") as ConnectionsInfo,
-        updateNow: async()=>{const result=readRefreshResult(await requestHelper("phone_helper_now"));sendSync();return result;},
         draft: (chatId, to, text) => {
-          if (disposed || activeChat !== chatId || current?.chatId !== chatId || !current.settings.enabled.messages) throw new Error("The chat changed. Reopen the original conversation.");
+          if (disposed || activeChat !== chatId || current?.chatId !== chatId || (!current.settings.apps.Messages||!current.settings.enabled.messages)) throw new Error("The chat changed. Reopen the original conversation.");
           return addReplyDraft(ctx, chatId, current.currentPlayer ?? "", to, text);
         }, size: (width, height) => {
         if (!widget || disposed) return;
@@ -201,7 +214,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
       clearTimeout(preferenceRequest.timer); prefsRequests.delete(payload.requestId);
       if (payload.type === "phone_preferences_error") preferenceRequest.reject(new Error(String(payload.message)));
       else {
-        try { const prefs = readPreferences(payload.preferences); if (preferenceRequest.appearanceEpoch === appearanceEpoch && prefs.revision >= preferences.revision) { preferences = prefs; view?.receivePreferences(prefs); }
+        try { const prefs = readPreferences(payload.preferences); if (preferenceRequest.appearanceEpoch === appearanceEpoch && prefs.revision >= preferences.revision) { preferences = prefs;sidebar?.preferences(prefs); view?.receivePreferences(prefs); }
           preferenceRequest.resolve(prefs);
         } catch { preferenceRequest.reject(new Error("Appearance could not be loaded.")); }
       }
@@ -214,9 +227,9 @@ export function setup(ctx: SpindleFrontendContext): () => void {
       if (edit.epoch !== epoch || edit.chatId !== activeChat) { edit.reject(new Error("The chat changed. Check the original chat before editing again.")); return; }
       if (payload.type === "phone_error") { edit.reject(new Error(String(payload.message))); return; }
       if (payload.chatId !== activeChat || !isRecord(payload.snapshot) || payload.snapshot.chatId !== activeChat) { edit.reject(new Error("The chat changed.")); return; }
-      current = payload.snapshot as unknown as PhoneDocument;
+      current = payload.snapshot as unknown as PhoneDocument;chatName=typeof payload.chatName==="string"?payload.chatName:chatName;sidebar?.receive(current,chatName);
       try { const value = readState(payload.reads); if (value.revision >= reads.revision) reads = value; } catch { /* Keep known read state. */ }
-      view?.receiveReads(reads); backendBusy=payload.helperBusy===true;view?.receiveHelperBusy(busy()); edit.resolve(current); return;
+      view?.receive(current,reads);view?.receiveReads(reads); backendBusy=payload.helperBusy===true;updateBusy(); edit.resolve(current); return;
     }
     if (payload.requestId !== pendingSync) return;
     if (payload.type === "phone_error") { view?.setError(String(payload.message)); return; }
@@ -225,10 +238,11 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     activeChat = typeof payload.chatId === "string" ? payload.chatId : null;
     current = isRecord(payload.snapshot) && payload.snapshot.chatId === activeChat ? payload.snapshot as unknown as PhoneDocument : null;
     try { const value = readState(payload.reads); if (value.revision >= reads.revision) reads = value; } catch { /* Keep known read state. */ }
-    view?.receive(current, reads); backendBusy=payload.helperBusy===true;view?.receiveHelperBusy(busy());
+    chatName=typeof payload.chatName==="string"?payload.chatName:"";sidebar?.receive(current,chatName);
+    view?.receive(current, reads); backendBusy=payload.helperBusy===true;updateBusy();
   }));
   const switchChat = (chatId: string | null) => {
-    epoch++; backendBusy=false;pendingSync = ""; activeChat = chatId; current = null; reads = emptyReads(); view?.receive(null, reads);
+    epoch++; refreshPending=false;refreshStatus.textContent="";openStatus.textContent="";backendBusy=false;pendingSync = ""; activeChat = chatId; current = null; reads = emptyReads(); view?.receive(null, reads);chatName="";sidebar?.receive(null,"");updateBusy();
     for (const [id, p] of readRequests) { clearTimeout(p.timer); p.reject(new Error("The chat changed.")); readRequests.delete(id); }
     for (const [id, p] of updates) { clearTimeout(p.timer); p.reject(new Error("The chat changed. Your original chat keeps its saved changes.")); updates.delete(id); }
     for(const [id,p]of helperRequests){clearTimeout(p.timer);p.reject(new Error("The chat changed."));helperRequests.delete(id);}
@@ -243,7 +257,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     const ids=streaming.get(payload.chatId)??new Set<string>();
     if(name==="GENERATION_STARTED")ids.add(payload.generationId);else ids.delete(payload.generationId);
     if(ids.size)streaming.set(payload.chatId,ids);else streaming.delete(payload.chatId);
-    if(payload.chatId===activeChat){view?.receiveHelperBusy(busy());if(name!=="GENERATION_STARTED")sendSync();}
+    if(payload.chatId===activeChat){updateBusy();if(name!=="GENERATION_STARTED")sendSync();}
   }));
   const fit = () => view?.fit(); window.addEventListener("resize", fit); window.visualViewport?.addEventListener("resize", fit);
   disposers.push(() => { window.removeEventListener("resize", fit); window.visualViewport?.removeEventListener("resize", fit); });
@@ -251,7 +265,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   if (detected) activeChat = detected;
   sendSync();
   const initialAppearanceEpoch = appearanceEpoch;
-  void prefsChange().then(p => { if (disposed || initialAppearanceEpoch !== appearanceEpoch || p.revision < preferences.revision) return; preferences = p; view?.receivePreferences(p); try { view?.applyCSS(p.css); } catch { help.textContent = "Saved custom CSS could not be applied. Reset appearance to clear it."; } }).catch(() => { help.textContent = "Appearance could not be loaded. Default styles are in use."; });
+  void prefsChange().then(p => { if (disposed || initialAppearanceEpoch !== appearanceEpoch || p.revision < preferences.revision) return; preferences = p;sidebar?.preferences(p); view?.receivePreferences(p); try { view?.applyCSS(p.css); } catch { help.textContent = "Saved custom CSS could not be applied. Reset appearance to clear it."; } }).catch(() => { help.textContent = "Appearance could not be loaded. Default styles are in use."; });
   void ensureWidget();
   return () => {
     disposed = true; epoch++; widgetResize?.disconnect(); view?.destroy(); widget?.destroy();

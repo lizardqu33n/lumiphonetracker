@@ -1,4 +1,6 @@
-# Current release: Launcher fit / 0.8.1
+# Current release: Sidebar settings / 0.9.0
+
+All settings are rendered outside the phone Shadow DOM in the existing drawer tab. App membership is a separate chat setting; a derived mask suppresses removed apps in macros, Helper input and recent text retention without altering their stored data. [PART-3.md](PART-3.md) records scope and migration.
 
 Refresh tracker rebuilds saved Main AI data or makes one explicit Helper request. Failures use safe categories, connections are authorized before listing, and late results retain chat/revision guards. See [PART-2.md](PART-2.md) for the identity audit. No new permission or setting. The launcher now embeds the tight-cropped 88 x 128 PNG with a transparent button and image-only shadow. Only its asset/CSS changed; standard chromeless placement, navigation and tracker handlers are unchanged.
 

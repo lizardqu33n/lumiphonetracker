@@ -1,0 +1,29 @@
+/* Host sidebar only; never part of the phone's custom-CSS tree. */
+.lpt-sidebar {max-height:100dvh;overflow-y:auto;color:var(--lumiverse-text,CanvasText);font:inherit;padding:12px;box-sizing:border-box;max-width:100%;overflow-wrap:anywhere;}
+.lpt-sidebar * {box-sizing:border-box;}
+.lpt-recovery-actions {display:grid;gap:8px;position:sticky;top:0;background:var(--lumiverse-bg,var(--lumiverse-fill,Canvas));z-index:1;padding:8px 0;}
+.lpt-recovery-action {display:grid;grid-template-columns:minmax(0,1fr);gap:3px;}
+.lpt-recovery-button,.lpt-store-button {font:inherit;color:var(--lumiverse-text,CanvasText);background:var(--lumiverse-fill-subtle,ButtonFace);border:1px solid var(--lumiverse-border,ButtonBorder);border-radius:var(--lumiverse-radius,8px);padding:7px 10px;cursor:pointer;min-height:40px;white-space:normal;}
+.lpt-sidebar button:focus-visible,.lpt-sidebar input:focus-visible,.lpt-sidebar textarea:focus-visible,.lpt-sidebar select:focus-visible,.lpt-sidebar summary:focus-visible {outline:2px solid var(--lumiverse-accent,Highlight);outline-offset:2px;}
+.lpt-sidebar button:disabled {opacity:.55;cursor:default;}
+.lpt-recovery-status,.lpt-side-status,.lpt-side-help,.lpt-side-scope {font-size:.85em;line-height:1.4;margin:4px 0;color:var(--lumiverse-text-muted,GrayText);}
+.lpt-side-section {border-top:1px solid var(--lumiverse-border,ButtonBorder);padding:10px 0;}
+.lpt-side-summary {font-weight:600;cursor:pointer;padding:5px 0;}
+.lpt-side-scope {font-weight:600;}
+.lpt-store-row {display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;align-items:center;padding:10px 0;}
+.lpt-side-label {display:flex;flex-direction:column;gap:4px;min-width:0;}
+.lpt-store-added {color:var(--lumiverse-accent,Highlight);}
+.lpt-store-icon .lpt-icon {width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;}
+.lpt-side-setting {display:flex;gap:10px;align-items:center;justify-content:space-between;padding:9px 0;}
+.lpt-side-setting .lpt-side-label {flex:1;}
+.lpt-side-switch {flex:none;}
+.lpt-side-group {border:0;margin:8px 0;padding:0;min-width:0;}
+.lpt-side-legend {font-weight:600;}
+.lpt-side-number,.lpt-helper-source,.lpt-helper-connection,.lpt-sidebar-css {font:inherit;color:var(--lumiverse-text,CanvasText);background:var(--lumiverse-fill,Canvas);border:1px solid var(--lumiverse-border,ButtonBorder);border-radius:var(--lumiverse-radius,8px);padding:6px;max-width:100%;}
+.lpt-side-number {width:68px;flex:none;}
+.lpt-helper-source,.lpt-helper-connection {width:100%;}
+.lpt-sidebar-css {width:100%;min-height:160px;resize:vertical;}
+.lpt-side-chat {font-size:.9em;}
+@media(max-width:420px){.lpt-sidebar{padding:8px}.lpt-store-row{gap:5px}.lpt-store-button{padding:6px}.lpt-side-setting{gap:6px}}
+
+.lpt-recovery-status:empty,.lpt-side-status:empty {display:none;}

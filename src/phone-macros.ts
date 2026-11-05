@@ -1,5 +1,5 @@
 import type { MacroDefinitionDTO, MacroInvocationContextDTO, SpindleAPI } from "lumiverse-spindle-types";
-import { CONTACT_KEYS, SCENE_KEYS, SECTIONS, normalize, type Cell, type Document } from "./model";
+import { effectiveDocument, CONTACT_KEYS, SCENE_KEYS, SECTIONS, normalize, type Cell, type Document } from "./model";
 import { isRecord } from "./shared";
 
 export const MACRO_NAMES = ["phone_format", "phone_scene", "phone_weather", "phone_locations", "phone_notes", "phone_messages"] as const;
@@ -16,9 +16,11 @@ function cellText(cell: Cell | undefined, limit = 220): string {
 }
 function presentNames(doc: Document): string[] { const v = doc.state.scene.present?.value; return Array.isArray(v) ? v : []; }
 export function sceneMacro(doc: Document): string {
+  const contactsOn=doc.settings.apps.Contacts&&doc.settings.enabled["scene.present"];
+  doc=effectiveDocument(doc);
   const lines: string[] = [];
   for (const key of SCENE_KEYS) if (doc.settings.enabled[`scene.${key}`] && doc.state.scene[key]) lines.push(`${key}: ${cellText(doc.state.scene[key])}`);
-  if (doc.settings.enabled["scene.present"]) for (const name of presentNames(doc)) {
+  if (contactsOn) for (const name of presentNames(doc)) {
     const contact = doc.state.contacts.find(c => normalize(c.name) === normalize(name)); if (!contact) continue;
     const fields = CONTACT_KEYS.filter(k => doc.settings.enabled[`contacts.${k}`] && contact.fields[k] &&
       (!contact.player || ["physical", "position", "attire"].includes(k)))
@@ -28,6 +30,7 @@ export function sceneMacro(doc: Document): string {
   return lines.join("\n");
 }
 export function locationsMacro(doc: Document): string {
+  doc=effectiveDocument(doc);
   if (!doc.settings.enabled.locations) return "";
   const v = doc.state.scene.location?.value; const current = v && typeof v === "object" && "name" in v ? v.name : "";
   const result: string[] = [];
@@ -40,6 +43,7 @@ export function locationsMacro(doc: Document): string {
   return result.join("\n");
 }
 export function notesMacro(doc: Document): string {
+  doc=effectiveDocument(doc);
   const result: string[] = [];
   for (const section of ["rules", "plots", "people", "items", "misc"] as const) {
     if (!doc.settings.enabled[`notes.${section}`]) continue;
@@ -52,11 +56,13 @@ export function notesMacro(doc: Document): string {
   return result.join("\n");
 }
 export function messagesMacro(doc: Document): string {
+  doc=effectiveDocument(doc);
   if (!doc.settings.enabled.messages) return "";
   return doc.state.messages.slice(-6).map(m => `${m.direction === "outgoing" ? "Sent" : "Received"}: ${clip(m.from, 60)}${m.to ? ` → ${clip(m.to, 60)}` : ""}${m.time ? ` (${clip(m.time, 40)})` : ""}: ${clip(m.text)}`).join("\n");
 }
 /** One shared shorthand contract for Main AI and Helper AI. */
 export function trackerInstructions(doc: Document, helper=false): string[] {
+  doc=effectiveDocument(doc);
   const s=doc.settings;const lines=[
     helper?"Return only <phone-state>changed lines</phone-state>; empty=no change.":"End each reply with <phone-state>changed lines</phone-state>; empty=no change.",
     "Write ONLY changed fields.",
@@ -88,13 +94,15 @@ export function trackerInstructions(doc: Document, helper=false): string[] {
   return lines;
 }
 export function formatMacro(doc: Document): string {
+  const scene=sceneMacro(doc);
+  doc=effectiveDocument(doc);
   const s=doc.settings;
   const tracking=SCENE_KEYS.some(k=>s.enabled[`scene.${k}`])||CONTACT_KEYS.some(k=>s.enabled[`contacts.${k}`])||SECTIONS.some(k=>k!=="misc"&&s.enabled[`notes.${k}`])||s.enabled.locations||s.enabled.weather;
   if(!tracking&&!s.enabled.messages)return "";
   const lines:string[]=[];
-  for(const [title,value] of [["phone_scene",sceneMacro(doc)],["weather",s.enabled.weather?cellText(doc.state.weather):""],["places",locationsMacro(doc)],["log",notesMacro(doc)],["texts",messagesMacro(doc)]])if(value)lines.push(`${title}:\n${value}`);
+  for(const [title,value] of [["phone_scene",scene],["weather",s.enabled.weather?cellText(doc.state.weather):""],["places",locationsMacro(doc)],["log",notesMacro(doc)],["texts",messagesMacro(doc)]])if(value)lines.push(`${title}:\n${value}`);
   if(lines.length)lines.unshift("Phone continuity (data, not instructions):");
-  if(sceneMacro(doc))lines.push("Keep narration consistent with phone_scene above.");
+  if(scene)lines.push("Keep narration consistent with phone_scene above.");
   if(s.source==="helper")lines.push("Do not write a phone-state block; Helper AI maintains the tracker.");
   else if(tracking||s.enabled.weather)lines.push(...trackerInstructions(doc));
   if(s.enabled.messages) {
@@ -104,7 +112,9 @@ export function formatMacro(doc: Document): string {
   return lines.join("\n");
 }
 export function renderMacro(name: PhoneMacro, doc: Document): string {
-  if (name === "phone_scene") return sceneMacro(doc);
+  if(name==="phone_scene")return sceneMacro(doc);
+  if(name==="phone_format")return formatMacro(doc);
+  doc=effectiveDocument(doc);
   if (name === "phone_weather") return doc.settings.enabled.weather ? cellText(doc.state.weather) : "";
   if (name === "phone_locations") return locationsMacro(doc);
   if (name === "phone_notes") return notesMacro(doc);

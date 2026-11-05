@@ -29,7 +29,11 @@ export interface State {
   scene: Partial<Record<SceneKey, Cell>>; weather?: Cell; contacts: Contact[]; locations: Place[];
   notes: Record<Section, Note[]>; messages: SavedMessage[]; notices: string[];
 }
+export const CORE_APPS = ["Scene","Weather","Locations","Notes","Contacts","Messages"] as const;
+export type CoreApp=typeof CORE_APPS[number];
+export const APP_FIELDS:Record<CoreApp,string[]>={Scene:SCENE_KEYS.map(k=>`scene.${k}`),Weather:["weather"],Locations:["locations"],Notes:SECTIONS.map(k=>`notes.${k}`),Contacts:CONTACT_KEYS.map(k=>`contacts.${k}`),Messages:["messages"]};
 export interface Settings {
+  apps:Record<CoreApp,boolean>;
   enabled: Record<string, boolean>; aiPlayerTexts: boolean; inferMissing: boolean;
   keepTexts: number; keepTrackers: number; notesPerSection: number; logLines: number;
   source: "main" | "helper";
@@ -55,7 +59,7 @@ export interface Document {
 }
 export const normalize = (name: string) => name.normalize("NFKC").trim().toLocaleLowerCase("en-US").split(" ").filter(Boolean).join(" ");
 export function defaults(): Settings {
-  return { enabled: Object.fromEntries(SWITCHES.map(k => [k, k !== "contacts.thoughts"])), aiPlayerTexts: false,
+  return { apps:Object.fromEntries(CORE_APPS.map(a=>[a,true])) as Record<CoreApp,boolean>, enabled: Object.fromEntries(SWITCHES.map(k => [k, k !== "contacts.thoughts"])), aiPlayerTexts: false,
     inferMissing: false, keepTexts: 3, keepTrackers: 0, notesPerSection: 10, logLines: 20, source: "main", connection_id: null, helperMessages: 3 };
 }
 export function readSettings(input: unknown): Settings {
@@ -63,7 +67,10 @@ export function readSettings(input: unknown): Settings {
   const out = defaults();
   for (const key of Object.keys(input)) {
     if (!(key in out)) throw new Error("Unknown setting");
-    if (key === "enabled") {
+    if(key==="apps") {
+      if(!isRecord(input.apps))throw new Error("Invalid apps");
+      for(const [app,on]of Object.entries(input.apps)){if(!CORE_APPS.includes(app as CoreApp)||typeof on!=="boolean")throw new Error("Invalid app");out.apps[app as CoreApp]=on;}
+    } else if (key === "enabled") {
       if (!isRecord(input.enabled)) throw new Error("Invalid switches");
       for (const [name, value] of Object.entries(input.enabled)) {
         if (!SWITCHES.includes(name as never) || typeof value !== "boolean") throw new Error("Invalid switch");
@@ -85,7 +92,12 @@ export function readSettings(input: unknown): Settings {
       Object.assign(out, { [key]: n });
     }
   }
+  if(input.apps===undefined)for(const app of CORE_APPS)out.apps[app]=APP_FIELDS[app].some(k=>out.enabled[k]);
   return out;
+}
+export function effectiveDocument(doc:Document):Document {
+  const enabled={...doc.settings.enabled};for(const app of CORE_APPS)if(!doc.settings.apps[app])for(const key of APP_FIELDS[app])enabled[key]=false;
+  return {...doc,settings:{...doc.settings,enabled}};
 }
 export const emptyPatch = (): Patch => ({ scene: {}, contacts: [], locations: [], notes: {} });
 export const emptyState = (): State => ({ scene: {}, contacts: [], locations: [], notes: { people: [], items: [], rules: [], plots: [], misc: [] }, messages: [], notices: [] });
