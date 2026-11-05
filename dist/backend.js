@@ -1,4 +1,132 @@
 // @bun
+// src/portraits.ts
+var PORTRAIT_INPUT_LIMIT = 5 * 1024 * 1024;
+var PORTRAIT_LIMIT = 20 * 1024;
+var PORTRAIT_CHAT_LIMIT = 512 * 1024;
+var emptyPortraitSources = () => ({ characters: [] });
+var ascii = (b, a, n) => String.fromCharCode(...b.slice(a, a + n));
+function rasterType(b) {
+  if (b.length < 12)
+    throw Error("Choose a real PNG, JPEG or WebP image.");
+  if (b[0] === 137 && ascii(b, 1, 3) === "PNG" && b[4] === 13 && b[5] === 10 && b[6] === 26 && b[7] === 10) {
+    for (let i = 8;i + 12 <= b.length; ) {
+      const size = new DataView(b.buffer, b.byteOffset + i, 4).getUint32(0);
+      if (ascii(b, i + 4, 4) === "acTL")
+        throw Error("Choose a still image.");
+      if (size > b.length - i - 12)
+        throw Error("The image is damaged.");
+      i += size + 12;
+    }
+    return "image/png";
+  }
+  if (b[0] === 255 && b[1] === 216 && b[2] === 255)
+    return "image/jpeg";
+  if (ascii(b, 0, 4) === "RIFF" && ascii(b, 8, 4) === "WEBP") {
+    for (let i = 12;i + 8 <= b.length; ) {
+      const tag = ascii(b, i, 4), size = new DataView(b.buffer, b.byteOffset + i + 4, 4).getUint32(0, true);
+      if (tag === "ANIM" || tag === "ANMF")
+        throw Error("Choose a still image.");
+      if (size > b.length - i - 8)
+        throw Error("The image is damaged.");
+      i += 8 + size + size % 2;
+    }
+    return "image/webp";
+  }
+  throw Error("Choose a real PNG, JPEG or WebP image; SVG and GIF are not accepted.");
+}
+function rasterData(bytes) {
+  const type = rasterType(bytes);
+  if (bytes.length > PORTRAIT_INPUT_LIMIT)
+    throw Error("Choose an image under 5 MB.");
+  let binary = "";
+  for (let i = 0;i < bytes.length; i += 8192)
+    binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  return `data:${type};base64,${btoa(binary)}`;
+}
+function rasterSize(b) {
+  const mime = rasterType(b), view = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  if (mime === "image/png" && b.length >= 24)
+    return { width: view.getUint32(16), height: view.getUint32(20) };
+  if (mime === "image/jpeg")
+    for (let i = 2;i + 4 < b.length; ) {
+      if (b[i] !== 255)
+        throw Error("The image is damaged.");
+      const marker = b[i + 1];
+      i += 2;
+      if (marker === 216 || marker === 217)
+        continue;
+      if (marker === 218)
+        break;
+      const length = view.getUint16(i);
+      if (length < 2 || i + length > b.length)
+        throw Error("The image is damaged.");
+      if ([192, 193, 194, 195, 197, 198, 199, 201, 202, 203, 205, 206, 207].includes(marker) && length >= 7)
+        return { width: view.getUint16(i + 5), height: view.getUint16(i + 3) };
+      i += length;
+    }
+  if (mime === "image/webp") {
+    const kind = ascii(b, 12, 4);
+    if (kind === "VP8X" && b.length >= 30)
+      return { width: 1 + b[24] + (b[25] << 8) + (b[26] << 16), height: 1 + b[27] + (b[28] << 8) + (b[29] << 16) };
+    if (kind === "VP8 " && b.length >= 30)
+      return { width: view.getUint16(26, true) & 16383, height: view.getUint16(28, true) & 16383 };
+    if (kind === "VP8L" && b.length >= 25) {
+      const n = view.getUint32(21, true);
+      return { width: 1 + (n & 16383), height: 1 + (n >>> 14 & 16383) };
+    }
+  }
+  throw Error("The image dimensions are unavailable.");
+}
+function portraitBytes(data, max = PORTRAIT_LIMIT) {
+  if (typeof data !== "string" || data.length > Math.ceil(max / 3) * 4 + 40 || !/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]*={0,2}$/.test(data))
+    throw Error("Invalid portrait.");
+  const comma = data.indexOf(",");
+  let raw;
+  try {
+    raw = atob(data.slice(comma + 1));
+  } catch {
+    throw Error("Invalid portrait.");
+  }
+  if (raw.length > max)
+    throw Error("The portrait is too large.");
+  const bytes = Uint8Array.from(raw, (c) => c.charCodeAt(0));
+  if (!data.startsWith(`data:${rasterType(bytes)};`))
+    throw Error("The image type does not match its contents.");
+  if (max === PORTRAIT_LIMIT) {
+    const size = rasterSize(bytes);
+    if (size.width !== 128 || size.height !== 128)
+      throw Error("Portraits must be 128 by 128.");
+  }
+  return bytes;
+}
+var exact = (name) => name.trim().toLocaleLowerCase("en-US");
+var portraitKey = exact;
+
+// src/portrait-sources.ts
+async function loadPortraitSources(api, chatId, userId, player) {
+  const result = emptyPortraitSources();
+  if (!userId || !chatId)
+    return result;
+  const chat = await api.chats.get(chatId, userId);
+  if (!chat || chat.id !== chatId)
+    return result;
+  if (!api.permissions.has("images"))
+    return result;
+  if (api.permissions.has("characters") && chat.character_id)
+    try {
+      const c = await api.characters.get(chat.character_id, userId);
+      if (c?.image_id)
+        result.characters.push({ name: c.name, data: rasterData(await api.images.readBinary(c.image_id, userId)) });
+    } catch {}
+  if (api.permissions.has("personas") && player)
+    try {
+      const p = await api.personas.getActive(userId);
+      if (p?.image_id && p.name.trim().toLocaleLowerCase("en-US") === player.trim().toLocaleLowerCase("en-US"))
+        result.persona = { name: p.name, data: rasterData(await api.images.readBinary(p.image_id, userId)) };
+    } catch {}
+  return result;
+}
+
 // src/shared.ts
 var EXTENSION_NAME = "Lumi Phone Tracker";
 var BUILD_STEP = 6;
@@ -1053,11 +1181,11 @@ function parseExpandedReply(content) {
   for (const tag of tags.filter((t) => t.name === "phone-text")) {
     const attrs = parseAttributes(tag.header);
     const text = decodeEntities(tag.body).trim();
-    if (!tag.complete || !attrs || !named(attrs.from) || !text || text.length > 3000 || tag.body.includes("<") || text.includes("\x00") || Object.keys(attrs).some((k) => !["from", "time", "to"].includes(k)) || attrs.time !== undefined && !short(attrs.time, 100) || attrs.to !== undefined && !named(attrs.to) || texts.length >= 12) {
+    if (!tag.complete || !attrs || !named(attrs.from) || !text || text.length > 3000 || tag.body.includes("<") || text.includes("\x00") || Object.keys(attrs).some((k) => !["from", "time", "to", "group"].includes(k)) || attrs.group !== undefined && !named(attrs.group) || attrs.time !== undefined && !short(attrs.time, 100) || attrs.to !== undefined && !named(attrs.to) || texts.length >= 12) {
       badTexts = true;
       continue;
     }
-    texts.push({ from: attrs.from.trim(), text, ...attrs.time ? { time: attrs.time } : {}, ...attrs.to ? { to: attrs.to.trim() } : {} });
+    texts.push({ from: attrs.from.trim(), text, ...attrs.time ? { time: attrs.time } : {}, ...attrs.to ? { to: attrs.to.trim() } : {}, ...attrs.group ? { group: attrs.group.trim() } : {} });
   }
   const emails = [];
   let badEmails = false;
@@ -1128,30 +1256,30 @@ function legacyPatch(content) {
     patch.weather = change("weather", legacy.patch.weather);
   return patch;
 }
-function replay(document, rows, playerNames, report) {
-  const next = structuredClone(document);
+function replay(document2, rows, playerNames, report) {
+  const next = structuredClone(document2);
   const state = emptyState();
-  state.notices = [...document.notices];
+  state.notices = [...document2.notices];
   next.state = state;
   next.accepted = [];
   const players = new Set(playerNames.map(normalize).filter(Boolean));
   for (const row of rows)
     if (row.role === "user" && row.name?.trim())
       players.add(normalize(row.name));
-  for (const edit of document.edits)
+  for (const edit of document2.edits)
     if (edit.target === "contact" && edit.rename && players.has(normalize(edit.name ?? "")))
       players.add(normalize(edit.rename));
-  const previous = new Map(document.accepted.map((e) => [JSON.stringify([e.at.id, e.at.variant]), e]));
-  const knownNotes = new Set(SECTIONS.flatMap((s) => document.state.notes[s].map((n) => `${s}/${normalize(n.name)}`)));
+  const previous = new Map(document2.accepted.map((e) => [JSON.stringify([e.at.id, e.at.variant]), e]));
+  const knownNotes = new Set(SECTIONS.flatMap((s) => document2.state.notes[s].map((n) => `${s}/${normalize(n.name)}`)));
   const tombstones = new Set;
   let oldNotes = [];
   let oldDetails = "";
-  const legacyEntries = document.legacy ? readSnapshot(document.legacy, document.chatId).entries : [];
+  const legacyEntries = document2.legacy ? readSnapshot(document2.legacy, document2.chatId).entries : [];
   const sorted = [...rows].sort((a, b) => a.index_in_chat - b.index_in_chat);
   const ids = new Set;
   const indexes = new Set;
   for (const row of sorted) {
-    if (row.chat_id !== document.chatId || ids.has(row.id) || indexes.has(row.index_in_chat) || !row.id || !Number.isInteger(row.index_in_chat) || row.index_in_chat < 0)
+    if (row.chat_id !== document2.chatId || ids.has(row.id) || indexes.has(row.index_in_chat) || !row.id || !Number.isInteger(row.index_in_chat) || row.index_in_chat < 0)
       throw new Error("Invalid history");
     ids.add(row.id);
     indexes.add(row.index_in_chat);
@@ -1166,10 +1294,10 @@ function replay(document, rows, playerNames, report) {
     if (players.has(key) && state.contacts.length < 30)
       state.contacts.push({ name, player: true, fields: {} });
   const callAliases = new Map;
-  for (const entry of document.accepted)
+  for (const entry of document2.accepted)
     for (const [i, c] of (entry.patch.calls ?? []).entries())
       callAliases.set(JSON.stringify([entry.at.id, entry.at.variant, "calls", i]), callId(entry.at.id, c));
-  for (const entry of document.helperEntries ?? [])
+  for (const entry of document2.helperEntries ?? [])
     for (const [i, c] of (validateExpanded(entry.values).calls ?? []).entries())
       callAliases.set(JSON.stringify([entry.at.id, entry.at.variant, "calls", i]), callId(c.source ?? entry.at.id, c));
   for (const edit of next.edits)
@@ -1182,7 +1310,7 @@ function replay(document, rows, playerNames, report) {
     for (const c of parsed.patch?.calls ?? (parsed.patch === null ? prior?.patch.calls : []) ?? [])
       callCandidates.add(callId(row.id, c));
   }
-  for (const entry of document.helperEntries ?? [])
+  for (const entry of document2.helperEntries ?? [])
     if (entry.sources.every((s) => sorted.some((r) => r.id === s.id && helperSourceSignature(r) === s.signature))) {
       for (const c of validateExpanded(entry.values).calls ?? [])
         if (!c.source || helperCallSource(c, sorted))
@@ -1192,7 +1320,7 @@ function replay(document, rows, playerNames, report) {
     if (edit.target === "call" && !edit.name && !edit.remove)
       callCandidates.add(edit.id);
   const deletedCalls = new Set(next.edits.filter((e) => e.target === "call" && e.remove).map((e) => e.name ?? e.id));
-  const reservedCalls = new Set((document.callAdmissions ?? document.state.calls.map((c) => c.id)).map((id) => callAliases.get(id) ?? id).filter((id) => callCandidates.has(id) && !deletedCalls.has(id)));
+  const reservedCalls = new Set((document2.callAdmissions ?? document2.state.calls.map((c) => c.id)).map((id) => callAliases.get(id) ?? id).filter((id) => callCandidates.has(id) && !deletedCalls.has(id)));
   const editsByIndex = new Map;
   for (const edit of next.edits) {
     const anchor = sorted.find((r) => r.id === edit.after);
@@ -1203,7 +1331,7 @@ function replay(document, rows, playerNames, report) {
     for (const edit of editsByIndex.get(index) ?? []) {
       if (edit.target === "call" && edit.name && !state.calls.some((c) => c.id === edit.name))
         continue;
-      applyManual(state, edit, players, tombstones, document.settings.aiPlayerTexts);
+      applyManual(state, edit, players, tombstones, document2.settings.aiPlayerTexts);
     }
   };
   manualAt(-1);
@@ -1304,7 +1432,7 @@ details=`);
           direction = "outgoing";
         } else {
           if (players.has(normalize(text.from))) {
-            if (!document.settings.aiPlayerTexts)
+            if (!document2.settings.aiPlayerTexts)
               continue;
             direction = "outgoing";
           } else if (text.to !== undefined && !players.has(normalize(text.to))) {
@@ -1312,12 +1440,12 @@ details=`);
             continue;
           }
         }
-        state.messages.push({ ...text, from, direction, at, id: JSON.stringify([at.id, at.variant, ordinal]) });
+        state.messages.push({ ...text, from, direction, at, ...typeof state.scene.date?.value === "string" ? { date: state.scene.date.value } : {}, id: JSON.stringify([at.id, at.variant, ordinal]) });
       }
       if (row.role === "assistant")
         report?.(row, parsed.issues);
     }
-    for (const entry of document.helperEntries ?? [])
+    for (const entry of document2.helperEntries ?? [])
       if (entry.at.id === row.id && entry.at.variant === at.variant && entry.sources.every((s) => sorted.some((r) => r.id === s.id && helperSourceSignature(r) === s.signature))) {
         const helperPatch = validateExpanded(entry.values);
         applyAI(next, helperPatch, entry.at, entry.prose, players, tombstones, knownNotes);
@@ -1676,6 +1804,17 @@ function readDocument(raw, chatId) {
       throw new Error("Invalid saved metadata");
     doc[key] = value[key] ?? [];
   }
+  if (value.portraits !== undefined) {
+    if (!isRecord(value.portraits))
+      throw Error("Invalid portraits");
+    doc.portraits = Object.create(null);
+    for (const [name, data] of Object.entries(value.portraits)) {
+      portraitBytes(data);
+      doc.portraits[name] = data;
+    }
+    if (Object.values(doc.portraits).reduce((sum, v) => sum + v.length, 0) > PORTRAIT_CHAT_LIMIT)
+      throw Error("Portrait storage is full.");
+  }
   doc.settings = readSettings(value.settings);
   doc.legacy = value.legacy;
   if (value.helperOwner !== undefined && (typeof value.helperOwner !== "string" || !value.helperOwner))
@@ -1713,7 +1852,7 @@ function readDocument(raw, chatId) {
     };
     const patch = validateExpanded(rawPatch);
     for (const text of entry.texts)
-      if (!isRecord(text) || !short(text.from, 100) || typeof text.text !== "string" || text.text.length > 3000 || text.to !== undefined && !short(text.to, 100) || text.time !== undefined && !short(text.time, 100))
+      if (!isRecord(text) || !short(text.from, 100) || typeof text.text !== "string" || text.text.length > 3000 || text.to !== undefined && !short(text.to, 100) || text.group !== undefined && !short(text.group, 100) || text.time !== undefined && !short(text.time, 100))
         throw new Error("Invalid saved text");
     if (entry.emails !== undefined && !Array.isArray(entry.emails))
       throw Error("Invalid saved emails");
@@ -1897,6 +2036,30 @@ class PhoneStore {
         }
         doc.edits.push(edit);
       }
+      if (update.portrait !== undefined) {
+        const p = update.portrait;
+        if (!isRecord(p) || typeof p.name !== "string" || !doc.state.contacts.some((c) => portraitKey(c.name) === portraitKey(p.name)))
+          throw Error("Reopen the contact before changing its portrait.");
+        const data = Object.assign(Object.create(null), doc.portraits);
+        if (p.data === null)
+          delete data[portraitKey(p.name)];
+        else {
+          portraitBytes(p.data);
+          data[portraitKey(p.name)] = p.data;
+        }
+        if (Object.values(data).reduce((n, v) => n + v.length, 0) > PORTRAIT_CHAT_LIMIT)
+          throw Error("Portrait storage is full. Remove a portrait first.");
+        doc.portraits = data;
+      }
+      if (isRecord(update.edit) && update.edit.target === "contact" && typeof update.edit.name === "string" && doc.portraits) {
+        const key = portraitKey(update.edit.name);
+        if (update.edit.remove)
+          delete doc.portraits[key];
+        else if (typeof update.edit.rename === "string" && portraitKey(update.edit.rename) !== key && doc.portraits[key]) {
+          doc.portraits[portraitKey(update.edit.rename)] = doc.portraits[key];
+          delete doc.portraits[key];
+        }
+      }
       doc = replay(doc, rows, doc.playerNames);
       doc.revision = saved.revision + 1;
       await this.io.write(chatId, JSON.stringify(doc));
@@ -2047,7 +2210,7 @@ function messagesMacro(doc) {
   doc = effectiveDocument(doc);
   if (!doc.settings.enabled.messages)
     return "";
-  return doc.state.messages.slice(-6).map((m) => `${m.direction === "outgoing" ? "Sent" : "Received"}: ${clip(m.from, 60)}${m.to ? ` \u2192 ${clip(m.to, 60)}` : ""}${m.time ? ` (${clip(m.time, 40)})` : ""}: ${clip(m.text)}`).join(`
+  return doc.state.messages.slice(-6).map((m) => `${m.direction === "outgoing" ? "Sent" : "Received"}: ${clip(m.from, 60)}${m.group ? ` [${clip(m.group, 60)}]` : ""}${m.to ? ` \u2192 ${clip(m.to, 60)}` : ""}${m.time ? ` (${clip(m.time, 40)})` : ""}: ${clip(m.text)}`).join(`
 `);
 }
 function activitiesMacro(name, doc) {
@@ -2139,7 +2302,7 @@ ${value}`);
     lines.push(s.aiPlayerTexts ? "Player texts, calls and emails only when actually established." : "NEVER write emails or texts from the player, or invent player replies.");
   }
   if (s.enabled.messages) {
-    lines.push('Actual sent texts only: <phone-text from="Name" to="player name" time="known time">escaped text</phone-text>. Omit unknown attributes; text only here, never invent.');
+    lines.push('Actual sent texts only: <phone-text from="Name" to="player name" time="known time">escaped text</phone-text>. Omit unknown attributes; optional group="established group name" only for an actual named player group, never guess membership; text only here, never invent.');
     lines.push(s.aiPlayerTexts ? "Tag only texts to the player or actual player-sent texts; NPC-to-NPC texts stay in narration without tags." : "Tag only texts sent to the player; NPC-to-NPC texts stay in narration without tags.");
     lines.push(s.aiPlayerTexts ? "Player texts only when actually sent in the story, using the player's exact name." : "NEVER write texts from the player's character or invent player replies.");
   }
@@ -2242,7 +2405,7 @@ function registerPhoneMacroTemplates(api, load) {
 }
 
 // src/retention.ts
-function trimPhoneHistory(messages, settings, document) {
+function trimPhoneHistory(messages, settings, document2) {
   const history = messages.map((m, i) => ({ m, i })).filter((x) => x.m.__isChatHistory === true);
   const indexed = history.every((x) => Number.isInteger(x.m.sourceIndexInChat));
   const last = Math.max(-1, ...history.map((x) => x.m.sourceIndexInChat ?? x.i));
@@ -2267,7 +2430,7 @@ function trimPhoneHistory(messages, settings, document) {
         else if (span.name === "phone-text") {
           const attrs = parseAttributes(span.header);
           const body = decodeEntities(span.body).trim();
-          const admitted = !!attrs && !!document?.state.messages.some((t) => (message.sourceMessageId ? t.at.id === message.sourceMessageId : Number.isInteger(message.sourceIndexInChat) && t.at.index === message.sourceIndexInChat) && normalize(t.from) === normalize(attrs.from ?? "") && t.text === body && (t.to ?? "") === (attrs.to ?? ""));
+          const admitted = !!attrs && !!document2?.state.messages.some((t) => (message.sourceMessageId ? t.at.id === message.sourceMessageId : Number.isInteger(message.sourceIndexInChat) && t.at.index === message.sourceIndexInChat) && normalize(t.from) === normalize(attrs.from ?? "") && t.text === body && (t.to ?? "") === (attrs.to ?? ""));
           keep = keep && settings.apps.Messages && settings.enabled.messages && recent(message, index, settings.keepTexts) && admitted;
         } else
           keep = false;
@@ -2303,7 +2466,7 @@ function trimPhoneHistory(messages, settings, document) {
 var APPS = ALL_APPS;
 var defaultPreferences = () => ({ revision: 0, css: "", dismissed: [] });
 function readPreferences(value) {
-  if (!isRecord(value) || typeof value.css !== "string" || value.css.length > 32000 || !Number.isSafeInteger(value.revision) || !Array.isArray(value.dismissed) || value.dismissed.some((a) => ![...APPS, "Home", "Settings"].includes(a)))
+  if (!isRecord(value) || typeof value.css !== "string" || value.css.length > 32000 || !Number.isSafeInteger(value.revision) || !Array.isArray(value.dismissed) || value.dismissed.some((a) => ![...APPS, "Home", "Draft hint", "Settings"].includes(a)))
     throw new Error("Invalid appearance preferences");
   return { revision: value.revision, css: value.css, dismissed: [...new Set(value.dismissed)].filter((a) => a !== "Settings") };
 }
@@ -2328,7 +2491,7 @@ class PreferenceStore {
         prefs.css = change.css;
       }
       if (change.dismiss !== undefined) {
-        if (![...APPS, "Home"].includes(change.dismiss))
+        if (![...APPS, "Home", "Draft hint"].includes(change.dismiss))
           throw new Error("Invalid app");
         if (!prefs.dismissed.includes(change.dismiss))
           prefs.dismissed.push(change.dismiss);
@@ -2354,8 +2517,8 @@ class PreferenceStore {
 
 // src/messages.ts
 var emptyReads = () => ({ revision: 0, seen: {} });
-var receipt = (m) => JSON.stringify([m.from, m.to ?? null, m.time ?? null, m.text]);
-var threadKey = (m) => m.direction === "incoming" ? normalize(m.from) : m.to ? normalize(m.to) : "";
+var receipt = (m) => JSON.stringify([m.from, m.to ?? null, ...m.group ? [m.group] : [], m.time ?? null, m.text]);
+var threadKey = (m) => m.group ? JSON.stringify(["group", normalize(m.group)]) : m.direction === "incoming" ? normalize(m.from) : m.to ? normalize(m.to) : "";
 
 // src/message-reads.ts
 function readState(value) {
@@ -2901,8 +3064,8 @@ function registerHooks() {
           warn("Lumi Phone Tracker: prompt context unavailable; prompt unchanged.");
           return messages;
         }
-        const document = await store.preview(context.chatId, context.userId);
-        return trimPhoneHistory(messages, document.settings, document);
+        const document2 = await store.preview(context.chatId, context.userId);
+        return trimPhoneHistory(messages, document2.settings, document2);
       } catch {
         warn("Lumi Phone Tracker: prompt processing failed; prompt unchanged.");
         return messages;
@@ -2924,6 +3087,15 @@ spindle.onFrontendMessage((payload, userId) => {
       warn("Lumi Phone Tracker: Helper AI: permission missing.");
     else
       warn("Lumi Phone Tracker: frontend user context unavailable; request ignored.");
+    return;
+  }
+  if (isRecord(payload) && payload.type === "phone_portraits" && typeof payload.chatId === "string" && payload.chatId.length <= 256 && typeof payload.requestId === "string" && payload.requestId.length <= 100) {
+    (async () => {
+      requireReadPermissions();
+      const doc = await store.preview(payload.chatId, userId);
+      const sources = await loadPortraitSources(spindle, doc.chatId, userId, doc.currentPlayer);
+      spindle.sendToFrontend({ type: "phone_portraits_result", requestId: payload.requestId, chatId: doc.chatId, sources }, userId);
+    })().catch(() => spindle.sendToFrontend({ type: "phone_portraits_result", requestId: payload.requestId, chatId: payload.chatId, sources: { characters: [] } }, userId));
     return;
   }
   if (isRecord(payload) && ["phone_connections", "phone_helper_now"].includes(String(payload.type)) && typeof payload.requestId === "string" && payload.requestId.length <= 100 && typeof payload.chatId === "string" && payload.chatId.length <= 256) {
@@ -2970,7 +3142,7 @@ spindle.onFrontendMessage((payload, userId) => {
       spindle.sendToFrontend({ type: "phone_snapshot", requestId, chatId: null }, userId);
       return;
     }
-    let snapshot = payload.type === "phone_update" ? await store.update(userId, chatId, typeof payload.revision === "number" ? payload.revision : -1, { settings: payload.settings, edit: payload.edit, dismissNotice: payload.dismissNotice }) : await store.sync(userId, chatId);
+    let snapshot = payload.type === "phone_update" ? await store.update(userId, chatId, typeof payload.revision === "number" ? payload.revision : -1, { settings: payload.settings, edit: payload.edit, dismissNotice: payload.dismissNotice, portrait: payload.portrait }) : await store.sync(userId, chatId);
     if (payload.type === "phone_update") {
       helper.cancel(chatId);
       if (snapshot.settings.source === "helper" && snapshot.helperOwner === userId) {

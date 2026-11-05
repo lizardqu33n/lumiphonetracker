@@ -59,7 +59,7 @@ export function notesMacro(doc: Document): string {
 export function messagesMacro(doc: Document): string {
   doc=effectiveDocument(doc);
   if (!doc.settings.enabled.messages) return "";
-  return doc.state.messages.slice(-6).map(m => `${m.direction === "outgoing" ? "Sent" : "Received"}: ${clip(m.from, 60)}${m.to ? ` → ${clip(m.to, 60)}` : ""}${m.time ? ` (${clip(m.time, 40)})` : ""}: ${clip(m.text)}`).join("\n");
+  return doc.state.messages.slice(-6).map(m => `${m.direction === "outgoing" ? "Sent" : "Received"}: ${clip(m.from, 60)}${m.group?` [${clip(m.group,60)}]`:""}${m.to ? ` → ${clip(m.to, 60)}` : ""}${m.time ? ` (${clip(m.time, 40)})` : ""}: ${clip(m.text)}`).join("\n");
 }
 export function activitiesMacro(name:"phone_calls"|"phone_email"|"phone_bank",doc:Document):string {
  doc=effectiveDocument(doc);const enabled=doc.settings.enabled;
@@ -118,7 +118,7 @@ export function formatMacro(doc: Document): string {
   else if(tracking||s.enabled.weather)lines.push(...trackerInstructions(doc));
   if(s.enabled.email){lines.push('Actual emails only: <phone-email from="Name or address" to="optional recipient" subject="known subject" time="known time">escaped body</phone-email>. Omit unknown optional attributes. Body max 1500 characters. Email content only in this tag, never in prose. Never invent emails.');lines.push(s.aiPlayerTexts?"Player texts, calls and emails only when actually established.":"NEVER write emails or texts from the player, or invent player replies.");}
   if(s.enabled.messages) {
-    lines.push('Actual sent texts only: <phone-text from="Name" to="player name" time="known time">escaped text</phone-text>. Omit unknown attributes; text only here, never invent.');
+    lines.push('Actual sent texts only: <phone-text from="Name" to="player name" time="known time">escaped text</phone-text>. Omit unknown attributes; optional group="established group name" only for an actual named player group, never guess membership; text only here, never invent.');
     lines.push(s.aiPlayerTexts?"Tag only texts to the player or actual player-sent texts; NPC-to-NPC texts stay in narration without tags.":"Tag only texts sent to the player; NPC-to-NPC texts stay in narration without tags.");
     lines.push(s.aiPlayerTexts?"Player texts only when actually sent in the story, using the player's exact name.":"NEVER write texts from the player's character or invent player replies.");
   }

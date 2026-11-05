@@ -181,7 +181,7 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
             continue;
           }
         }
-        state.messages.push({ ...text, from, direction, at, id: JSON.stringify([at.id, at.variant, ordinal]) });
+        state.messages.push({ ...text, from, direction, at, ...(typeof state.scene.date?.value==="string"?{date:state.scene.date.value}:{}), id: JSON.stringify([at.id, at.variant, ordinal]) });
       }
       if(row.role==="assistant")report?.(row,parsed.issues);
     }

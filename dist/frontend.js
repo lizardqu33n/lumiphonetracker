@@ -15,6 +15,154 @@ function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+// src/portraits.ts
+var PORTRAIT_INPUT_LIMIT = 5 * 1024 * 1024;
+var PORTRAIT_LIMIT = 20 * 1024;
+var PORTRAIT_CHAT_LIMIT = 512 * 1024;
+var emptyPortraitSources = () => ({ characters: [] });
+var ascii = (b, a, n) => String.fromCharCode(...b.slice(a, a + n));
+function rasterType(b) {
+  if (b.length < 12)
+    throw Error("Choose a real PNG, JPEG or WebP image.");
+  if (b[0] === 137 && ascii(b, 1, 3) === "PNG" && b[4] === 13 && b[5] === 10 && b[6] === 26 && b[7] === 10) {
+    for (let i = 8;i + 12 <= b.length; ) {
+      const size = new DataView(b.buffer, b.byteOffset + i, 4).getUint32(0);
+      if (ascii(b, i + 4, 4) === "acTL")
+        throw Error("Choose a still image.");
+      if (size > b.length - i - 12)
+        throw Error("The image is damaged.");
+      i += size + 12;
+    }
+    return "image/png";
+  }
+  if (b[0] === 255 && b[1] === 216 && b[2] === 255)
+    return "image/jpeg";
+  if (ascii(b, 0, 4) === "RIFF" && ascii(b, 8, 4) === "WEBP") {
+    for (let i = 12;i + 8 <= b.length; ) {
+      const tag = ascii(b, i, 4), size = new DataView(b.buffer, b.byteOffset + i + 4, 4).getUint32(0, true);
+      if (tag === "ANIM" || tag === "ANMF")
+        throw Error("Choose a still image.");
+      if (size > b.length - i - 8)
+        throw Error("The image is damaged.");
+      i += 8 + size + size % 2;
+    }
+    return "image/webp";
+  }
+  throw Error("Choose a real PNG, JPEG or WebP image; SVG and GIF are not accepted.");
+}
+function rasterSize(b) {
+  const mime = rasterType(b), view = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  if (mime === "image/png" && b.length >= 24)
+    return { width: view.getUint32(16), height: view.getUint32(20) };
+  if (mime === "image/jpeg")
+    for (let i = 2;i + 4 < b.length; ) {
+      if (b[i] !== 255)
+        throw Error("The image is damaged.");
+      const marker = b[i + 1];
+      i += 2;
+      if (marker === 216 || marker === 217)
+        continue;
+      if (marker === 218)
+        break;
+      const length = view.getUint16(i);
+      if (length < 2 || i + length > b.length)
+        throw Error("The image is damaged.");
+      if ([192, 193, 194, 195, 197, 198, 199, 201, 202, 203, 205, 206, 207].includes(marker) && length >= 7)
+        return { width: view.getUint16(i + 5), height: view.getUint16(i + 3) };
+      i += length;
+    }
+  if (mime === "image/webp") {
+    const kind = ascii(b, 12, 4);
+    if (kind === "VP8X" && b.length >= 30)
+      return { width: 1 + b[24] + (b[25] << 8) + (b[26] << 16), height: 1 + b[27] + (b[28] << 8) + (b[29] << 16) };
+    if (kind === "VP8 " && b.length >= 30)
+      return { width: view.getUint16(26, true) & 16383, height: view.getUint16(28, true) & 16383 };
+    if (kind === "VP8L" && b.length >= 25) {
+      const n = view.getUint32(21, true);
+      return { width: 1 + (n & 16383), height: 1 + (n >>> 14 & 16383) };
+    }
+  }
+  throw Error("The image dimensions are unavailable.");
+}
+function portraitBytes(data, max = PORTRAIT_LIMIT) {
+  if (typeof data !== "string" || data.length > Math.ceil(max / 3) * 4 + 40 || !/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]*={0,2}$/.test(data))
+    throw Error("Invalid portrait.");
+  const comma = data.indexOf(",");
+  let raw;
+  try {
+    raw = atob(data.slice(comma + 1));
+  } catch {
+    throw Error("Invalid portrait.");
+  }
+  if (raw.length > max)
+    throw Error("The portrait is too large.");
+  const bytes = Uint8Array.from(raw, (c) => c.charCodeAt(0));
+  if (!data.startsWith(`data:${rasterType(bytes)};`))
+    throw Error("The image type does not match its contents.");
+  if (max === PORTRAIT_LIMIT) {
+    const size = rasterSize(bytes);
+    if (size.width !== 128 || size.height !== 128)
+      throw Error("Portraits must be 128 by 128.");
+  }
+  return bytes;
+}
+async function preparePortrait(file) {
+  if (!file.size || file.size > PORTRAIT_INPUT_LIMIT)
+    throw Error("Choose an image under 5 MB.");
+  const bytes = new Uint8Array(await file.arrayBuffer()), mime = rasterType(bytes);
+  const size = rasterSize(bytes);
+  if (!size.width || !size.height || size.width * size.height > 32000000)
+    throw Error("Choose an image with smaller dimensions.");
+  if (file.type && file.type !== mime)
+    throw Error("The image type does not match its contents.");
+  if (typeof createImageBitmap !== "function")
+    throw Error("This browser cannot prepare portraits. Try a recent browser.");
+  let bitmap;
+  try {
+    bitmap = await createImageBitmap(new Blob([bytes], { type: mime }));
+  } catch {
+    throw Error("This image could not be read. Choose another PNG, JPEG or WebP.");
+  }
+  try {
+    if (!bitmap.width || !bitmap.height || bitmap.width * bitmap.height > 32000000)
+      throw Error("Choose an image with smaller dimensions.");
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 128;
+    const context = canvas.getContext("2d");
+    if (!context)
+      throw Error("Images cannot be prepared here.");
+    const side = Math.min(bitmap.width, bitmap.height);
+    context.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, 128, 128);
+    for (const quality of [0.84, 0.7, 0.5, 0.3]) {
+      const data = canvas.toDataURL("image/webp", quality);
+      try {
+        portraitBytes(data);
+        return data;
+      } catch {}
+    }
+    throw Error("This portrait could not be made small enough.");
+  } finally {
+    bitmap.close();
+  }
+}
+var exact = (name) => name.trim().toLocaleLowerCase("en-US");
+function portraitSource(name, custom, sources, player = false) {
+  const key = exact(name);
+  if (Object.hasOwn(custom, key))
+    return custom[key];
+  if (player)
+    return sources.persona && exact(sources.persona.name) === key ? sources.persona.data : undefined;
+  const matches = sources.characters.filter((c) => exact(c.name) === key);
+  return matches.length === 1 ? matches[0].data : undefined;
+}
+var portraitKey = exact;
+function initialTone(name) {
+  let hash = 0;
+  for (const c of exact(name))
+    hash = hash * 31 + c.codePointAt(0) >>> 0;
+  return hash % 5;
+}
+
 // src/model.ts
 var SCENE_KEYS = ["location", "time", "date", "present"];
 var CONTACT_KEYS = ["roles", "physical", "mood", "position", "attire", "thoughts"];
@@ -70,7 +218,7 @@ var activityUnread = (entry, seen) => {
 var APPS = ALL_APPS;
 var defaultPreferences = () => ({ revision: 0, css: "", dismissed: [] });
 function readPreferences(value) {
-  if (!isRecord(value) || typeof value.css !== "string" || value.css.length > 32000 || !Number.isSafeInteger(value.revision) || !Array.isArray(value.dismissed) || value.dismissed.some((a) => ![...APPS, "Home", "Settings"].includes(a)))
+  if (!isRecord(value) || typeof value.css !== "string" || value.css.length > 32000 || !Number.isSafeInteger(value.revision) || !Array.isArray(value.dismissed) || value.dismissed.some((a) => ![...APPS, "Home", "Draft hint", "Settings"].includes(a)))
     throw new Error("Invalid appearance preferences");
   return { revision: value.revision, css: value.css, dismissed: [...new Set(value.dismissed)].filter((a) => a !== "Settings") };
 }
@@ -325,31 +473,33 @@ var short = (v, max = 500) => typeof v === "string" && v.length <= max && !["\x0
 
 // src/messages.ts
 var emptyReads = () => ({ revision: 0, seen: {} });
-var receipt = (m) => JSON.stringify([m.from, m.to ?? null, m.time ?? null, m.text]);
+var receipt = (m) => JSON.stringify([m.from, m.to ?? null, ...m.group ? [m.group] : [], m.time ?? null, m.text]);
 var isUnread = (m, reads) => m.direction === "incoming" && reads.seen[m.id] !== receipt(m);
-var threadKey = (m) => m.direction === "incoming" ? normalize(m.from) : m.to ? normalize(m.to) : "";
+var threadKey = (m) => m.group ? JSON.stringify(["group", normalize(m.group)]) : m.direction === "incoming" ? normalize(m.from) : m.to ? normalize(m.to) : "";
 function conversations(messages, reads) {
   const groups = new Map;
   for (const m of messages) {
     const key = threadKey(m);
-    const group = groups.get(key) ?? { key, name: m.direction === "incoming" ? m.from : m.to ?? "Your texts", messages: [], unread: 0 };
+    const group = groups.get(key) ?? { key, name: m.group ?? (m.direction === "incoming" ? m.from : m.to ?? "Your texts"), ...m.group ? { group: true } : {}, messages: [], unread: 0 };
     group.messages.push(m);
     if (isUnread(m, reads))
       group.unread++;
     groups.set(key, group);
   }
-  return [...groups.values()];
+  return [...groups.values()].sort((a, b) => messages.lastIndexOf(b.messages.at(-1)) - messages.lastIndexOf(a.messages.at(-1)));
 }
 var escape = (text) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");
-function replyTag(from, to, text) {
+function replyTag(from, to, text, group) {
   if (!short(from, 100) || !from.trim() || !short(to, 100) || !to.trim())
     throw new Error("Your character's name or the recipient is unavailable. Reopen this chat.");
   if (!text.trim() || text.trim().length > 3000 || text.includes("\x00"))
     throw new Error("Write a reply of up to 3,000 characters.");
-  return `<phone-text from="${escape(from.trim())}" to="${escape(to.trim())}">${escape(text.trim())}</phone-text>`;
+  if (group !== undefined && (!short(group, 100) || !group.trim()))
+    throw Error("Invalid group name.");
+  return `<phone-text from="${escape(from.trim())}" to="${escape(to.trim())}"${group ? ` group="${escape(group.trim())}"` : ""}>${escape(text.trim())}</phone-text>`;
 }
-function addReplyDraft(ctx, chatId, from, to, text) {
-  const tag = replyTag(from, to, text);
+function addReplyDraft(ctx, chatId, from, to, text, group) {
+  const tag = replyTag(from, to, text, group);
   if (!ctx.composer || !((ctx.host?.capabilities?.["composer-v1"] ?? 0) >= 1))
     return { manual: true, tag };
   const state = ctx.composer.getState();
@@ -470,6 +620,10 @@ class PhoneView {
   editing = false;
   busy = false;
   observer;
+  portraitSources = emptyPortraitSources();
+  portraitEpoch = 0;
+  pendingThreadScroll = false;
+  viewportFit = () => this.measure();
   selectedText = null;
   probe = el("div", "lpt-size-probe");
   reads = emptyReads();
@@ -517,6 +671,7 @@ class PhoneView {
     this.observer.observe(this.root);
     this.observer.observe(this.probe);
     this.observer.observe(this.launcher);
+    window.visualViewport?.addEventListener("resize", this.viewportFit);
     this.render();
     this.setOpen(false);
   }
@@ -529,6 +684,8 @@ class PhoneView {
     if (this.app !== "Home" && !doc?.settings.apps[this.app])
       this.app = "Home";
     if (changedChat) {
+      this.portraitEpoch++;
+      this.portraitSources = emptyPortraitSources();
       this.chatEpoch++;
       this.pendingReads.clear();
       this.reads = reads ?? emptyReads();
@@ -565,9 +722,67 @@ class PhoneView {
   receivePreferences(prefs) {
     if (prefs.revision >= this.prefs.revision) {
       this.prefs = prefs;
+      if (prefs.dismissed.includes("Draft hint"))
+        this.root.querySelector(".lpt-draft-hint")?.remove();
       if (prefs.dismissed.includes(this.app))
         this.root.querySelector(this.app === "Home" ? ".lpt-home-hint" : ".lpt-description")?.remove();
     }
+  }
+  async receivePortraitSources(raw) {
+    const epoch = ++this.portraitEpoch, chat = this.chatEpoch;
+    const sources = emptyPortraitSources();
+    const prepare = async (v) => {
+      if (!isRecord(v) || typeof v.name !== "string" || v.name.length > 100)
+        return;
+      try {
+        const bytes = portraitBytes(v.data, PORTRAIT_INPUT_LIMIT);
+        return { name: v.name, data: await preparePortrait(new Blob([bytes], { type: typeof v.data === "string" ? v.data.slice(5, v.data.indexOf(";")) : "" })) };
+      } catch {
+        return;
+      }
+    };
+    if (isRecord(raw)) {
+      if (Array.isArray(raw.characters))
+        for (const c of raw.characters.slice(0, 30)) {
+          const result = await prepare(c);
+          if (result)
+            sources.characters.push(result);
+        }
+      const persona = await prepare(raw.persona);
+      if (persona)
+        sources.persona = persona;
+    }
+    if (chat !== this.chatEpoch || epoch !== this.portraitEpoch)
+      return;
+    this.portraitSources = sources;
+    if (!this.editing)
+      this.render();
+  }
+  portrait(name, player = false, group = false, custom) {
+    const node = el("span", `lpt-portrait lpt-portrait-tone-${initialTone(name)}`);
+    node.setAttribute("role", "img");
+    node.setAttribute("aria-label", `Portrait for ${name}`);
+    const initial = el("span", "lpt-portrait-initial", Array.from(name.trim())[0]?.toLocaleUpperCase() ?? "?");
+    node.append(initial);
+    const source = group ? undefined : portraitSource(name, custom ?? this.doc?.portraits ?? {}, this.portraitSources, player);
+    if (source)
+      try {
+        portraitBytes(source);
+        const img = el("img", "lpt-portrait-image");
+        img.alt = "";
+        img.setAttribute("aria-hidden", "true");
+        img.draggable = false;
+        img.addEventListener("load", () => {
+          initial.hidden = true;
+        });
+        img.addEventListener("error", () => {
+          img.remove();
+          initial.hidden = false;
+        });
+        img.src = source;
+        node.append(img);
+      } catch {}
+    return node;
   }
   setError(message) {
     this.error.textContent = message;
@@ -601,6 +816,8 @@ class PhoneView {
     this.launcher.focus();
   }
   destroy() {
+    window.visualViewport?.removeEventListener("resize", this.viewportFit);
+    this.portraitEpoch++;
     clearTimeout(this.noticeTimer);
     this.chatEpoch++;
     this.observer.disconnect();
@@ -637,17 +854,22 @@ class PhoneView {
     this.markVisibleActivity();
   }
   render() {
+    if (this.app === "Messages" && this.selectedText !== null && (!this.enabled("messages") || !this.doc || !this.doc.state.messages.some((m) => threadKey(m) === this.selectedText) && !this.doc.state.contacts.some((c) => normalize(c.name) === this.selectedText)))
+      this.selectedText = null;
     const focused = this.mount instanceof ShadowRoot ? this.mount.activeElement : document.activeElement;
     const replyFocus = focused instanceof HTMLTextAreaElement && focused.classList.contains("lpt-reply-input") ? {
-      key: focused.closest(".lpt-conversation")?.dataset.conversation,
+      key: focused.closest(".lpt-thread")?.dataset.conversation,
       start: focused.selectionStart,
       end: focused.selectionEnd
     } : null;
+    const previousList = this.content.querySelector(".lpt-text-list");
+    const oldScroll = previousList ? { key: previousList.closest(".lpt-thread")?.dataset.conversation, top: previousList.scrollTop, bottom: this.pendingThreadScroll || previousList.scrollHeight - previousList.clientHeight - previousList.scrollTop < 30 } : null;
+    this.content.dataset.thread = String(this.app === "Messages" && this.selectedText !== null);
     this.content.replaceChildren();
     this.error.textContent = "";
     this.status.textContent = "";
     this.heading.textContent = this.app === "Home" ? "Lumi Phone Tracker" : this.app;
-    this.back.hidden = this.app === "Home";
+    this.back.hidden = this.app === "Home" || this.app === "Messages" && this.selectedText !== null;
     if (this.app === "Home") {
       const home = el("div", "lpt-home");
       for (const app of APPS.filter((a) => this.doc?.settings.apps[a])) {
@@ -683,7 +905,7 @@ class PhoneView {
       if (!this.doc)
         this.content.append(el("p", "lpt-empty", "Open a chat to start keeping track of your story."));
     } else {
-      if (!this.prefs.dismissed.includes(this.app))
+      if (!this.prefs.dismissed.includes(this.app) && !(this.app === "Messages" && this.selectedText !== null))
         this.description(this.app);
       if (!this.doc && true)
         this.empty("Open a chat first. Each chat keeps its own story information.");
@@ -715,14 +937,21 @@ class PhoneView {
     this.content.append(this.error, this.status);
     this.refreshBadges();
     if (replyFocus) {
-      const card = Array.from(this.content.querySelectorAll(".lpt-conversation")).find((c) => c.dataset.conversation === replyFocus.key);
+      const card = Array.from(this.content.querySelectorAll(".lpt-thread")).find((c) => c.dataset.conversation === replyFocus.key);
       const input = card?.querySelector(".lpt-reply-input");
       if (input) {
         input.focus();
         input.setSelectionRange(replyFocus.start, replyFocus.end);
       }
     }
-    requestAnimationFrame(() => this.measure());
+    this.pendingThreadScroll = this.app === "Messages" && this.selectedText !== null && (!oldScroll || oldScroll.key !== this.selectedText || oldScroll.bottom);
+    requestAnimationFrame(() => {
+      const list = this.content.querySelector(".lpt-text-list");
+      if (list)
+        list.scrollTop = oldScroll?.key === this.selectedText && !oldScroll.bottom ? oldScroll.top : list.scrollHeight;
+      this.pendingThreadScroll = false;
+      this.measure();
+    });
   }
   description(app) {
     const row = el("div", "lpt-description");
@@ -813,7 +1042,7 @@ class PhoneView {
     form.append(actions);
     form.addEventListener("submit", (e) => {
       e.preventDefault();
-      if (originEpoch !== this.chatEpoch || originChat !== this.doc?.chatId)
+      if (originEpoch !== this.chatEpoch || originChat !== this.doc?.chatId || !form.isConnected)
         return;
       const values = {};
       for (const [key, input] of controls)
@@ -869,9 +1098,16 @@ class PhoneView {
   }
   scene() {
     const section = el("section", "lpt-scene");
-    for (const key of SCENE_KEYS)
+    if (this.enabled("scene.location"))
+      this.field(section, "location", this.doc.state.scene.location, "scene");
+    const when = el("div", "lpt-scene-when");
+    for (const key of ["time", "date"])
       if (this.enabled(`scene.${key}`))
-        this.field(section, key, this.doc.state.scene[key], "scene");
+        this.field(when, key, this.doc.state.scene[key], "scene");
+    if (when.children.length)
+      section.append(when);
+    if (this.enabled("scene.present"))
+      this.field(section, "present", this.doc.state.scene.present, "scene");
     if (!section.children.length)
       this.empty("Scene fields are off. Turn them on in the sidebar's Phone tab.", section);
     this.content.append(section);
@@ -912,26 +1148,23 @@ class PhoneView {
     const contacts = this.doc.state.contacts;
     for (const c of contacts.filter((c) => present.has(normalize(c.name))))
       this.contactCard(section, c, true);
-    const absent = contacts.filter((c) => !present.has(normalize(c.name)));
-    if (absent.length) {
-      const group = el("details", "lpt-absent lpt-section");
-      group.append(el("summary", "lpt-summary", `Not here now (${absent.length})`));
-      for (const c of absent)
-        this.contactCard(group, c, false);
-      section.append(group);
-    }
+    for (const c of contacts.filter((c) => !present.has(normalize(c.name))))
+      this.contactCard(section, c, false);
     if (!contacts.length)
       this.empty("No contacts yet. Named characters appear when the story establishes them.", section);
   }
   contactCard(parent, c, here) {
     const card = el("details", "lpt-card lpt-contact");
     const summary = el("summary", "lpt-summary");
-    summary.append(el("span", "lpt-card-title", c.name), ...c.player ? [el("span", "lpt-marker", "You")] : []);
+    summary.append(this.portrait(c.name, c.player));
+    const words = el("span", "lpt-contact-copy");
+    summary.append(words);
+    words.append(el("span", "lpt-card-title", c.name), ...c.player ? [el("span", "lpt-marker", "You")] : []);
     if (c.editedByUser)
-      summary.append(el("span", "lpt-marker", "edited by you"));
+      words.append(el("span", "lpt-marker", "edited by you"));
     if (!c.player && this.enabled("contacts.roles") && Array.isArray(c.fields.roles?.value) && c.fields.roles.value.length)
-      summary.append(el("span", "lpt-card-subtitle", c.fields.roles.value.join(" / ")));
-    summary.append(el("span", "lpt-card-subtitle", here ? "Here now" : `Last seen: ${c.lastSeen ?? "not established"}`));
+      words.append(el("span", "lpt-card-subtitle", c.fields.roles.value.join(" / ")));
+    words.append(el("span", "lpt-card-subtitle", here ? "Here now" : `Last seen: ${c.lastSeen ?? "not established"}`));
     const body = el("div", "lpt-card-body");
     for (const key of CONTACT_KEYS)
       if (this.enabled(`contacts.${key}`) && (!c.player || ["physical", "position", "attire"].includes(key)))
@@ -943,7 +1176,7 @@ class PhoneView {
       this.markVisibleConversation();
     });
     openTexts.append(this.unreadBadge(normalize(c.name)));
-    actions.append(button("Edit name", "lpt-button", () => this.contactForm(body, c)));
+    actions.append(button("Edit contact", "lpt-button", () => this.contactForm(body, c)));
     if (this.enabled("messages"))
       actions.append(openTexts);
     this.deleteAction(actions, { target: "contact", name: c.name });
@@ -952,16 +1185,73 @@ class PhoneView {
     parent.append(card);
   }
   contactForm(parent, contact) {
+    if (this.editing)
+      return;
     if (!contact && this.doc.state.contacts.length >= 30) {
       this.setError("Contacts is full (30/30). Delete a contact to make room.");
       return;
     }
-    this.form(parent, [{ key: "name", label: "Name", value: contact?.name ?? "", required: true, max: 100 }], (v) => ({ edit: {
-      target: "contact",
-      name: contact?.name ?? String(v.name),
-      ...contact && v.name !== contact.name ? { rename: String(v.name) } : {},
-      value: {}
-    } }));
+    let pendingPortrait;
+    this.form(parent, [{ key: "name", label: "Name", value: contact?.name ?? "", required: true, max: 100 }], (v) => ({
+      ...contact && v.name === contact.name ? {} : { edit: { target: "contact", name: contact?.name ?? String(v.name), ...contact && v.name !== contact.name ? { rename: String(v.name) } : {}, value: {} } },
+      ...contact && pendingPortrait !== undefined ? { portrait: { name: contact.name, data: pendingPortrait } } : {}
+    }));
+    if (!contact)
+      return;
+    const form = parent.querySelector(".lpt-form");
+    if (!form)
+      return;
+    const epoch = this.chatEpoch, name = contact.name, key = portraitKey(name);
+    const controls = el("div", "lpt-portrait-controls"), file = el("input", "lpt-portrait-file");
+    file.type = "file";
+    file.accept = "image/png,image/jpeg,image/webp";
+    file.hidden = true;
+    file.setAttribute("aria-label", "Choose portrait");
+    let preview = this.portrait(name, contact.player);
+    const notice = el("small", "lpt-portrait-status");
+    notice.setAttribute("aria-live", "polite");
+    const refreshPreview = () => {
+      const custom = { ...this.doc?.portraits };
+      if (pendingPortrait === null)
+        delete custom[key];
+      else if (pendingPortrait)
+        custom[key] = pendingPortrait;
+      const next = this.portrait(name, contact.player, false, custom);
+      preview.replaceWith(next);
+      preview = next;
+    };
+    const remove = button("Remove", "lpt-button lpt-remove-portrait", () => {
+      if (epoch !== this.chatEpoch)
+        return;
+      pendingPortrait = null;
+      refreshPreview();
+      remove.disabled = true;
+      notice.textContent = "Save to remove the custom portrait.";
+    });
+    remove.disabled = !this.doc?.portraits?.[key];
+    const choose = button("Change portrait", "lpt-button lpt-change-portrait", () => file.click());
+    file.addEventListener("change", () => {
+      const image = file.files?.[0];
+      if (!image)
+        return;
+      choose.disabled = true;
+      preparePortrait(image).then((data) => {
+        if (epoch !== this.chatEpoch || !form.isConnected)
+          return;
+        pendingPortrait = data;
+        refreshPreview();
+        remove.disabled = false;
+        notice.textContent = "Portrait ready. Save to apply.";
+      }).catch((e) => {
+        if (epoch === this.chatEpoch)
+          this.setError(e instanceof Error ? e.message : "Portrait could not be prepared.");
+      }).finally(() => {
+        choose.disabled = false;
+        file.value = "";
+      });
+    });
+    controls.append(preview, choose, file, remove, notice);
+    form.append(controls);
   }
   locations() {
     const section = el("section", "lpt-locations");
@@ -1101,52 +1391,117 @@ class PhoneView {
     const section = el("section", "lpt-messages");
     this.content.append(section);
     if (!this.enabled("messages")) {
+      this.selectedText = null;
+      this.content.dataset.thread = "false";
       this.empty("Messages is off. Turn it on in the sidebar's Phone tab.", section);
       return;
     }
     const threads = conversations(this.doc.state.messages, this.reads);
     if (this.selectedText !== null && !threads.some((t) => t.key === this.selectedText)) {
-      const contact = this.doc.state.contacts.find((c) => normalize(c.name) === this.selectedText);
-      if (contact)
-        threads.push({ key: normalize(contact.name), name: contact.name, messages: [], unread: 0 });
+      const c = this.doc.state.contacts.find((c) => normalize(c.name) === this.selectedText);
+      if (c)
+        threads.push({ key: normalize(c.name), name: c.name, messages: [], unread: 0 });
+      else
+        this.selectedText = null;
     }
+    const selected = threads.find((t) => t.key === this.selectedText);
+    if (selected) {
+      this.conversation(section, selected);
+      return;
+    }
+    this.content.dataset.thread = "false";
     if (!threads.length)
-      this.empty("No texts yet. Texts actually sent in the story appear here, grouped by sender.", section);
-    for (const thread of threads)
-      this.conversation(section, thread);
+      this.empty("No texts yet. Actual texts sent to you will appear here.", section);
+    const list = el("div", "lpt-conversations");
+    for (const thread of threads) {
+      const row = button("", "lpt-conversation lpt-thread-row", () => {
+        this.selectedText = thread.key;
+        this.render();
+        this.markVisibleConversation();
+        this.content.querySelector(".lpt-thread-back")?.focus();
+      });
+      row.dataset.conversation = thread.key;
+      const last = thread.messages.at(-1), copy = el("span", "lpt-thread-copy");
+      copy.append(el("span", "lpt-card-title", thread.name), el("span", "lpt-thread-preview", last ? `${last.direction === "outgoing" ? "You: " : ""}${last.text.replace(/\s+/g, " ")}` : "No texts yet"));
+      row.append(this.portrait(thread.name, this.doc.state.contacts.some((c) => c.player && normalize(c.name) === normalize(thread.name)), thread.group), copy);
+      if (last?.time)
+        row.append(el("small", "lpt-thread-time", last.time));
+      row.append(this.unreadBadge(thread.key));
+      list.append(row);
+    }
+    section.append(list);
   }
   conversation(parent, thread) {
-    const chatId = this.doc.chatId;
-    const card = el("details", "lpt-card lpt-conversation");
+    const chatId = this.doc.chatId, epoch = this.chatEpoch;
+    const card = el("div", "lpt-thread");
     card.dataset.conversation = thread.key;
-    const summary = el("summary", "lpt-summary");
-    summary.append(el("span", "lpt-card-title", thread.name), this.unreadBadge(thread.key));
-    if (!thread.key)
-      summary.append(el("span", "lpt-card-subtitle", "Recipient not stated"));
-    const body = el("div", "lpt-card-body");
+    const header = el("header", "lpt-thread-header");
+    const back = button("Back", "lpt-button lpt-thread-back", () => {
+      this.selectedText = null;
+      this.render();
+    });
+    back.setAttribute("aria-label", "Back to Messages");
+    header.append(back, this.portrait(thread.name, false, thread.group), el("h2", "lpt-thread-name", thread.name));
+    card.append(header);
     const list = el("div", "lpt-text-list");
+    list.setAttribute("role", "log");
+    list.setAttribute("aria-label", `Texts with ${thread.name}`);
+    let sender = "", direction = "", day;
+    const group = thread.group === true || new Set(thread.messages.filter((m) => m.direction === "incoming").map((m) => normalize(m.from))).size > 1;
     for (const message of thread.messages) {
-      const item = el("article", `lpt-text-message${message.direction === "outgoing" ? " lpt-outgoing" : " lpt-incoming"}`);
-      item.append(el("p", "lpt-text-sender", `${message.direction === "outgoing" ? "You · " : ""}${message.from}`), el("p", "lpt-text-body", message.text));
+      if (this.enabled("scene.date") && message.date && message.date !== day) {
+        list.append(el("p", "lpt-text-date", message.date));
+        day = message.date;
+        sender = "";
+      }
+      const together = sender === normalize(message.from) && direction === message.direction;
+      const item = el("article", `lpt-text-message ${message.direction === "outgoing" ? "lpt-outgoing" : "lpt-incoming"}${together ? " lpt-text-continuation" : ""}`);
+      if (group && !together)
+        item.append(el("p", "lpt-text-sender", message.direction === "outgoing" ? "You" : message.from));
+      item.append(el("p", "lpt-text-body", message.text));
       if (message.time)
         item.append(el("span", "lpt-text-time", message.time));
       list.append(item);
+      sender = normalize(message.from);
+      direction = message.direction;
     }
     if (!thread.messages.length)
-      this.empty("No texts sent here yet. Your reply will appear only after you send it from the chat input.", list);
-    body.append(list);
+      this.empty("No texts sent here yet. Your reply appears after you send it from the chat input.", list);
+    card.append(list);
     if (thread.key) {
-      const form = el("form", "lpt-reply");
-      const label = el("label", "lpt-label", `Reply to ${thread.name}`);
-      const input = el("textarea", "lpt-textarea lpt-reply-input");
+      if (!this.prefs.dismissed.includes("Draft hint")) {
+        const hint = el("div", "lpt-draft-hint"), hide = button("�", "lpt-dismiss", () => {
+          this.actions.preferences({ dismiss: "Draft hint" }).then((p) => {
+            this.receivePreferences(p);
+            hint.remove();
+          }).catch(() => this.setError("Could not hide the explanation."));
+        });
+        hide.setAttribute("aria-label", "Hide draft explanation");
+        hint.append(el("small", "lpt-help", "Adds to the chat input for you to review. It does not send."), hide);
+        card.append(hint);
+      }
+      const form = el("form", "lpt-reply"), label = el("label", "lpt-reply-label", `Reply to ${thread.name}`), input = el("textarea", "lpt-textarea lpt-reply-input");
+      input.rows = 1;
       input.maxLength = 3000;
       input.required = true;
+      input.placeholder = "Write a reply";
       input.value = this.replyDrafts.get(thread.key) ?? "";
-      input.addEventListener("input", () => {
-        if (this.doc?.chatId === chatId)
-          this.replyDrafts.set(thread.key, input.value);
-      });
       label.append(input);
+      const grow = () => {
+        const bottom = list.scrollHeight - list.clientHeight - list.scrollTop < 30;
+        input.rows = 1;
+        const css = getComputedStyle(input), height = input.scrollHeight - parseFloat(css.paddingTop) - parseFloat(css.paddingBottom);
+        input.rows = Math.min(4, Math.max(1, Math.ceil(height / parseFloat(css.lineHeight))));
+        if (bottom)
+          list.scrollTop = list.scrollHeight;
+      };
+      input.addEventListener("input", () => {
+        if (epoch !== this.chatEpoch)
+          return;
+        this.replyDrafts.set(thread.key, input.value);
+        grow();
+      });
+      requestAnimationFrame(grow);
       const add = el("button", "lpt-button lpt-add-draft", "Add to draft");
       add.type = "submit";
       const status = el("p", "lpt-reply-status lpt-help");
@@ -1156,46 +1511,35 @@ class PhoneView {
       fallback.setAttribute("aria-label", "Text tag to copy into the chat input");
       fallback.value = this.manualDrafts.get(thread.key) ?? "";
       fallback.hidden = !fallback.value;
-      if (fallback.value)
-        status.textContent = "Drafting is unavailable here. Copy this tag into the chat input, then review and send it yourself.";
-      form.append(label, add, el("p", "lpt-help", "Adds to the chat input for you to review. It does not send."), status, fallback);
-      form.addEventListener("submit", (e) => {
-        e.preventDefault();
+      form.append(label, add, status, fallback);
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (epoch !== this.chatEpoch || this.doc?.chatId !== chatId || !form.isConnected)
+          return;
         try {
-          const result = this.actions.draft(chatId, thread.name, input.value);
+          const result = this.actions.draft(chatId, thread.name, input.value, thread.group ? thread.name : undefined);
           if (result.manual) {
             this.manualDrafts.set(thread.key, result.tag);
             fallback.value = result.tag;
             fallback.hidden = false;
-            status.textContent = "Drafting is unavailable here. Copy this tag into the chat input, then review and send it yourself.";
+            status.textContent = "Copy this tag into the chat input, then review and send it yourself.";
             fallback.select();
           } else {
             this.replyDrafts.delete(thread.key);
             this.manualDrafts.delete(thread.key);
             input.value = "";
+            grow();
             fallback.value = "";
             fallback.hidden = true;
-            status.textContent = "Added to the chat draft. Review it there and send it yourself.";
+            status.textContent = "Added to the chat draft. Review it there.";
           }
         } catch (error) {
-          status.textContent = error instanceof Error ? error.message : "Could not add to the draft. Your reply is still here.";
+          status.textContent = error instanceof Error ? error.message : "Could not add to draft. Your reply is still here.";
         }
       });
-      body.append(form);
+      card.append(form);
     }
-    card.append(summary, body);
     parent.append(card);
-    card.open = this.selectedText === thread.key;
-    card.addEventListener("toggle", () => {
-      if (card.open) {
-        this.selectedText = thread.key;
-        for (const other of Array.from(this.content.querySelectorAll(".lpt-conversation")))
-          if (other !== card)
-            other.open = false;
-        this.markVisibleConversation();
-      } else if (this.selectedText === thread.key)
-        this.selectedText = null;
-    });
   }
   unreadBadge(key) {
     const badge = el("span", "lpt-unread-badge");
@@ -1217,7 +1561,7 @@ class PhoneView {
   markVisibleConversation() {
     if (!this.doc || !this.openState || this.app !== "Messages" || this.selectedText === null || !this.enabled("messages") || document.visibilityState === "hidden")
       return;
-    const visibleCard = Array.from(this.content.querySelectorAll(".lpt-conversation")).find((c) => c.open && c.dataset.conversation === this.selectedText);
+    const visibleCard = Array.from(this.content.querySelectorAll(".lpt-thread")).find((c) => c.dataset.conversation === this.selectedText);
     if (!visibleCard || !this.frame.getClientRects().length)
       return;
     const observed = this.doc.state.messages.filter((m) => threadKey(m) === this.selectedText && isUnread(m, this.reads)).map((m) => ({ id: m.id, receipt: receipt(m) }));
@@ -3019,6 +3363,68 @@ var styles_default = `/* =======================================================
   --lpt-shadow: 0 22px 54px -10px rgba(0, 0, 0, 0.72), inset 0 1px 0 0 #353047;
 }
    ========================================================================== */
+\r
+/* Compact story views and text threads. All tokens remain on the phone root. */\r
+.lpt-root {\r
+  --lpt-portrait-size: 42px;\r
+  --lpt-portrait-radius: 50%;\r
+  --lpt-bubble-max-width: 85%;\r
+  --lpt-composer-font-size: 16px;\r
+  --lpt-portrait-text: var(--lpt-on-pastel);\r
+  --lpt-portrait-tone-0: var(--lpt-lilac-2);\r
+  --lpt-portrait-tone-1: var(--lpt-pink-1);\r
+  --lpt-portrait-tone-2: var(--lpt-blue);\r
+  --lpt-portrait-tone-3: var(--lpt-yellow);\r
+  --lpt-portrait-tone-4: var(--lpt-lilac-1);\r
+  --lpt-thread-gap: 12px;\r
+  --lpt-bubble-gap: 3px;\r
+  --lpt-thread-row-padding: 10px;\r
+  --lpt-composer-max-lines: 4;\r
+  --lpt-composer-padding: 8px;\r
+}\r
+.lpt-scene-when {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;border-bottom:var(--lpt-border-size) solid var(--lpt-border);}\r
+.lpt-scene-when .lpt-field {border:0;border-radius:0;box-shadow:none;margin:0;background-color:var(--lpt-screen-bg);}\r
+.lpt-scene-when .lpt-field + .lpt-field {border-left:var(--lpt-border-size) solid var(--lpt-border);}\r
+.lpt-scene > .lpt-field:not(.lpt-location) {border:0;border-bottom:var(--lpt-border-size) solid var(--lpt-border);border-radius:0;box-shadow:none;background-color:var(--lpt-screen-bg);}\r
+.lpt-portrait {display:inline-grid;place-items:center;flex:none;width:var(--lpt-portrait-size);height:var(--lpt-portrait-size);border-radius:var(--lpt-portrait-radius);overflow:hidden;vertical-align:middle;color:var(--lpt-portrait-text);font-weight:var(--lpt-strong-weight);background-color:var(--lpt-portrait-tone-0);}\r
+.lpt-portrait-tone-0 {background-color:var(--lpt-portrait-tone-0);}.lpt-portrait-tone-1 {background-color:var(--lpt-portrait-tone-1);}.lpt-portrait-tone-2 {background-color:var(--lpt-portrait-tone-2);}.lpt-portrait-tone-3 {background-color:var(--lpt-portrait-tone-3);}.lpt-portrait-tone-4 {background-color:var(--lpt-portrait-tone-4);}\r
+.lpt-portrait-initial,.lpt-portrait-image {grid-area:1/1;width:100%;height:100%;}.lpt-portrait-initial {display:grid;place-items:center;}.lpt-portrait-image {object-fit:cover;image-rendering:auto;}\r
+.lpt-portrait [hidden] {display:none;}\r
+.lpt-contact {border:0;border-bottom:var(--lpt-border-size) solid var(--lpt-border);border-radius:0;box-shadow:none;margin:0;background-color:var(--lpt-screen-bg);}\r
+.lpt-contact > .lpt-summary {display:flex;align-items:center;gap:var(--lpt-space);padding:var(--lpt-thread-row-padding);}\r
+.lpt-contact > .lpt-summary::before {display:none;}\r
+.lpt-contact-copy {display:flex;flex-direction:column;min-width:0;gap:var(--lpt-bubble-gap);}\r
+.lpt-contact .lpt-card-body {border-top:var(--lpt-border-size) solid var(--lpt-border);background-color:var(--lpt-card-bg);}\r
+.lpt-portrait-controls {display:flex;align-items:center;flex-wrap:wrap;gap:var(--lpt-space);padding-block:var(--lpt-space);}\r
+.lpt-conversations {display:flex;flex-direction:column;background-color:var(--lpt-screen-bg);}\r
+.lpt-thread-row {display:flex;align-items:center;width:100%;gap:var(--lpt-space);padding:var(--lpt-thread-row-padding);color:var(--lpt-text);font:inherit;text-align:left;border:0;border-bottom:var(--lpt-border-size) solid var(--lpt-border);border-radius:0;background-color:var(--lpt-screen-bg);cursor:pointer;}\r
+.lpt-thread-row .lpt-unread-badge {position:static;flex:none;}\r
+.lpt-thread-copy {display:flex;flex-direction:column;min-width:0;flex:1;gap:var(--lpt-bubble-gap);}\r
+.lpt-thread-preview {display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;color:var(--lpt-muted);font-size:var(--lpt-small-font-size);}\r
+.lpt-thread-time {flex:none;max-width:25%;overflow-wrap:anywhere;color:var(--lpt-muted);font-size:var(--lpt-small-font-size);}\r
+.lpt-content[data-thread="true"] {display:flex;flex-direction:column;overflow:hidden;min-height:0;padding-bottom:0;}\r
+.lpt-content[data-thread="true"] > .lpt-messages {flex:1;min-height:0;display:flex;flex-direction:column;margin:0;padding:0;background-color:var(--lpt-screen-bg);}\r
+.lpt-thread {display:flex;flex:1;min-height:0;flex-direction:column;background-color:var(--lpt-screen-bg);}\r
+.lpt-thread-header {display:flex;flex:none;align-items:center;gap:var(--lpt-space);padding-block:var(--lpt-space);border-bottom:var(--lpt-border-size) solid var(--lpt-border);background-color:var(--lpt-screen-bg);}\r
+.lpt-thread-name {font-size:var(--lpt-title-size);margin:0;overflow-wrap:anywhere;min-width:0;}\r
+.lpt-thread .lpt-text-list {flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:var(--lpt-thread-gap);padding-block:var(--lpt-space);background-color:var(--lpt-screen-bg);}\r
+.lpt-thread .lpt-text-message {flex:none;max-width:var(--lpt-bubble-max-width);margin:0;}\r
+.lpt-thread .lpt-incoming {align-self:flex-start;}.lpt-thread .lpt-outgoing {align-self:flex-end;}\r
+.lpt-thread .lpt-text-continuation {margin-top:calc(var(--lpt-bubble-gap) - var(--lpt-thread-gap));}\r
+.lpt-text-date {display:flex;align-items:center;gap:var(--lpt-space);align-self:stretch;margin:var(--lpt-space) 0;color:var(--lpt-muted);font-size:var(--lpt-small-font-size);text-align:center;}\r
+.lpt-text-date::before,.lpt-text-date::after {content:"";flex:1;border-top:var(--lpt-border-size) solid var(--lpt-border);}\r
+.lpt-thread .lpt-text-time {font-size:var(--lpt-small-font-size);}\r
+.lpt-draft-hint {display:flex;align-items:center;flex:none;gap:var(--lpt-space);border-top:var(--lpt-border-size) solid var(--lpt-border);background-color:var(--lpt-screen-bg);padding:var(--lpt-composer-padding);}\r
+.lpt-draft-hint .lpt-help {margin:0;flex:1;}\r
+.lpt-thread .lpt-reply {display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;flex:none;gap:var(--lpt-space);margin:0;padding:var(--lpt-composer-padding) 0 max(var(--lpt-composer-padding),env(safe-area-inset-bottom));border-top:var(--lpt-border-size) solid var(--lpt-border);background-color:var(--lpt-screen-bg);}\r
+.lpt-reply-label {display:flex;flex-direction:column;min-width:0;gap:var(--lpt-bubble-gap);font-size:var(--lpt-small-font-size);}\r
+.lpt-thread .lpt-reply-input {box-sizing:border-box;min-height:0;max-height:calc(var(--lpt-composer-max-lines) * 1em * var(--lpt-line-height) + var(--lpt-composer-padding) * 2);height:auto;padding:var(--lpt-composer-padding);resize:none;overflow:auto;line-height:var(--lpt-line-height);font:inherit;font-size:var(--lpt-composer-font-size);border-radius:var(--lpt-radius);}\r
+.lpt-thread .lpt-add-draft {padding:var(--lpt-composer-padding);min-height:var(--lpt-control-size);font-size:var(--lpt-small-font-size);}\r
+.lpt-thread .lpt-reply-status,.lpt-thread .lpt-manual-tag {grid-column:1/-1;}\r
+.lpt-thread .lpt-manual-tag {max-height:calc(var(--lpt-control-size)*2);}\r
+\r
+.lpt-portrait-status {flex-basis:100%;font-size:var(--lpt-small-font-size);color:var(--lpt-muted);}\r
+.lpt-portrait-status:empty {display:none;}\r
 `;
 
 // src/message-reads.ts
@@ -3496,6 +3902,7 @@ function setup(ctx) {
   let activeChat = null;
   let epoch = 0;
   let pendingSync = "";
+  let portraitRequest = "", portraitChat = null;
   let current = null;
   let reads = emptyReads();
   let preferences = defaultPreferences();
@@ -3657,6 +4064,7 @@ function setup(ctx) {
   };
   refreshButton.addEventListener("click", () => {
     const origin = epoch;
+    portraitChat = null;
     refreshPending = true;
     refreshStatus.textContent = "";
     updateBusy();
@@ -3760,10 +4168,10 @@ function setup(ctx) {
         update,
         preferences: prefsChange,
         markRead,
-        draft: (chatId, to, text) => {
+        draft: (chatId, to, text, group) => {
           if (disposed || activeChat !== chatId || current?.chatId !== chatId || (!current.settings.apps.Messages || !current.settings.enabled.messages))
             throw new Error("The chat changed. Reopen the original conversation.");
-          return addReplyDraft(ctx, chatId, current.currentPlayer ?? "", to, text);
+          return addReplyDraft(ctx, chatId, current.currentPlayer ?? "", to, text, group);
         },
         size: (width, height) => {
           if (!widget || disposed)
@@ -3814,6 +4222,13 @@ function setup(ctx) {
     }
   }
   disposers.push(ctx.onBackendMessage((payload) => {
+    if (disposed)
+      return;
+    if (isRecord(payload) && payload.type === "phone_portraits_result") {
+      if (payload.requestId === portraitRequest && payload.chatId === activeChat)
+        view?.receivePortraitSources(payload.sources);
+      return;
+    }
     if (disposed || !isRecord(payload))
       return;
     if (payload.type === "phone_helper_changed") {
@@ -3938,10 +4353,17 @@ function setup(ctx) {
     chatName = typeof payload.chatName === "string" ? payload.chatName : "";
     sidebar?.receive(current, chatName);
     view?.receive(current, reads);
+    if (current && portraitChat !== activeChat) {
+      portraitChat = activeChat;
+      portraitRequest = crypto.randomUUID();
+      ctx.sendToBackend({ type: "phone_portraits", requestId: portraitRequest, chatId: activeChat });
+    }
     backendBusy = payload.helperBusy === true;
     updateBusy();
   }));
   const switchChat = (chatId) => {
+    portraitChat = null;
+    portraitRequest = "";
     epoch++;
     refreshPending = false;
     refreshStatus.textContent = "";

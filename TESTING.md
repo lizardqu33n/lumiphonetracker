@@ -1,6 +1,50 @@
-# Verification report - 0.10.2
+# Verification report - 0.11.0
 
 Checked November 5, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **No live Lumiverse session or real model connection was used. A local Lumiverse build and its user-docs were inspected; that is not live-host verification. No paid model request was made.**
+
+## 0.11.0: compact layout, text threads and portraits
+
+**184 code tests / 1215 assertions; 202 browser checks pass.** Type checking,
+reproducible built-file comparison and manifest/package checks pass. No real
+Lumiverse server, second-user login, provider or paid request was used.
+
+- Scene Time/Date share a compact row. Contacts are flat portrait rows with roles,
+  presence and inline details; player-field protection and the You marker remain.
+- Conversation rows include a portrait, latest preview with ellipsis, known time
+  and badge. Threads preserve direct/group identity and newest-first list order,
+  side-aligned bubbles, consecutive grouping and only established story dates.
+- Composer stays docked while bubbles scroll. Tests cover its four-line bound,
+  exact-chat refusal, outgoing only after actual send, escaped/group-aware draft
+  insertion, unsupported-composer fallback, persistent read status, personal hint
+  dismissal, rapid-arrival bottom scrolling and short viewport layout.
+- Browser upload checks reject SVG, mismatched MIME and over-5-MB input.
+  Code checks also reject GIF and wrong bytes. A real canvas crop is checked pixel-wise, output is 128
+  square and under 20 KB, custom beats card, Remove restores source fallback,
+  image error restores initial, and Save/Cancel preserve portrait/name drafts.
+- Server tests cover byte/type/dimension checks, unknown contact rejection,
+  authorization and revision guards, shared custom portraits across two users,
+  case-only and ordinary rename, deletion/removal, restart and a full 512-KiB
+  budget keeping all existing portraits. Portraits stay out of macros/Helper input.
+- Optional avatar mocks enforce trusted userId on chat/card/persona/image calls.
+  Two users in the SAME chat receive different own-persona bytes. Missing grants
+  do not call card/persona/image APIs. Names match exactly ignoring case; unmatched,
+  duplicate or wrong-player names do not choose a guessed portrait.
+- Existing player-only text recipient rules, all nine opaque app screens, native
+  draft safeguards, narrow sidebar, 1x/2x launcher and hostile-CSS Reset still pass.
+  Screenshot review covers Scene, Contacts, desktop/mobile and short thread views.
+  The test drawer is closed for phone-only mobile screenshots; this is fixture
+  layout, not a private host style change. Sidebar tests still run separately.
+
+**Not verified in a real install:** actual optional grants/operator behavior,
+card/persona image-byte transport, authenticated host CSP, group-member discovery,
+live cross-user events, real mobile drawer/keyboard/safe-area behavior, native
+WebView image decoding and provider compliance with group tags. The ordinary
+group-member lookup is not documented and is deliberately NOT implemented; those
+NPCs use custom portraits or initials. Active persona is checked against the
+requesting user's confirmed player name; no private chat override fields are read.
+
+This checkpoint does not include the next requested top strip, sidebar toolbar,
+accordion or the eight supplied sidebar icons. See docs/PORTRAITS-THREADS.md.
 
 ## 0.10.2: player-phone Messages filtering
 

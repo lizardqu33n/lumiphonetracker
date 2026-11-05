@@ -4,29 +4,30 @@ import { short } from "./schema";
 
 export interface ReadState { revision: number; seen: Record<string, string> }
 export const emptyReads = (): ReadState => ({ revision: 0, seen: {} });
-export const receipt = (m: SavedMessage): string => JSON.stringify([m.from, m.to ?? null, m.time ?? null, m.text]);
+export const receipt = (m: SavedMessage): string => JSON.stringify([m.from, m.to ?? null, ...(m.group?[m.group]:[]), m.time ?? null, m.text]);
 export const isUnread = (m: SavedMessage, reads: ReadState): boolean => m.direction === "incoming" && reads.seen[m.id] !== receipt(m);
-export const threadKey = (m: SavedMessage): string => m.direction === "incoming" ? normalize(m.from) : m.to ? normalize(m.to) : "";
-export interface Conversation { key: string; name: string; messages: SavedMessage[]; unread: number }
+export const threadKey = (m: SavedMessage): string => m.group?JSON.stringify(["group",normalize(m.group)]):m.direction === "incoming" ? normalize(m.from) : m.to ? normalize(m.to) : "";
+export interface Conversation { key: string; name: string; messages: SavedMessage[]; unread: number; group?:boolean }
 export function conversations(messages: SavedMessage[], reads: ReadState): Conversation[] {
   const groups = new Map<string, Conversation>();
   for (const m of messages) {
     const key = threadKey(m);
-    const group = groups.get(key) ?? { key, name: m.direction === "incoming" ? m.from : m.to ?? "Your texts", messages: [], unread: 0 };
+    const group = groups.get(key) ?? { key, name:m.group??(m.direction === "incoming" ? m.from : m.to ?? "Your texts"),...(m.group?{group:true}:{}), messages: [], unread: 0 };
     group.messages.push(m); if (isUnread(m, reads)) group.unread++;
     groups.set(key, group);
   }
-  return [...groups.values()];
+  return [...groups.values()].sort((a,b)=>messages.lastIndexOf(b.messages.at(-1)!)-messages.lastIndexOf(a.messages.at(-1)!));
 }
 const escape = (text: string) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");
-export function replyTag(from: string, to: string, text: string): string {
+export function replyTag(from: string, to: string, text: string, group?:string): string {
   if (!short(from, 100) || !from.trim() || !short(to, 100) || !to.trim()) throw new Error("Your character's name or the recipient is unavailable. Reopen this chat.");
   if (!text.trim() || text.trim().length > 3000 || text.includes("\u0000")) throw new Error("Write a reply of up to 3,000 characters.");
-  return `<phone-text from="${escape(from.trim())}" to="${escape(to.trim())}">${escape(text.trim())}</phone-text>`;
+  if(group!==undefined&&(!short(group,100)||!group.trim()))throw Error("Invalid group name.");
+  return `<phone-text from="${escape(from.trim())}" to="${escape(to.trim())}"${group?` group="${escape(group.trim())}"`:""}>${escape(text.trim())}</phone-text>`;
 }
 /** Synchronous documented composer writes: never sends or changes saved history. */
-export function addReplyDraft(ctx: Pick<SpindleFrontendContext, "composer" | "host">, chatId: string, from: string, to: string, text: string): { manual: boolean; tag: string } {
-  const tag = replyTag(from, to, text);
+export function addReplyDraft(ctx: Pick<SpindleFrontendContext, "composer" | "host">, chatId: string, from: string, to: string, text: string, group?:string): { manual: boolean; tag: string } {
+  const tag = replyTag(from, to, text,group);
   if (!ctx.composer || !((ctx.host?.capabilities?.["composer-v1"] ?? 0) >= 1)) return { manual: true, tag };
   const state = ctx.composer.getState();
   if (!state.mounted || state.chatId !== chatId) throw new Error("The chat input changed. Open the original chat before adding this reply.");

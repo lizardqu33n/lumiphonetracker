@@ -1,3 +1,4 @@
+import {portraitBytes,portraitKey,PORTRAIT_CHAT_LIMIT} from "./portraits";
 import {callId} from "./calls";
 import { validateEmail,validateActivity } from "./activity";
 import { isHelperNotice } from "./helper-status";
@@ -31,6 +32,7 @@ export function readDocument(raw: string, chatId: string): Document {
     if (value[key] !== undefined && (!Array.isArray(value[key]) || (value[key] as unknown[]).some(x => typeof x !== "string"))) throw new Error("Invalid saved metadata");
     doc[key] = value[key] as string[] ?? [];
   }
+  if(value.portraits!==undefined){if(!isRecord(value.portraits))throw Error("Invalid portraits");doc.portraits=Object.create(null) as Record<string,string>;for(const [name,data]of Object.entries(value.portraits)){portraitBytes(data);doc.portraits[name]=data as string;}if(Object.values(doc.portraits).reduce((sum,v)=>sum+v.length,0)>PORTRAIT_CHAT_LIMIT)throw Error("Portrait storage is full.");}
   doc.settings = readSettings(value.settings); doc.legacy = value.legacy;
   if (value.helperOwner !== undefined && (typeof value.helperOwner !== "string" || !value.helperOwner)) throw new Error("Invalid helper owner");
   doc.helperOwner = value.helperOwner as string | undefined;
@@ -57,7 +59,7 @@ export function readDocument(raw: string, chatId: string): Document {
       }), locations: entry.patch.locations, ...entry.patch.notes };
     const patch = validateExpanded(rawPatch);
     for (const text of entry.texts) if (!isRecord(text) || !short(text.from, 100) || typeof text.text !== "string" || text.text.length > 3000 ||
-      (text.to !== undefined && !short(text.to, 100)) || (text.time !== undefined && !short(text.time, 100))) throw new Error("Invalid saved text");
+      (text.to !== undefined && !short(text.to, 100)) || (text.group !== undefined && !short(text.group,100)) || (text.time !== undefined && !short(text.time, 100))) throw new Error("Invalid saved text");
     if(entry.emails!==undefined&&!Array.isArray(entry.emails))throw Error("Invalid saved emails");
     const emails=Array.isArray(entry.emails)?entry.emails.map(validateEmail):[];
     if(entry.bankProof!==undefined&&!Array.isArray(entry.bankProof))throw Error("Invalid bank proof");
@@ -143,7 +145,7 @@ export class PhoneStore {
     });
   }
   /** Step 4's controls will use this same validated, chat-authorized operation. */
-  update(userId: string, chatId: string, expectedRevision: number, update: { settings?: unknown; edit?: unknown; dismissNotice?: unknown }): Promise<Document> {
+  update(userId: string, chatId: string, expectedRevision: number, update: { settings?: unknown; edit?: unknown; dismissNotice?: unknown;portrait?:unknown }): Promise<Document> {
     return this.serial(chatId, async () => {
       if (!userId || !(await this.io.authorize(chatId, userId))) throw new Error("Chat unavailable");
       const raw = await this.io.read(chatId); const saved = readDocument(raw, chatId);
@@ -155,6 +157,7 @@ export class PhoneStore {
         if(update.settings.apps!==undefined&&!isRecord(update.settings.apps))throw new Error("Invalid apps");
         const enabled = update.settings.enabled;
         if (enabled !== undefined && !isRecord(enabled)) throw new Error("Invalid switches");
+
         doc.settings = readSettings({ ...doc.settings, ...update.settings,
           apps: { ...doc.settings.apps, ...(isRecord(update.settings.apps)?update.settings.apps:{}) },
           enabled: { ...doc.settings.enabled, ...(isRecord(enabled) ? enabled : {}) } });
@@ -177,6 +180,12 @@ export class PhoneStore {
         }
         doc.edits.push(edit);
       }
+      if(update.portrait!==undefined){
+        const p=update.portrait;if(!isRecord(p)||typeof p.name!=="string"||!doc.state.contacts.some(c=>portraitKey(c.name)===portraitKey(p.name as string)))throw Error("Reopen the contact before changing its portrait.");
+        const data=Object.assign(Object.create(null),doc.portraits) as Record<string,string>;if(p.data===null)delete data[portraitKey(p.name)];else {portraitBytes(p.data);data[portraitKey(p.name)]=p.data as string;}
+        if(Object.values(data).reduce((n,v)=>n+v.length,0)>PORTRAIT_CHAT_LIMIT)throw Error("Portrait storage is full. Remove a portrait first.");doc.portraits=data;
+      }
+      if(isRecord(update.edit)&&update.edit.target==="contact"&&typeof update.edit.name==="string"&&doc.portraits){const key=portraitKey(update.edit.name);if(update.edit.remove)delete doc.portraits[key];else if(typeof update.edit.rename==="string"&&portraitKey(update.edit.rename)!==key&&doc.portraits[key]){doc.portraits[portraitKey(update.edit.rename)]=doc.portraits[key];delete doc.portraits[key];}}
       doc = replay(doc, rows, doc.playerNames);
       doc.revision = saved.revision + 1;
       await this.io.write(chatId, JSON.stringify(doc)); return doc;

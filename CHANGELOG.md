@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.11.0 - Compact story views, text threads and portraits
+
+- Put Scene Time and Date in one compact row; flatten Contact rows with portraits, roles and presence labels, keeping player protections and inline details.
+- Replace expanded conversation cards with a newest-first Messages list and a text-thread view: previews, portraits, side-aligned bubbles, explicit group senders, tight consecutive grouping and established story-date separators.
+- Dock a growing one-to-four-line composer with Add to draft, never Send. Keep drafts, exact-chat checks, per-conversation reads, player-only recipients and a personal dismissible drafting hint.
+- Add optional group tags for explicitly established player group texts. Untagged direct conversations stay separate; never infer membership.
+- Add raster-only custom portraits, center-cropped/re-encoded in the browser to 128 square, up to 20 KB each and 512 KB encoded per chat. Keep them shared, editable/removable and outside AI prompts.
+- Read main-card and requesting-user persona image bytes only with optional characters/personas/images grants. Use initials without permission, on errors or unmatched names. Ordinary group-member enumeration is not documented; those NPCs use custom portraits or initials.
+- Preserve protected Reset and opaque surfaces. The phone top strip, sidebar toolbar/accordion and eight supplied sidebar icons are deferred to the next step.
+
 ## 0.10.2 - Only the player's phone texts
 
 - Tell the AI in one short sentence to tag only texts to the player, plus actual player-sent texts when enabled. NPC-to-NPC texts stay in narration without tags.

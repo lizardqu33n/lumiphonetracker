@@ -19,8 +19,8 @@ describe("Step 5 saved texts, read status and draft safety", () => {
   test("group chats retain separate sender conversations, case-insensitive replies and unknown recipients", () => {
     const rows = [message("1"), message("2","Bea"), message("3","Player",{direction:"outgoing",to:"ADA"}), message("4","Player",{direction:"outgoing"})];
     const groups = conversations(rows,emptyReads());
-    expect(groups.map(g => [g.key,g.messages.length,g.unread])).toEqual([["ada",2,1],["bea",1,1],["",1,0]]);
-    expect(threadKey(rows[2])).toBe("ada"); expect(groups[2].name).toBe("Your texts");
+    expect(groups.map(g => [g.key,g.messages.length,g.unread])).toEqual([["",1,0],["ada",2,1],["bea",1,1]]);
+    expect(threadKey(rows[2])).toBe("ada"); expect(groups[0].name).toBe("Your texts");
   });
   test("read receipts survive restart but never mark unseen arrivals, changed texts, outgoing texts or another sender", async () => {
     const disk = new Map<string,unknown>();

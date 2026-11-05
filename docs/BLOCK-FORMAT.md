@@ -279,3 +279,22 @@ invented. Correctly generated NPC-to-NPC text is normal narration with no tag.
 The server logs `Lumi Phone Tracker: text tag ignored: recipient is not a confirmed player.`
 once per unchanged source, using the existing bounded warning deduplication;
 no story text, names, recipients or field values enter that warning.
+
+## Explicit group texts (0.11.0)
+
+The optional attribute group="Established group name" puts actual texts from
+several senders in one named thread. Use it only when the story establishes that
+player group and the text is actually sent to the player (or actually by the
+player with the usual permission). Never infer group membership. Example:
+
+```text
+<phone-text from="Ada" to="Player" group="Crew" time="8 PM">Meet at the gate.</phone-text>
+```
+
+Names are bounded to 100 characters and escaped like other attributes. Group
+never bypasses recipient filtering. A sent reply preserves group in the draft.
+Short Messages continuity includes the explicit group name as text. Without group, conversations still group by sender/recipient. No automatic
+merging from similar names or surrounding group roleplay. Only established Scene
+dates at each message's history position become thread date separators; no new
+AI date field, device date or guessed time conversion is added. Portrait bytes
+are UI data only and never enter this block, continuity macros or Helper input.

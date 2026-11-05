@@ -18,6 +18,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   let activeChat: string | null = null;
   let epoch = 0;
   let pendingSync = "";
+  let portraitRequest="",portraitChat:string|null=null;
   let current: PhoneDocument | null = null;
   let reads = emptyReads();
   let preferences = defaultPreferences();
@@ -52,7 +53,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     if (payload.isUser === false || ([TEXT_TAG,"phone-email"].includes(tagName) && payload.isUser === true)) sendSync();
   }));
 
-  const prefsChange = (change?: { css?: string; dismiss?: import("./preferences").App|"Home" }): Promise<Preferences> => {
+  const prefsChange = (change?: { css?: string; dismiss?: import("./preferences").App|"Home"|"Draft hint" }): Promise<Preferences> => {
     const requestId = crypto.randomUUID();
     if (change?.css !== undefined) { appearanceEpoch++; preferences = { ...preferences, css: change.css }; }
     return new Promise((resolve, reject) => {
@@ -112,7 +113,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   const refreshStatus=document.createElement("p");refreshStatus.className="lpt-recovery-status lpt-refresh-result";refreshStatus.setAttribute("aria-live","polite");
   const refreshButton=document.createElement("button");refreshButton.type="button";refreshButton.className="lpt-recovery-button lpt-update-now";refreshButton.textContent="Refresh tracker";
   const updateBusy=()=>{refreshButton.disabled=!activeChat||!current||busy()||refreshPending;};
-  refreshButton.addEventListener("click",()=>{const origin=epoch;refreshPending=true;refreshStatus.textContent="";updateBusy();void requestHelper("phone_helper_now").then(value=>{if(origin!==epoch)return;const result=readRefreshResult(value);refreshStatus.textContent=result.ok?"Refreshed":failureLabel(result.category??"invalid output");sendSync();}).catch(error=>{if(origin===epoch)refreshStatus.textContent=failureLabel(failureCategory(error,"validation rejected"));}).finally(()=>{if(origin===epoch){refreshPending=false;updateBusy();}});});
+  refreshButton.addEventListener("click",()=>{const origin=epoch;portraitChat=null;refreshPending=true;refreshStatus.textContent="";updateBusy();void requestHelper("phone_helper_now").then(value=>{if(origin!==epoch)return;const result=readRefreshResult(value);refreshStatus.textContent=result.ok?"Refreshed":failureLabel(result.category??"invalid output");sendSync();}).catch(error=>{if(origin===epoch)refreshStatus.textContent=failureLabel(failureCategory(error,"validation rejected"));}).finally(()=>{if(origin===epoch){refreshPending=false;updateBusy();}});});
   for(const [button,status]of [[open,openStatus],[refreshButton,refreshStatus],[resetButton,recoveryStatus]]){const row=document.createElement("div");row.className="lpt-recovery-action";row.append(button,status);recoveryActions.append(row);}
   panel.append(recoveryActions,help);tab.root.append(panel);
   sidebar=new Sidebar(panel,ctx,{update:async(settings,revision)=>await update({settings},revision),connections:async()=>await requestHelper("phone_connections") as ConnectionsInfo,css:text=>prefsChange({css:text}),applyCSS:text=>{appearanceEpoch++;preferences={...preferences,css:text};view?.applyCSS(text);}},preferences);
@@ -151,9 +152,9 @@ export function setup(ctx: SpindleFrontendContext): () => void {
       const custom = document.createElement("style"); shadow.append(base, custom);
       viewport.append(island); transport.append(viewport); widget.root.append(placementStyle, transport);
       view = new PhoneView(shadow, custom, { update, preferences: prefsChange, markRead,
-        draft: (chatId, to, text) => {
+        draft: (chatId, to, text,group) => {
           if (disposed || activeChat !== chatId || current?.chatId !== chatId || (!current.settings.apps.Messages||!current.settings.enabled.messages)) throw new Error("The chat changed. Reopen the original conversation.");
-          return addReplyDraft(ctx, chatId, current.currentPlayer ?? "", to, text);
+          return addReplyDraft(ctx, chatId, current.currentPlayer ?? "", to, text,group);
         }, size: (width, height) => {
         if (!widget || disposed) return;
         const vw = window.visualViewport?.width ?? window.innerWidth; const vh = window.visualViewport?.height ?? window.innerHeight;
@@ -185,6 +186,9 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   }
 
   disposers.push(ctx.onBackendMessage(payload => {
+    if(disposed)return;
+    if(isRecord(payload)&&payload.type==="phone_portraits_result") {if(payload.requestId===portraitRequest&&payload.chatId===activeChat)void view?.receivePortraitSources(payload.sources);return;}
+
     if (disposed || !isRecord(payload)) return;
     if(payload.type==="phone_helper_changed") { if(activeChat && payload.chatId===activeChat)sendSync();return; }
     if(typeof payload.requestId!=="string")return;
@@ -239,10 +243,12 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     current = isRecord(payload.snapshot) && payload.snapshot.chatId === activeChat ? payload.snapshot as unknown as PhoneDocument : null;
     try { const value = readState(payload.reads); if (value.revision >= reads.revision) reads = value; } catch { /* Keep known read state. */ }
     chatName=typeof payload.chatName==="string"?payload.chatName:"";sidebar?.receive(current,chatName);
-    view?.receive(current, reads); backendBusy=payload.helperBusy===true;updateBusy();
+    view?.receive(current, reads);
+    if(current&&portraitChat!==activeChat){portraitChat=activeChat;portraitRequest=crypto.randomUUID();ctx.sendToBackend({type:"phone_portraits",requestId:portraitRequest,chatId:activeChat});}
+    backendBusy=payload.helperBusy===true;updateBusy();
   }));
   const switchChat = (chatId: string | null) => {
-    epoch++; refreshPending=false;refreshStatus.textContent="";openStatus.textContent="";backendBusy=false;pendingSync = ""; activeChat = chatId; current = null; reads = emptyReads(); view?.receive(null, reads);chatName="";sidebar?.receive(null,"");updateBusy();
+    portraitChat=null;portraitRequest="";epoch++; refreshPending=false;refreshStatus.textContent="";openStatus.textContent="";backendBusy=false;pendingSync = ""; activeChat = chatId; current = null; reads = emptyReads(); view?.receive(null, reads);chatName="";sidebar?.receive(null,"");updateBusy();
     for (const [id, p] of readRequests) { clearTimeout(p.timer); p.reject(new Error("The chat changed.")); readRequests.delete(id); }
     for (const [id, p] of updates) { clearTimeout(p.timer); p.reject(new Error("The chat changed. Your original chat keeps its saved changes.")); updates.delete(id); }
     for(const [id,p]of helperRequests){clearTimeout(p.timer);p.reject(new Error("The chat changed."));helperRequests.delete(id);}

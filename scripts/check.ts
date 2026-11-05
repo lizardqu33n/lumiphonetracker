@@ -12,7 +12,7 @@ for (const key of ["version", "name", "identifier", "author", "github", "homepag
 }
 assert.equal(new URL(manifest.github).hostname, "github.com");
 assert.equal(new URL(manifest.homepage).protocol, "https:");
-assert.deepEqual(manifest.permissions, ["chats", "chat_mutation", "interceptor", "ui_panels", "generation", "macro_interceptor"]);
+assert.deepEqual(manifest.permissions, ["chats", "chat_mutation", "interceptor", "ui_panels", "generation", "macro_interceptor", "characters", "personas", "images"]);
 assert.equal(manifest.entry_backend, "dist/backend.js");
 assert.equal(manifest.entry_frontend, "dist/frontend.js");
 for (const key of ["entry_backend", "entry_frontend"]) {

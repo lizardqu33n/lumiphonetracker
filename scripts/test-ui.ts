@@ -14,15 +14,15 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(req) { return n
   { headers: { "Content-Type": new URL(req.url).pathname === "/harness.js" ? "text/javascript" : "text/html" } }); } });
 const browser = await chromium.launch({ executablePath: "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe", headless: true });
 await mkdir(".test-artifacts", { recursive: true });
-let checks = 0;
-const check = (condition: unknown, message: string) => { assert.ok(condition, message); checks++; };
+let checks = 0;let lastCheck="starting";
+const check = (condition: unknown, message: string) => { assert.ok(condition, message); checks++;lastCheck=message; };
 const ui = (page: Page) => page.locator(".lpt-island, .lpt-sidebar"); // Phone shadow tree plus separate host sidebar.
 async function ready(page: Page) { await page.waitForFunction(() => !!document.querySelector(".lpt-island")?.shadowRoot?.querySelector(".lpt-root")); await page.waitForTimeout(80); }
 async function seed(page: Page, kind = "story") { await page.evaluate(k => (window as any).harness.seed(k), kind); await ready(page); }
 async function pageAppearance(page:Page){await page.locator(".lpt-side-appearance").evaluate((n:HTMLDetailsElement)=>{n.open=true;n.dispatchEvent(new Event("toggle"));});}
 async function settings(page:Page){for(const key of ["tracking","source"])await page.locator(`.lpt-side-${key}`).evaluate((n:HTMLDetailsElement)=>{n.open=true;n.dispatchEvent(new Event("toggle"));});}
 async function open(page: Page, app?: string) { const launcher=page.locator(".lpt-island").getByRole("button",{name:"Open phone",exact:true});if(await launcher.isVisible())await launcher.click();if(app==="Settings")await settings(page);else if(app)await page.locator(".lpt-island").locator(`[data-app="${app}"]`).click(); }
-async function home(page: Page) {const back=page.locator(".lpt-island").getByRole("button",{name:"Back to Home",exact:true});if(await back.isVisible())await back.click(); }
+async function home(page: Page) {const threadBack=page.locator(".lpt-island .lpt-thread-back");if(await threadBack.isVisible())await threadBack.click();const back=page.locator(".lpt-island").getByRole("button",{name:"Back to Home",exact:true});if(await back.isVisible())await back.click(); }
 async function save(page: Page) { await ui(page).locator(".lpt-form").getByRole("button", { name: "Save", exact: true }).click(); await page.waitForFunction(() => !document.querySelector(".lpt-island")?.shadowRoot?.querySelector(".lpt-form")); }
 try {
   for(const density of [1,2]) {
@@ -166,7 +166,39 @@ try {
   check(await addressedPage.locator('.lpt-island [data-app="Messages"] .lpt-unread-badge').innerText()==="2","Rejected NPC text adds no unread badge item");
   await addressedPage.locator('.lpt-island [data-app="Messages"]').click();check(!(await addressedPage.locator(".lpt-messages").textContent())!.includes("NPC-only text")&&await addressedPage.locator(".lpt-conversation").count()===2,"Only player-phone conversations appear in Messages");
   await addressedPage.evaluate(()=>{(window as any).harness.setComposer({text:'<phone-text from="Player" to="Ada">My actual reply</phone-text>'});(window as any).harness.sendComposer();});await addressedPage.waitForTimeout(130);
-  check(await addressedPage.locator(".lpt-outgoing").count()===1&&await addressedPage.evaluate(()=>(window as any).harness.getDocument().state.messages.at(-1).direction)==="outgoing","A sent user reply to a character stays outgoing after recipient filtering");await addressedPage.close();
+  check(await addressedPage.evaluate(()=>(window as any).harness.getDocument().state.messages.at(-1).direction)==="outgoing","A sent user reply to a character stays outgoing after recipient filtering");await addressedPage.close();
+  const portraitPage=await browser.newPage({viewport:{width:1100,height:850}});await portraitPage.goto(`http://127.0.0.1:${server.port}`);await ready(portraitPage);await open(portraitPage,"Scene");
+  check(await portraitPage.locator(".lpt-scene-when .lpt-field").count()===2,"Time and Date share one compact row");
+  await home(portraitPage);await portraitPage.locator('.lpt-island [data-app="Contacts"]').click();
+  check(await portraitPage.locator(".lpt-portrait-initial").count()===3&&await portraitPage.locator(".lpt-portrait-image").count()===0,"Without optional avatar permission, Contacts use name-colored initials");
+  const sourcePNG=await portraitPage.evaluate(()=>{const c=document.createElement("canvas");c.width=256;c.height=128;const x=c.getContext("2d")!;x.fillStyle="red";x.fillRect(0,0,64,128);x.fillStyle="green";x.fillRect(64,0,128,128);x.fillStyle="blue";x.fillRect(192,0,64,128);return c.toDataURL("image/png");});
+  await portraitPage.evaluate(data=>{(window as any).harness.portraitSources({characters:[{name:"ADA",data}],persona:{name:"Player",data}});(window as any).harness.reload();},sourcePNG);await ready(portraitPage);await open(portraitPage,"Contacts");await portraitPage.waitForTimeout(180);
+  check(await portraitPage.locator(".lpt-portrait-image").count()===2,"Exact card name and requesting persona produce portraits; unmatched NPC retains an initial");
+  const portraitAda=portraitPage.locator(".lpt-contact").filter({has:portraitPage.locator(".lpt-card-title",{hasText:/^Ada$/})});await portraitAda.locator(":scope > summary").click();await portraitAda.getByRole("button",{name:"Edit contact",exact:true}).click();
+  const file=portraitPage.locator(".lpt-portrait-file");await portraitPage.locator('.lpt-form [name="name"]').fill("Unsaved name");await file.setInputFiles({name:"preview.png",mimeType:"image/png",buffer:Buffer.from(sourcePNG.split(",")[1],"base64")});await portraitPage.waitForTimeout(100);
+  check(await portraitPage.locator('.lpt-form [name="name"]').inputValue()==="Unsaved name"&&await portraitPage.evaluate(()=>(window as any).harness.getDocument().portraits?.ada)===undefined,"Preparing a portrait preserves the name draft and waits for Save");await portraitPage.locator(".lpt-form").getByRole("button",{name:"Cancel",exact:true}).click();check(await portraitPage.evaluate(()=>(window as any).harness.getDocument().portraits?.ada)===undefined,"Cancel discards a prepared portrait");await portraitAda.locator(":scope > summary").click();await portraitAda.getByRole("button",{name:"Edit contact",exact:true}).click();await file.setInputFiles({name:"bad.svg",mimeType:"image/svg+xml",buffer:Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>')});await portraitPage.waitForTimeout(80);check((await portraitPage.locator(".lpt-error").innerText()).includes("PNG, JPEG or WebP"),"An uploaded SVG is rejected by contents");
+  await file.setInputFiles({name:"too-large.png",mimeType:"image/png",buffer:Buffer.alloc(5*1024*1024+1)});await portraitPage.waitForTimeout(80);check((await portraitPage.locator(".lpt-error").innerText()).includes("5 MB"),"Oversized upload is rejected before decoding");
+  await file.setInputFiles({name:"wrong.jpg",mimeType:"image/jpeg",buffer:Buffer.from(sourcePNG.split(",")[1],"base64")});await portraitPage.waitForTimeout(80);check((await portraitPage.locator(".lpt-error").innerText()).includes("does not match"),"Wrong declared image type is rejected");
+  await file.setInputFiles({name:"portrait.png",mimeType:"image/png",buffer:Buffer.from(sourcePNG.split(",")[1],"base64")});await portraitPage.waitForTimeout(120);await save(portraitPage);await portraitPage.waitForTimeout(80);
+  const custom=await portraitPage.evaluate(()=>(window as any).harness.getDocument().portraits.ada);check(custom.startsWith("data:image/webp;base64,")&&Buffer.from(custom.split(",")[1],"base64").length<20*1024,"Custom portrait is re-encoded small and stored on this chat");
+  check(await portraitAda.locator(".lpt-portrait-image").getAttribute("src")===custom,"Custom portrait takes priority over card avatar");
+  check(await portraitAda.locator(".lpt-portrait-image").evaluate((image:HTMLImageElement)=>{const c=document.createElement("canvas");c.width=c.height=128;const x=c.getContext("2d")!;x.drawImage(image,0,0);const pixel=x.getImageData(4,4,1,1).data;return image.naturalWidth===128&&image.naturalHeight===128&&pixel[1]>pixel[0]+pixel[2];}),"Portrait is center-cropped to 128 square, without side margins");await portraitPage.locator(".harness-widget").screenshot({path:".test-artifacts/contacts-portraits.png"});
+  await portraitAda.locator(".lpt-portrait-image").evaluate(n=>n.dispatchEvent(new Event("error")));check(await portraitAda.locator(".lpt-portrait-image").count()===0&&await portraitAda.locator(".lpt-portrait-initial").isVisible(),"Failed portrait falls back to an initial circle");
+  await portraitAda.locator(":scope > summary").click();await portraitAda.getByRole("button",{name:"Edit contact",exact:true}).click();await portraitAda.getByRole("button",{name:"Remove",exact:true}).click();await save(portraitPage);await portraitPage.waitForTimeout(80);check(await portraitPage.evaluate(()=>(window as any).harness.getDocument().portraits.ada)===undefined,"Remove clears the custom portrait and restores source fallback");
+  await portraitPage.evaluate(()=>(window as any).harness.activityStory('<phone-state>date: Thursday</phone-state><phone-text from="Ada" group="Crew" time="8 PM">First</phone-text><phone-text from="Ada" group="Crew">Second</phone-text>'));await portraitPage.waitForTimeout(80);
+  await portraitPage.evaluate(()=>(window as any).harness.activityStory('<phone-state>date: Friday</phone-state><phone-text from="Bea" group="Crew">Third</phone-text>'));await portraitPage.waitForTimeout(80);await home(portraitPage);await portraitPage.locator('.lpt-island [data-app="Messages"]').click();
+  check(await portraitPage.locator(".lpt-thread-row .lpt-thread-preview").innerText()==="Third"&&await portraitPage.locator(".lpt-thread-row .lpt-portrait").count()===1,"Message row has portrait and one-line latest-message preview");
+  check(await portraitPage.locator(".lpt-thread-preview").evaluate(n=>getComputedStyle(n).textOverflow==="ellipsis"),"Long message previews truncate with ellipsis");await portraitPage.locator(".lpt-thread-row").click();await portraitPage.waitForTimeout(100);
+  check(await portraitPage.locator(".lpt-thread-header .lpt-portrait").count()===1&&await portraitPage.locator(".lpt-text-continuation").count()===1&&await portraitPage.locator(".lpt-text-sender").allTextContents().then(x=>x.join("|")==="Ada|Bea"),"Explicit group thread has a portrait, sender labels and tight consecutive grouping");
+  check(await portraitPage.locator(".lpt-text-date").allTextContents().then(x=>x.join("|")==="Thursday|Friday")&&await portraitPage.locator(".lpt-reply").evaluate(n=>getComputedStyle(n).borderTopStyle==="solid"),"Only established story dates make solid day separators; no dashed composer border");
+  const dock=portraitPage.locator(".lpt-reply"),dockInput=portraitPage.locator(".lpt-reply-input");await dockInput.fill("One\nTwo\nThree\nFour\nFive");check(Number(await dockInput.getAttribute("rows"))<=4,"Docked composer grows to at most four lines");
+  check(await dock.evaluate(n=>{const thread=n.closest(".lpt-thread")!;return Math.abs(n.getBoundingClientRect().bottom-thread.getBoundingClientRect().bottom)<2;}),"Composer stays docked at the thread bottom");
+  await portraitPage.locator(".lpt-draft-hint").getByRole("button",{name:"Hide draft explanation"}).click();await portraitPage.waitForTimeout(80);check(await portraitPage.locator(".lpt-draft-hint").count()===0,"Draft explanation is dismissible once per user");
+  await dockInput.fill("A < B & C");await portraitPage.locator(".lpt-add-draft").click();check(await portraitPage.evaluate(()=>(window as any).harness.composer().text.includes('group="Crew"')&&(window as any).harness.composer().sendCalls===0),"Group Add to draft escapes text and keeps explicit group without sending");
+  await portraitPage.evaluate(()=>(window as any).harness.sendComposer());await portraitPage.waitForTimeout(120);check(await portraitPage.locator(".lpt-outgoing").count()===1&&await portraitPage.locator(".lpt-incoming").count()===3,"Only the sent group reply appears, right of the incoming bubbles");
+  for(let i=0;i<12;i++)await portraitPage.evaluate(i=>(window as any).harness.activityStory(`<phone-text from="Ada" group="Crew">Actual long message ${i} in the story.</phone-text>`),i);await portraitPage.waitForTimeout(130);
+  check(await portraitPage.locator(".lpt-text-list").evaluate(n=>n.scrollHeight-n.scrollTop-n.clientHeight<3),"Open thread follows new messages at the bottom");
+  await portraitPage.locator(".harness-widget").screenshot({path:".test-artifacts/thread-desktop.png"});await portraitPage.locator(".harness-drawer").evaluate(n=>{(n as HTMLElement).hidden=true;});await portraitPage.setViewportSize({width:390,height:844});await portraitPage.waitForTimeout(100);await portraitPage.locator(".harness-widget").screenshot({path:".test-artifacts/thread-mobile.png"});await portraitPage.setViewportSize({width:390,height:420});await portraitPage.waitForTimeout(150);const dockBounds=await dock.boundingBox();check(!!dockBounds&&dockBounds.y+dockBounds.height<=420,"Dock stays inside a short mobile-sized viewport");await portraitPage.locator(".harness-widget").screenshot({path:".test-artifacts/thread-short.png"});await portraitPage.close();
   const placementPage = await browser.newPage({ viewport: { width: 1100, height: 850 } });
   await placementPage.goto(`http://127.0.0.1:${server.port}/?auto-root`); await ready(placementPage);
   const initialHeight = await placementPage.locator(".lpt-viewport").evaluate(e => e.getBoundingClientRect().height);
@@ -204,7 +236,7 @@ try {
   await page.locator(".harness-widget").screenshot({ path: ".test-artifacts/scene-desktop.png" });
   await home(page); await ui(page).locator('[data-app="Contacts"]').click();
   check(await ui(page).locator(".lpt-contact").count() === 3, "Named Contacts and player card");
-  check(await ui(page).locator(".lpt-absent").getAttribute("open") === null, "Absent group starts collapsed");
+  check(await ui(page).locator(".lpt-absent").count() === 0, "Contacts use flat portrait rows without a nested absent group");
   const ada = ui(page).locator(".lpt-contact").filter({ has: page.locator(".lpt-card-title", { hasText: /^Ada$/ }) });
   await ada.locator(":scope > summary").click();
   check((await ada.innerText()).includes("Guide / Friend"), "Ordered roles");
@@ -214,7 +246,7 @@ try {
   await player.locator(":scope > summary").click();
   check(!(await player.innerText()).includes("Mood") && !(await player.innerText()).includes("Inner thoughts"), "Player card restricts private fields");
   await ada.locator(":scope > summary").click(); await ada.getByRole("button", { name: "Open texts", exact: true }).click();
-  check(await ui(page).locator('.lpt-conversation[data-conversation="ada"]').getAttribute("open") !== null, "Contact Open texts expands that person's conversation");
+  check(await ui(page).locator('.lpt-thread[data-conversation="ada"]').count() === 1, "Contact Open texts opens that person's thread");
   check(await ui(page).locator(".lpt-reply").count() === 1 && await ui(page).locator(".lpt-text-message").count() === 0, "Empty conversation has a reply box and no fabricated texts");
   await home(page); await ui(page).locator('[data-app="Locations"]').click();
   check((await ui(page).locator(".lpt-locations").innerText()).includes("Current"), "Current place derives from Scene");
@@ -278,9 +310,9 @@ try {
   await ui(page).getByRole("button", { name: "+ Add contact", exact: true }).click();
   await ui(page).locator('.lpt-form [name="name"]').fill("User contact"); await save(page);
   const addedContact = ui(page).locator(".lpt-contact").filter({ has: page.locator(".lpt-card-title", { hasText: /^User contact$/ }) });
-  await ui(page).locator(".lpt-absent > summary").click(); await addedContact.locator(":scope > summary").click();
+  await addedContact.locator(":scope > summary").click();
   check((await addedContact.innerText()).includes("edited by you"), "Contact addition is marked");
-  await addedContact.getByRole("button", { name: "Edit name", exact: true }).click();
+  await addedContact.getByRole("button", { name: "Edit contact", exact: true }).click();
   await addedContact.locator('.lpt-form [name="name"]').fill("Renamed contact"); await save(page);
   check(await ui(page).locator(".lpt-card-title", { hasText: /^Renamed contact$/ }).count() === 1, "Contact rename saves");
   if(await page.locator(".lpt-island .lpt-back").isVisible())await home(page); await settings(page);
@@ -337,14 +369,16 @@ try {
   check((await ui(page).locator(".lpt-text-notice").innerText()).includes("new text") || (await ui(page).locator(".lpt-text-notice").innerText()).includes("New text"), "New actual texts show a small arrival notice");
   await ui(page).locator('[data-app="Messages"]').click();
   check(await ui(page).locator(".lpt-conversation").count() === 2, "Group roleplay keeps both senders as separate conversations");
-  const adaTexts = ui(page).locator('[data-conversation="ada"]'); const beaTexts = ui(page).locator('[data-conversation="bea"]');
-  await adaTexts.locator(":scope > summary").click(); await page.waitForTimeout(100);
-  check(await adaTexts.locator(".lpt-unread-badge").isHidden() && await beaTexts.locator(".lpt-unread-badge").innerText() === "1", "Opening Ada clears only Ada's unread count");
-  check(await adaTexts.locator(".lpt-text-time").innerText() === "Dusk" && await beaTexts.locator(".lpt-text-time").count() === 0, "Only established text times are displayed");
-  await page.evaluate(() => (window as any).harness.reload()); await ready(page); await open(page,"Messages");
-  check(await adaTexts.locator(".lpt-unread-badge").isHidden() && (await beaTexts.locator(".lpt-unread-badge").textContent()) === "1", "Per-conversation read status persists across extension restart");
-  check(await ui(page).locator(".lpt-text-notice").isHidden(), "History replay does not announce old texts as new arrivals");
-  await adaTexts.locator(":scope > summary").click();
+  const adaTexts=ui(page).locator('.lpt-thread[data-conversation="ada"]');
+  await ui(page).locator('.lpt-thread-row[data-conversation="ada"]').click();await page.waitForTimeout(100);
+  check(await adaTexts.count()===1&&await adaTexts.locator(".lpt-text-sender").count()===0,"A direct thread opens with no redundant sender labels");
+  check(await adaTexts.locator(".lpt-text-time").innerText()==="Dusk","Known text time appears inside the thread");
+  await adaTexts.getByRole("button",{name:"Back to Messages",exact:true}).click();
+  check(await ui(page).locator('.lpt-thread-row[data-conversation="ada"] .lpt-unread-badge').isHidden()&&await ui(page).locator('.lpt-thread-row[data-conversation="bea"] .lpt-unread-badge').innerText()==="1","Opening a thread clears only that conversation");
+  await page.evaluate(()=>(window as any).harness.reload());await ready(page);await open(page,"Messages");
+  check(await ui(page).locator('.lpt-thread-row[data-conversation="ada"] .lpt-unread-badge').isHidden()&&await ui(page).locator('.lpt-thread-row[data-conversation="bea"] .lpt-unread-badge').innerText()==="1","Read status persists across restart");
+  check(await ui(page).locator(".lpt-text-notice").isHidden(),"History replay does not announce old texts");
+  await ui(page).locator('.lpt-thread-row[data-conversation="ada"]').click();
   const reply = adaTexts.locator(".lpt-reply-input"); await reply.fill("Working reply"); await reply.evaluate(e => (e as HTMLTextAreaElement).setSelectionRange(4,4));
   await page.evaluate(() => (window as any).harness.incoming("Bea","Another actual text.")); await page.waitForTimeout(100);
   check(await reply.inputValue() === "Working reply" && await reply.evaluate(e => (e as HTMLTextAreaElement).selectionStart) === 4, "New texts preserve a reply being written and its caret");
@@ -359,7 +393,7 @@ try {
   await page.evaluate(() => (window as any).harness.sendComposer()); await page.waitForTimeout(100);
   check(await adaTexts.locator(".lpt-outgoing .lpt-text-body").innerText() === "Actually yes & <hello>.", "An outgoing reply appears only after the simulated user Send stores the tagged row");
   await page.evaluate(() => { (window as any).harness.setComposer({text:'<phone-text from="Player" to="Bea">Typed by me.</phone-text>'}); (window as any).harness.sendComposer(); }); await page.waitForTimeout(100);
-  check((await beaTexts.locator(".lpt-outgoing .lpt-text-body").textContent()) === "Typed by me.", "A manually typed tag uses its saved recipient rather than the currently open conversation");
+  check(await page.evaluate(()=>(window as any).harness.getDocument().state.messages.some((m:any)=>m.to==="Bea"&&m.direction==="outgoing"&&m.text==="Typed by me.")), "A manually typed tag uses its saved recipient rather than the currently open conversation");
   const outgoingBefore = await page.evaluate(() => (window as any).harness.getDocument().state.messages.length);
   await page.evaluate(() => (window as any).harness.incoming("Player","An AI-authored player text.")); await page.waitForTimeout(100);
   check(await page.evaluate(() => (window as any).harness.getDocument().state.messages.length) === outgoingBefore, "Default OFF rejects AI-authored player texts");
@@ -384,7 +418,7 @@ try {
   check(await ui(page).locator(".lpt-text-notice").isVisible(), "A new saved text shows its notice even with the phone closed");
   const noticeBounds = await ui(page).locator(".lpt-text-notice").boundingBox(); const noticeWidget = await page.locator(".harness-widget").boundingBox();
   check(!!noticeBounds && !!noticeWidget && noticeBounds.y + noticeBounds.height <= noticeWidget.y + noticeWidget.height, `Closed-phone notice fits inside its own protected placement: ${JSON.stringify({noticeBounds,noticeWidget})}`);
-  await open(page,"Messages"); await ui(page).locator('[data-conversation="ada"] > summary').click();
+  await open(page,"Messages"); await ui(page).locator('.lpt-thread-row[data-conversation="ada"]').click();
   await ui(page).locator(".lpt-reply-input").fill("Pinned to the original chat");
   await page.evaluate(() => { (window as any).oldReplyForm=document.querySelector(".lpt-island")!.shadowRoot!.querySelector(".lpt-reply"); (window as any).harness.switchChat("b"); }); await page.waitForTimeout(100);
   await page.evaluate(() => { (window as any).harness.setComposer({text:"Leave this other draft alone"}); (window as any).oldReplyForm.dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})); });
@@ -437,4 +471,5 @@ try {
   const small = await page.locator(".harness-widget").boundingBox(); check(!!small && small.y + small.height <= 420, "Short viewport/keyboard layout remains within screen");
   check(errors.length === 0, `No browser errors: ${errors.join("; ")}`);
   console.log(`Browser UI verification passed: ${checks} checks. Screenshots in .test-artifacts/. No real Lumiverse instance or provider was used.`);
+} catch(error) { console.error(`Browser stopped after check ${checks}: ${lastCheck}`);for(const [i,page]of browser.contexts().flatMap(c=>c.pages()).entries())try{await page.screenshot({path:`.test-artifacts/failure-${i}.png`});}catch{}throw error;
 } finally { await browser.close(); server.stop(true); }

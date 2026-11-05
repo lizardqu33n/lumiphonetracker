@@ -9,6 +9,7 @@ import { replyTag } from "../src/messages";
 import { HelperAI, type HelperIO } from "../src/helper";
 
 const docs = new Map<string, string>(); const histories = new Map<string, StoryRow[]>();
+let portraitSources:unknown={characters:[]};
 let prefs: unknown = defaultPreferences(); let activeChat: string | null = "a"; let updateDelay = 0;
 let onBackend: (p: unknown) => void = () => {}; const events = new Map<string, Set<(p: unknown) => void>>();
 const tagHandlers: { options: unknown; callback: (p: unknown) => void }[] = [];
@@ -28,7 +29,8 @@ const sendToBackend = (payload: unknown) => {
   const id = payload.requestId; const chat = payload.chatId===null?"":String(payload.chatId ?? activeChat ?? ""); const reply = onBackend;
   const run = async () => {
     try {
-      if (payload.type === "phone_preferences" || payload.type === "phone_preferences_update") {
+      if(payload.type==="phone_portraits"){reply({type:"phone_portraits_result",requestId:payload.requestId,chatId:payload.chatId,sources:portraitSources});return;}
+  if (payload.type === "phone_preferences" || payload.type === "phone_preferences_update") {
         if (payload.type === "phone_preferences_update" && failAppearanceSave) {
           reply({ type: "phone_preferences_error", requestId: id, message: "Appearance could not be saved." }); return;
         }
@@ -44,7 +46,7 @@ const sendToBackend = (payload: unknown) => {
         const reads = await readStore.mark("user", chat, String(payload.key), payload.observed as { id: string; receipt: string }[], snapshot.state.messages,snapshot.state);
         reply({ type: "phone_reads_result", requestId: id, chatId: chat, reads }); return;
       }
-      let snapshot = payload.type === "phone_update" ? await store.update(`owner-${chat}`, chat, Number(payload.revision), { edit: payload.edit, settings: payload.settings, dismissNotice: payload.dismissNotice }) : await store.sync(`owner-${chat}`, chat);
+      let snapshot = payload.type === "phone_update" ? await store.update(`owner-${chat}`, chat, Number(payload.revision), { edit: payload.edit, settings: payload.settings, dismissNotice: payload.dismissNotice,portrait:payload.portrait }) : await store.sync(`owner-${chat}`, chat);
       if(payload.type==="phone_update"){helper.cancel(chat);if(snapshot.settings.source==="helper"){await helper.connections(`owner-${chat}`,chat);snapshot=await store.sync(`owner-${chat}`,chat);}}
       reply({ type: "phone_snapshot", requestId: id, chatId: chat, chatName:chat==="a"?"Lantern story":"Other story", snapshot, reads: await readStore.read("user",chat),helperBusy:helper.busy(chat) });
     } catch (e) { reply({ type: payload.type === "phone_mark_read" ? "phone_reads_error" : "phone_error", requestId: id, chatId:chat, message: e instanceof Error ? e.message : "Failed" }); }
@@ -145,6 +147,7 @@ const api = {
   failWidget(value: boolean) { failWidget = value; },
   setCSS(css: string) { prefs = { ...defaultPreferences(), css }; },
   activityStory(content:string,role:"assistant"|"user"="assistant",name?:string){const chat=activeChat!,rows=histories.get(chat)??[];rows.push({id:`${chat}-${rows.length}`,chat_id:chat,index_in_chat:rows.length,role,swipe_id:0,content,...(name?{name}:{})});histories.set(chat,rows);events.get("MESSAGE_SENT")?.forEach(fn=>fn({chatId:chat}));},
+  portraitSources(value:unknown){portraitSources=value;},
   getDocument: (chat = "a") => JSON.parse(docs.get(chat) ?? "null"),
   emitTag(tag: string, streaming: boolean, user: boolean) { for (const item of tagHandlers) if ((item.options as { tagName: string }).tagName === tag) item.callback({ chatId: activeChat, messageId: `${activeChat}-0`, isUser: user, isStreaming: streaming }); },
   tagHandlers: () => tagHandlers.map(h => h.options), tagCalls: () => tagCalls,

@@ -1,5 +1,7 @@
 # Style your phone
 
+Version 0.11.0 adds compact Scene and Contact rows, portrait circles, a newest-first Messages list and a docked text-thread composer. The top strip and sidebar rework are the next checkpoint. Existing phone custom CSS still overrides the defaults.
+
 Version 0.10.1 bundles the supplied styles(1).css and sidebar.css as the default look: pastel tiles, plum outlines, heart markers and solid dark story surfaces. This default does not use the custom CSS character limit. Class names, navigation and tracker behavior are unchanged.
 
 Open **sidebar > Phone > Appearance > Custom CSS** to override the defaults live. Your saved custom CSS still overrides a new default after an update; it is not deleted automatically. To see the new default alone, use **Reset appearance** at the top of the Phone sidebar tab.
@@ -377,7 +379,7 @@ These remain the existing UI hooks, not extra screens or settings. `.lpt-root[da
 | `.lpt-text-list` | Chronological messages within a sender conversation. |
 | `.lpt-text-message` | One text with sender, body and optional established time. |
 | `.lpt-text-notice` | Brief new-text notice, including when the phone is closed. |
-| `.lpt-text-sender` | Saved sender name; outgoing texts also say You. |
+| `.lpt-text-sender` | Sender label in group threads only; outgoing says You. |
 | `.lpt-text-time` | Story-supplied text timestamp; absent if unknown. |
 | `.lpt-textarea` | Multi-line edit field. |
 | `.lpt-toggle` | Native checkbox styled as a pill switch; its checked behavior is unchanged. |
@@ -392,6 +394,72 @@ These remain the existing UI hooks, not extra screens or settings. `.lpt-root[da
 | Class | What it is |
 | --- | --- |
 | `.lpt-side-scope` | Small per-chat or all-my-chats scope label. |
+
+## Compact views and portraits (0.11.0)
+
+The portrait and thread rules are grouped at the end of src/styles.css. All new
+colors, sizes and spacing tokens are on `.lpt-root`; no inline styles are added.
+Phone CSS cannot reach the protected sidebar Reset. Persona image data is never
+stored in styles or shared chat data; custom contact portraits are shared chat data.
+
+| Variable | Default | What it changes |
+| --- | --- | --- |
+| `--lpt-portrait-size` | `42px` | Portrait diameter in Contacts, rows and thread headers. |
+| `--lpt-portrait-radius` | `50%` | Portrait shape; 50% is a circle. |
+| `--lpt-bubble-max-width` | `85%` | Maximum bubble width within a thread. |
+| `--lpt-composer-font-size` | `16px` | Reply text size; defaults to 16px for mobile readability. |
+| `--lpt-portrait-text` | `var(--lpt-on-pastel)` | Initial-letter color. |
+| `--lpt-portrait-tone-0` | `var(--lpt-lilac-2)` | Name-derived initial palette shade 0. |
+| `--lpt-portrait-tone-1` | `var(--lpt-pink-1)` | Name-derived initial palette shade 1. |
+| `--lpt-portrait-tone-2` | `var(--lpt-blue)` | Name-derived initial palette shade 2. |
+| `--lpt-portrait-tone-3` | `var(--lpt-yellow)` | Name-derived initial palette shade 3. |
+| `--lpt-portrait-tone-4` | `var(--lpt-lilac-1)` | Name-derived initial palette shade 4. |
+| `--lpt-thread-gap` | `12px` | Space between separate sender groups. |
+| `--lpt-bubble-gap` | `3px` | Small gap between consecutive texts from one sender. |
+| `--lpt-thread-row-padding` | `10px` | Padding in compact Contacts and conversation rows. |
+| `--lpt-composer-max-lines` | `4` | Reply editor visual line limit. |
+| `--lpt-composer-padding` | `8px` | Composer and hint padding. |
+
+| Class | What it is |
+| --- | --- |
+| `.lpt-scene-when` | One compact row for the existing Time and Date fields. |
+| `.lpt-contact-copy` | Name, roles and Here now/Last seen text beside a contact portrait. |
+| `.lpt-portrait` | Fixed-size portrait circle with safe initial fallback. |
+| `.lpt-portrait-initial` | Name initial displayed when no image is available. |
+| `.lpt-portrait-image` | Validated raster image, cropped to fill the portrait. |
+| `.lpt-portrait-controls` | Portrait preview, Change portrait and Remove in contact edit. |
+| `.lpt-portrait-status` | Small Save-to-apply portrait confirmation in contact edit. |
+| `.lpt-portrait-file` | Native raster-only file input opened by Change portrait. |
+| `.lpt-change-portrait` | Change portrait button. |
+| `.lpt-remove-portrait` | Remove custom portrait button. |
+| `.lpt-conversations` | Newest-first conversation list. |
+| `.lpt-thread-row` | Portrait, name, preview, known time and badge button. |
+| `.lpt-thread-copy` | Flexible name/preview area in a list row. |
+| `.lpt-thread-preview` | Single line with ellipsis for the latest message. |
+| `.lpt-thread-time` | Known story time beside a conversation preview. |
+| `.lpt-thread` | Open text thread, laid out above its docked composer. |
+| `.lpt-thread-header` | Back, portrait and thread name. |
+| `.lpt-thread-back` | Back to Messages list button. |
+| `.lpt-thread-name` | Direct contact or established group name. |
+| `.lpt-text-continuation` | Tighter spacing for a consecutive text from the same sender. |
+| `.lpt-text-date` | Solid separator for an established story date. |
+| `.lpt-draft-hint` | Small personal, dismissible no-send explanation above the composer. |
+| `.lpt-reply-label` | Compact accessible reply label and growing input. |
+| `.lpt-portrait-tone-0` | Deterministic initial-circle palette choice 0; no inline colors. |
+| `.lpt-portrait-tone-1` | Deterministic initial-circle palette choice 1; no inline colors. |
+| `.lpt-portrait-tone-2` | Deterministic initial-circle palette choice 2; no inline colors. |
+| `.lpt-portrait-tone-3` | Deterministic initial-circle palette choice 3; no inline colors. |
+| `.lpt-portrait-tone-4` | Deterministic initial-circle palette choice 4; no inline colors. |
+
+Existing classes keep these roles: `.lpt-conversation` is now a list-row button,
+`.lpt-reply` is the docked form, `.lpt-reply-input` grows from one to four lines,
+`.lpt-text-list` scrolls independently, `.lpt-incoming` aligns left, and
+`.lpt-outgoing` aligns right. `.lpt-text-sender` appears only in explicit group
+threads. `.lpt-text-time` is small and absent for unknown times. The old
+`.lpt-absent` wrapper is no longer emitted; each Contact expands inline.
+`.lpt-content[data-thread="true"]` switches only the open thread into a fixed
+flex layout so its composer stays below the scrolling bubbles. The native
+rows property controls textarea growth without inline styles.
 
 ## Copy-paste examples
 

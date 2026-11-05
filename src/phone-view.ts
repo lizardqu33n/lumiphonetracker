@@ -1,3 +1,4 @@
+import {preparePortrait,portraitBytes,portraitSource,portraitKey,initialTone,emptyPortraitSources,PORTRAIT_INPUT_LIMIT,type PortraitSources} from "./portraits";
 import type { Cell, Contact, Document as PhoneDocument, ManualEdit, Note, Section } from "./model";
 import { effectiveDocument, CONTACT_KEYS, SCENE_KEYS, SECTIONS, normalize } from "./model";
 import { APP_IMAGES } from "./app-icons";
@@ -10,10 +11,10 @@ import { conversations, emptyReads, isUnread, receipt, threadKey, type Conversat
 import { isRecord } from "./shared";
 
 export interface ViewActions {
-  update(change: { edit?: Partial<ManualEdit>; settings?: unknown; dismissNotice?: string }, revision: number): Promise<PhoneDocument>;
-  preferences(change: { css?: string; dismiss?: App|"Home" }): Promise<Preferences>;
+  update(change: { edit?: Partial<ManualEdit>; settings?: unknown; dismissNotice?: string;portrait?:{name:string;data:string|null} }, revision: number): Promise<PhoneDocument>;
+  preferences(change: { css?: string; dismiss?: App|"Home"|"Draft hint" }): Promise<Preferences>;
   markRead(chatId: string, key: string, observed: { id: string; receipt: string }[]): Promise<ReadState>;
-  draft(chatId: string, to: string, text: string): { manual: boolean; tag: string };
+  draft(chatId: string, to: string, text: string,group?:string): { manual: boolean; tag: string };
   size(width: number, height: number, open: boolean): void;
 }
 export const DESCRIPTIONS: Record<App, string> = {
@@ -77,6 +78,10 @@ export class PhoneView {
   private editing = false;
   private busy = false;
   private observer: ResizeObserver;
+  private portraitSources=emptyPortraitSources();
+  private portraitEpoch=0;
+  private pendingThreadScroll=false;
+  private viewportFit=()=>this.measure();
   private selectedText: string | null = null;
   private probe = el("div", "lpt-size-probe");
   private reads = emptyReads();
@@ -100,6 +105,7 @@ export class PhoneView {
     this.probe.setAttribute("aria-hidden", "true"); this.root.append(this.launcher, this.frame, this.probe); mount.append(this.root);
     this.root.addEventListener("keydown", e => { if (e.key === "Escape") { e.stopPropagation(); this.close(); } });
     this.observer = new ResizeObserver(() => this.measure()); this.observer.observe(this.root); this.observer.observe(this.probe); this.observer.observe(this.launcher);
+    window.visualViewport?.addEventListener("resize",this.viewportFit);
     this.render(); this.setOpen(false);
   }
   receive(doc: PhoneDocument | null, reads?: ReadState): void {
@@ -111,7 +117,7 @@ export class PhoneView {
     this.doc = doc;
     if(this.app!=="Home"&&!doc?.settings.apps[this.app])this.app="Home";
     if (changedChat) {
-      this.chatEpoch++; this.pendingReads.clear(); this.reads = reads ?? emptyReads(); this.replyDrafts.clear(); this.manualDrafts.clear();
+      this.portraitEpoch++;this.portraitSources=emptyPortraitSources();this.chatEpoch++; this.pendingReads.clear(); this.reads = reads ?? emptyReads(); this.replyDrafts.clear(); this.manualDrafts.clear();
       this.clearTextNotice(); this.editing = false; this.app = "Home"; this.selectedText = null;
 
 
@@ -123,7 +129,20 @@ export class PhoneView {
     this.markVisibleConversation();this.markVisibleActivity();
   }
   receiveReads(reads: ReadState): void { if (reads.revision >= this.reads.revision) { this.reads = reads; this.refreshBadges(); } }
-  receivePreferences(prefs: Preferences): void { if (prefs.revision >= this.prefs.revision) {this.prefs=prefs;if(prefs.dismissed.includes(this.app))this.root.querySelector(this.app==="Home"?".lpt-home-hint":".lpt-description")?.remove();} }
+  receivePreferences(prefs: Preferences): void { if (prefs.revision >= this.prefs.revision) {this.prefs=prefs;if(prefs.dismissed.includes("Draft hint"))this.root.querySelector(".lpt-draft-hint")?.remove();if(prefs.dismissed.includes(this.app))this.root.querySelector(this.app==="Home"?".lpt-home-hint":".lpt-description")?.remove();} }
+  async receivePortraitSources(raw:unknown):Promise<void>{
+    const epoch=++this.portraitEpoch,chat=this.chatEpoch;const sources=emptyPortraitSources();
+    const prepare=async(v:unknown)=>{if(!isRecord(v)||typeof v.name!=="string"||v.name.length>100)return;try{const bytes=portraitBytes(v.data,PORTRAIT_INPUT_LIMIT);return {name:v.name,data:await preparePortrait(new Blob([bytes],{type:typeof v.data==="string"?v.data.slice(5,v.data.indexOf(";")):""}))};}catch{return;}};
+    if(isRecord(raw)){if(Array.isArray(raw.characters))for(const c of raw.characters.slice(0,30)){const result=await prepare(c);if(result)sources.characters.push(result);}const persona=await prepare(raw.persona);if(persona)sources.persona=persona;}
+    if(chat!==this.chatEpoch||epoch!==this.portraitEpoch)return;this.portraitSources=sources;if(!this.editing)this.render();
+  }
+  private portrait(name:string,player=false,group=false,custom?:Record<string,string>):HTMLElement{
+    const node=el("span",`lpt-portrait lpt-portrait-tone-${initialTone(name)}`);node.setAttribute("role","img");node.setAttribute("aria-label",`Portrait for ${name}`);
+    const initial=el("span","lpt-portrait-initial",Array.from(name.trim())[0]?.toLocaleUpperCase()??"?");node.append(initial);
+    const source=group?undefined:portraitSource(name,custom??this.doc?.portraits??{},this.portraitSources,player);
+    if(source)try{portraitBytes(source);const img=el("img","lpt-portrait-image");img.alt="";img.setAttribute("aria-hidden","true");img.draggable=false;img.addEventListener("load",()=>{initial.hidden=true;});img.addEventListener("error",()=>{img.remove();initial.hidden=false;});img.src=source;node.append(img);}catch{}
+    return node;
+  }
   setError(message: string): void { this.error.textContent = message; }
   setStatus(message: string): void { this.status.textContent = message; }
   fit(): void { this.measure(); }
@@ -137,7 +156,7 @@ export class PhoneView {
   }
   open(app?: App): void { if (app) this.navigate(app); this.setOpen(true); this.back.hidden ? this.frame.querySelector<HTMLElement>(".lpt-app-button, .lpt-close")?.focus() : this.back.focus(); }
   close(): void { this.setOpen(false); this.launcher.focus(); }
-  destroy(): void { clearTimeout(this.noticeTimer); this.chatEpoch++; this.observer.disconnect(); this.root.remove(); }
+  destroy(): void { window.visualViewport?.removeEventListener("resize",this.viewportFit);this.portraitEpoch++;clearTimeout(this.noticeTimer); this.chatEpoch++; this.observer.disconnect(); this.root.remove(); }
   private setOpen(open: boolean): void {
     this.openState = open; this.root.dataset.open = String(open); this.frame.hidden = !open; this.launcher.hidden = open;
     if (open) this.frame.insertBefore(this.textNotice, this.content); else this.root.insertBefore(this.textNotice, this.frame);
@@ -155,13 +174,16 @@ export class PhoneView {
   }
   private navigate(app: App | "Home"): void { this.app = app!=="Home"&&!this.doc?.settings.apps[app]?"Home":app; this.editing = false; this.render(); this.content.scrollTop = 0; this.markVisibleActivity(); }
   private render(): void {
+    if(this.app==="Messages"&&this.selectedText!==null&&(!this.enabled("messages")||!this.doc||( !this.doc.state.messages.some(m=>threadKey(m)===this.selectedText)&&!this.doc.state.contacts.some(c=>normalize(c.name)===this.selectedText))))this.selectedText=null;
     const focused = this.mount instanceof ShadowRoot ? this.mount.activeElement : document.activeElement;
     const replyFocus = focused instanceof HTMLTextAreaElement && focused.classList.contains("lpt-reply-input") ? {
-      key: focused.closest<HTMLElement>(".lpt-conversation")?.dataset.conversation, start: focused.selectionStart, end: focused.selectionEnd,
+      key: focused.closest<HTMLElement>(".lpt-thread")?.dataset.conversation, start: focused.selectionStart, end: focused.selectionEnd,
     } : null;
+    const previousList=this.content.querySelector<HTMLElement>(".lpt-text-list");const oldScroll=previousList?{key:previousList.closest<HTMLElement>(".lpt-thread")?.dataset.conversation,top:previousList.scrollTop,bottom:this.pendingThreadScroll||previousList.scrollHeight-previousList.clientHeight-previousList.scrollTop<30}:null;
+    this.content.dataset.thread=String(this.app==="Messages"&&this.selectedText!==null);
     this.content.replaceChildren(); this.error.textContent = ""; this.status.textContent = "";
     this.heading.textContent = this.app === "Home" ? "Lumi Phone Tracker" : this.app;
-    this.back.hidden = this.app === "Home";
+    this.back.hidden = this.app === "Home" || (this.app==="Messages"&&this.selectedText!==null);
     if (this.app === "Home") {
       const home = el("div", "lpt-home");
       for (const app of APPS.filter(a=>this.doc?.settings.apps[a])) {
@@ -178,7 +200,7 @@ export class PhoneView {
       }
       if (!this.doc) this.content.append(el("p", "lpt-empty", "Open a chat to start keeping track of your story."));
     } else {
-      if (!this.prefs.dismissed.includes(this.app)) this.description(this.app);
+      if (!this.prefs.dismissed.includes(this.app)&&!(this.app==="Messages"&&this.selectedText!==null)) this.description(this.app);
       if (!this.doc && true) this.empty("Open a chat first. Each chat keeps its own story information.");
       else if (this.app === "Scene") this.scene();
       else if (this.app === "Weather") this.weather();
@@ -197,11 +219,12 @@ export class PhoneView {
     this.error.setAttribute("role", "alert"); this.status.setAttribute("aria-live", "polite"); this.content.append(this.error, this.status);
     this.refreshBadges();
     if (replyFocus) {
-      const card = Array.from(this.content.querySelectorAll<HTMLElement>(".lpt-conversation")).find(c => c.dataset.conversation === replyFocus.key);
+      const card = Array.from(this.content.querySelectorAll<HTMLElement>(".lpt-thread")).find(c => c.dataset.conversation === replyFocus.key);
       const input = card?.querySelector<HTMLTextAreaElement>(".lpt-reply-input");
       if (input) { input.focus(); input.setSelectionRange(replyFocus.start, replyFocus.end); }
     }
-    requestAnimationFrame(() => this.measure());
+    this.pendingThreadScroll=this.app==="Messages"&&this.selectedText!==null&&(!oldScroll||oldScroll.key!==this.selectedText||oldScroll.bottom);
+    requestAnimationFrame(() => {const list=this.content.querySelector<HTMLElement>(".lpt-text-list");if(list)list.scrollTop=oldScroll?.key===this.selectedText&&!oldScroll.bottom?oldScroll.top:list.scrollHeight;this.pendingThreadScroll=false;this.measure();});
   }
   private description(app: App): void {
     const row = el("div", "lpt-description");
@@ -245,7 +268,7 @@ export class PhoneView {
     actions.append(submit, button("Cancel", "lpt-cancel", () => { this.editing = false; this.render(); })); form.append(actions);
     form.addEventListener("submit", e => {
       e.preventDefault();
-      if(originEpoch!==this.chatEpoch||originChat!==this.doc?.chatId)return;
+      if(originEpoch!==this.chatEpoch||originChat!==this.doc?.chatId||!form.isConnected)return;
       const values: Record<string, string | boolean> = {};
       for (const [key, input] of controls) values[key] = input instanceof HTMLInputElement && input.type === "checkbox" ? input.checked : input.value.trim();
       void this.change(save(values), revision);
@@ -285,7 +308,9 @@ export class PhoneView {
   }
   private scene(): void {
     const section = el("section", "lpt-scene");
-    for (const key of SCENE_KEYS) if (this.enabled(`scene.${key}`)) this.field(section, key, this.doc!.state.scene[key], "scene");
+    if(this.enabled("scene.location"))this.field(section,"location",this.doc!.state.scene.location,"scene");
+    const when=el("div","lpt-scene-when");for(const key of ["time","date"] as const)if(this.enabled(`scene.${key}`))this.field(when,key,this.doc!.state.scene[key],"scene");if(when.children.length)section.append(when);
+    if(this.enabled("scene.present"))this.field(section,"present",this.doc!.state.scene.present,"scene");
     if (!section.children.length) this.empty("Scene fields are off. Turn them on in the sidebar's Phone tab.", section);
     this.content.append(section);
   }
@@ -312,32 +337,49 @@ export class PhoneView {
     const v = this.doc!.state.scene.present?.value; const present = new Set((Array.isArray(v) ? v : []).map(normalize));
     const contacts = this.doc!.state.contacts;
     for (const c of contacts.filter(c => present.has(normalize(c.name)))) this.contactCard(section, c, true);
-    const absent = contacts.filter(c => !present.has(normalize(c.name)));
-    if (absent.length) {
-      const group = el("details", "lpt-absent lpt-section"); group.append(el("summary", "lpt-summary", `Not here now (${absent.length})`));
-      for (const c of absent) this.contactCard(group, c, false); section.append(group);
-    }
+    for(const c of contacts.filter(c=>!present.has(normalize(c.name))))this.contactCard(section,c,false);
     if (!contacts.length) this.empty("No contacts yet. Named characters appear when the story establishes them.", section);
   }
   private contactCard(parent: HTMLElement, c: Contact, here: boolean): void {
     const card = el("details", "lpt-card lpt-contact"); const summary = el("summary", "lpt-summary");
-    summary.append(el("span", "lpt-card-title", c.name), ...(c.player ? [el("span", "lpt-marker", "You")] : []));
-    if (c.editedByUser) summary.append(el("span", "lpt-marker", "edited by you"));
-    if (!c.player && this.enabled("contacts.roles") && Array.isArray(c.fields.roles?.value) && c.fields.roles.value.length) summary.append(el("span", "lpt-card-subtitle", c.fields.roles.value.join(" / ")));
-    summary.append(el("span", "lpt-card-subtitle", here ? "Here now" : `Last seen: ${c.lastSeen ?? "not established"}`));
+    summary.append(this.portrait(c.name,c.player));const words=el("span","lpt-contact-copy");summary.append(words);words.append(el("span", "lpt-card-title", c.name), ...(c.player ? [el("span", "lpt-marker", "You")] : []));
+    if (c.editedByUser) words.append(el("span", "lpt-marker", "edited by you"));
+    if (!c.player && this.enabled("contacts.roles") && Array.isArray(c.fields.roles?.value) && c.fields.roles.value.length) words.append(el("span", "lpt-card-subtitle", c.fields.roles.value.join(" / ")));
+    words.append(el("span", "lpt-card-subtitle", here ? "Here now" : `Last seen: ${c.lastSeen ?? "not established"}`));
     const body = el("div", "lpt-card-body");
     for (const key of CONTACT_KEYS) if (this.enabled(`contacts.${key}`) && (!c.player || ["physical", "position", "attire"].includes(key))) this.field(body, key, c.fields[key], "contact", c);
     const actions = el("div", "lpt-actions");
     const openTexts = button("Open texts", "lpt-open-texts", () => { this.selectedText = normalize(c.name); this.navigate("Messages"); this.markVisibleConversation(); });
     openTexts.append(this.unreadBadge(normalize(c.name)));
-    actions.append(button("Edit name", "lpt-button", () => this.contactForm(body, c)));if(this.enabled("messages"))actions.append(openTexts);
+    actions.append(button("Edit contact", "lpt-button", () => this.contactForm(body, c)));if(this.enabled("messages"))actions.append(openTexts);
     this.deleteAction(actions, { target: "contact", name: c.name }); body.append(actions); card.append(summary, body); parent.append(card);
   }
-  private contactForm(parent: HTMLElement, contact?: Contact): void {
-    if (!contact && this.doc!.state.contacts.length >= 30) { this.setError("Contacts is full (30/30). Delete a contact to make room."); return; }
-    this.form(parent, [{ key: "name", label: "Name", value: contact?.name ?? "", required: true, max: 100 }], v => ({ edit: {
-      target: "contact", name: contact?.name ?? String(v.name), ...(contact && v.name !== contact.name ? { rename: String(v.name) } : {}), value: {},
-    } }));
+  private contactForm(parent:HTMLElement,contact?:Contact):void {
+    if(this.editing)return;
+    if(!contact&&this.doc!.state.contacts.length>=30){this.setError("Contacts is full (30/30). Delete a contact to make room.");return;}
+    let pendingPortrait:string|null|undefined;
+    this.form(parent,[{key:"name",label:"Name",value:contact?.name??"",required:true,max:100}],v=>({
+      ...(contact&&v.name===contact.name?{}:{edit:{target:"contact" as const,name:contact?.name??String(v.name),...(contact&&v.name!==contact.name?{rename:String(v.name)}:{}),value:{}}}),
+      ...(contact&&pendingPortrait!==undefined?{portrait:{name:contact.name,data:pendingPortrait}}:{}),
+    }));
+    if(!contact)return;
+    const form=parent.querySelector<HTMLFormElement>(".lpt-form");if(!form)return;
+    const epoch=this.chatEpoch,name=contact.name,key=portraitKey(name);
+    const controls=el("div","lpt-portrait-controls"),file=el("input","lpt-portrait-file");
+    file.type="file";file.accept="image/png,image/jpeg,image/webp";file.hidden=true;file.setAttribute("aria-label","Choose portrait");
+    let preview=this.portrait(name,contact.player);
+    const notice=el("small","lpt-portrait-status");notice.setAttribute("aria-live","polite");
+    const refreshPreview=()=>{const custom={...this.doc?.portraits};if(pendingPortrait===null)delete custom[key];else if(pendingPortrait)custom[key]=pendingPortrait;const next=this.portrait(name,contact.player,false,custom);preview.replaceWith(next);preview=next;};
+    const remove=button("Remove","lpt-button lpt-remove-portrait",()=>{if(epoch!==this.chatEpoch)return;pendingPortrait=null;refreshPreview();remove.disabled=true;notice.textContent="Save to remove the custom portrait.";});
+    remove.disabled=!this.doc?.portraits?.[key];
+    const choose=button("Change portrait","lpt-button lpt-change-portrait",()=>file.click());
+    file.addEventListener("change",()=>{
+      const image=file.files?.[0];if(!image)return;choose.disabled=true;
+      void preparePortrait(image).then(data=>{if(epoch!==this.chatEpoch||!form.isConnected)return;pendingPortrait=data;refreshPreview();remove.disabled=false;notice.textContent="Portrait ready. Save to apply.";})
+        .catch(e=>{if(epoch===this.chatEpoch)this.setError(e instanceof Error?e.message:"Portrait could not be prepared.");})
+        .finally(()=>{choose.disabled=false;file.value="";});
+    });
+    controls.append(preview,choose,file,remove,notice);form.append(controls);
   }
   private locations(): void {
     const section = el("section", "lpt-locations"); this.content.append(section);
@@ -411,62 +453,35 @@ export class PhoneView {
       ...(note && v.name !== note.name ? { rename: String(v.name) } : {}), value: { detail: v.detail, context: v.context ?? "",
         ...(key === "plots" ? { resolved: v.resolved } : {}), ...(key === "misc" ? { sendToAI: v.sendToAI } : {}) } } }));
   }
-  private messages(): void {
-    const section = el("section", "lpt-messages"); this.content.append(section);
-    if (!this.enabled("messages")) { this.empty("Messages is off. Turn it on in the sidebar's Phone tab.", section); return; }
-    const threads = conversations(this.doc!.state.messages, this.reads);
-    if (this.selectedText !== null && !threads.some(t => t.key === this.selectedText)) {
-      const contact = this.doc!.state.contacts.find(c => normalize(c.name) === this.selectedText);
-      if (contact) threads.push({ key: normalize(contact.name), name: contact.name, messages: [], unread: 0 });
-    }
-    if (!threads.length) this.empty("No texts yet. Texts actually sent in the story appear here, grouped by sender.", section);
-    for (const thread of threads) this.conversation(section, thread);
+  private messages():void{
+    const section=el("section","lpt-messages");this.content.append(section);
+    if(!this.enabled("messages")){this.selectedText=null;this.content.dataset.thread="false";this.empty("Messages is off. Turn it on in the sidebar's Phone tab.",section);return;}
+    const threads=conversations(this.doc!.state.messages,this.reads);
+    if(this.selectedText!==null&&!threads.some(t=>t.key===this.selectedText)){const c=this.doc!.state.contacts.find(c=>normalize(c.name)===this.selectedText);if(c)threads.push({key:normalize(c.name),name:c.name,messages:[],unread:0});else this.selectedText=null;}
+    const selected=threads.find(t=>t.key===this.selectedText);
+    if(selected){this.conversation(section,selected);return;}
+    this.content.dataset.thread="false";if(!threads.length)this.empty("No texts yet. Actual texts sent to you will appear here.",section);
+    const list=el("div","lpt-conversations");for(const thread of threads){const row=button("","lpt-conversation lpt-thread-row",()=>{this.selectedText=thread.key;this.render();this.markVisibleConversation();this.content.querySelector<HTMLElement>(".lpt-thread-back")?.focus();});row.dataset.conversation=thread.key;const last=thread.messages.at(-1),copy=el("span","lpt-thread-copy");copy.append(el("span","lpt-card-title",thread.name),el("span","lpt-thread-preview",last?`${last.direction==="outgoing"?"You: ":""}${last.text.replace(/\s+/g," ")}`:"No texts yet"));row.append(this.portrait(thread.name,this.doc!.state.contacts.some(c=>c.player&&normalize(c.name)===normalize(thread.name)),thread.group),copy);if(last?.time)row.append(el("small","lpt-thread-time",last.time));row.append(this.unreadBadge(thread.key));list.append(row);}section.append(list);
   }
-  private conversation(parent: HTMLElement, thread: Conversation): void {
-    const chatId = this.doc!.chatId;
-    const card = el("details", "lpt-card lpt-conversation"); card.dataset.conversation = thread.key;
-    const summary = el("summary", "lpt-summary"); summary.append(el("span", "lpt-card-title", thread.name), this.unreadBadge(thread.key));
-    if (!thread.key) summary.append(el("span", "lpt-card-subtitle", "Recipient not stated"));
-    const body = el("div", "lpt-card-body"); const list = el("div", "lpt-text-list");
-    for (const message of thread.messages) {
-      const item = el("article", `lpt-text-message${message.direction === "outgoing" ? " lpt-outgoing" : " lpt-incoming"}`);
-      item.append(el("p", "lpt-text-sender", `${message.direction === "outgoing" ? "You Â· " : ""}${message.from}`), el("p", "lpt-text-body", message.text));
-      if (message.time) item.append(el("span", "lpt-text-time", message.time)); list.append(item);
+  private conversation(parent:HTMLElement,thread:Conversation):void{
+    const chatId=this.doc!.chatId,epoch=this.chatEpoch;const card=el("div","lpt-thread");card.dataset.conversation=thread.key;const header=el("header","lpt-thread-header");
+    const back=button("Back","lpt-button lpt-thread-back",()=>{this.selectedText=null;this.render();});back.setAttribute("aria-label","Back to Messages");header.append(back,this.portrait(thread.name,false,thread.group),el("h2","lpt-thread-name",thread.name));card.append(header);
+    const list=el("div","lpt-text-list");list.setAttribute("role","log");list.setAttribute("aria-label",`Texts with ${thread.name}`);let sender="",direction="",day:string|undefined;
+    const group=thread.group===true||new Set(thread.messages.filter(m=>m.direction==="incoming").map(m=>normalize(m.from))).size>1;
+    for(const message of thread.messages){if(this.enabled("scene.date")&&message.date&&message.date!==day){list.append(el("p","lpt-text-date",message.date));day=message.date;sender="";}
+      const together=sender===normalize(message.from)&&direction===message.direction;
+      const item=el("article",`lpt-text-message ${message.direction==="outgoing"?"lpt-outgoing":"lpt-incoming"}${together?" lpt-text-continuation":""}`);
+      if(group&&!together)item.append(el("p","lpt-text-sender",message.direction==="outgoing"?"You":message.from));item.append(el("p","lpt-text-body",message.text));if(message.time)item.append(el("span","lpt-text-time",message.time));list.append(item);sender=normalize(message.from);direction=message.direction;
     }
-    if (!thread.messages.length) this.empty("No texts sent here yet. Your reply will appear only after you send it from the chat input.", list);
-    body.append(list);
-    if (thread.key) {
-      const form = el("form", "lpt-reply"); const label = el("label", "lpt-label", `Reply to ${thread.name}`);
-      const input = el("textarea", "lpt-textarea lpt-reply-input"); input.maxLength = 3000; input.required = true; input.value = this.replyDrafts.get(thread.key) ?? "";
-      input.addEventListener("input", () => { if (this.doc?.chatId === chatId) this.replyDrafts.set(thread.key, input.value); }); label.append(input);
-      const add = el("button", "lpt-button lpt-add-draft", "Add to draft"); add.type = "submit";
-      const status = el("p", "lpt-reply-status lpt-help"); status.setAttribute("aria-live", "polite");
-      const fallback = el("textarea", "lpt-textarea lpt-manual-tag"); fallback.readOnly = true; fallback.setAttribute("aria-label", "Text tag to copy into the chat input");
-      fallback.value = this.manualDrafts.get(thread.key) ?? ""; fallback.hidden = !fallback.value;
-      if (fallback.value) status.textContent = "Drafting is unavailable here. Copy this tag into the chat input, then review and send it yourself.";
-      form.append(label, add, el("p", "lpt-help", "Adds to the chat input for you to review. It does not send."), status, fallback);
-      form.addEventListener("submit", e => {
-        e.preventDefault();
-        try {
-          const result = this.actions.draft(chatId, thread.name, input.value);
-          if (result.manual) {
-            this.manualDrafts.set(thread.key,result.tag); fallback.value = result.tag; fallback.hidden = false;
-            status.textContent = "Drafting is unavailable here. Copy this tag into the chat input, then review and send it yourself."; fallback.select();
-          } else {
-            this.replyDrafts.delete(thread.key); this.manualDrafts.delete(thread.key); input.value = ""; fallback.value = ""; fallback.hidden = true;
-            status.textContent = "Added to the chat draft. Review it there and send it yourself.";
-          }
-        } catch (error) { status.textContent = error instanceof Error ? error.message : "Could not add to the draft. Your reply is still here."; }
-      }); body.append(form);
+    if(!thread.messages.length)this.empty("No texts sent here yet. Your reply appears after you send it from the chat input.",list);card.append(list);
+    if(thread.key){
+      if(!this.prefs.dismissed.includes("Draft hint")){const hint=el("div","lpt-draft-hint"),hide=button("×","lpt-dismiss",()=>{void this.actions.preferences({dismiss:"Draft hint"}).then(p=>{this.receivePreferences(p);hint.remove();}).catch(()=>this.setError("Could not hide the explanation."));});hide.setAttribute("aria-label","Hide draft explanation");hint.append(el("small","lpt-help","Adds to the chat input for you to review. It does not send."),hide);card.append(hint);}
+      const form=el("form","lpt-reply"),label=el("label","lpt-reply-label",`Reply to ${thread.name}`),input=el("textarea","lpt-textarea lpt-reply-input");input.rows=1;input.maxLength=3000;input.required=true;input.placeholder="Write a reply";input.value=this.replyDrafts.get(thread.key)??"";label.append(input);
+      const grow=()=>{const bottom=list.scrollHeight-list.clientHeight-list.scrollTop<30;input.rows=1;const css=getComputedStyle(input),height=input.scrollHeight-parseFloat(css.paddingTop)-parseFloat(css.paddingBottom);input.rows=Math.min(4,Math.max(1,Math.ceil(height/parseFloat(css.lineHeight))));if(bottom)list.scrollTop=list.scrollHeight;};input.addEventListener("input",()=>{if(epoch!==this.chatEpoch)return;this.replyDrafts.set(thread.key,input.value);grow();});requestAnimationFrame(grow);
+      const add=el("button","lpt-button lpt-add-draft","Add to draft");add.type="submit";const status=el("p","lpt-reply-status lpt-help");status.setAttribute("aria-live","polite");const fallback=el("textarea","lpt-textarea lpt-manual-tag");fallback.readOnly=true;fallback.setAttribute("aria-label","Text tag to copy into the chat input");fallback.value=this.manualDrafts.get(thread.key)??"";fallback.hidden=!fallback.value;form.append(label,add,status,fallback);
+      form.addEventListener("submit",event=>{event.preventDefault();if(epoch!==this.chatEpoch||this.doc?.chatId!==chatId||!form.isConnected)return;try{const result=this.actions.draft(chatId,thread.name,input.value,thread.group?thread.name:undefined);if(result.manual){this.manualDrafts.set(thread.key,result.tag);fallback.value=result.tag;fallback.hidden=false;status.textContent="Copy this tag into the chat input, then review and send it yourself.";fallback.select();}else{this.replyDrafts.delete(thread.key);this.manualDrafts.delete(thread.key);input.value="";grow();fallback.value="";fallback.hidden=true;status.textContent="Added to the chat draft. Review it there.";}}catch(error){status.textContent=error instanceof Error?error.message:"Could not add to draft. Your reply is still here.";}});card.append(form);
     }
-    card.append(summary, body); parent.append(card); card.open = this.selectedText === thread.key;
-    card.addEventListener("toggle", () => {
-      if (card.open) {
-        this.selectedText = thread.key;
-        for (const other of Array.from(this.content.querySelectorAll<HTMLDetailsElement>(".lpt-conversation"))) if (other !== card) other.open = false;
-        this.markVisibleConversation();
-      } else if (this.selectedText === thread.key) this.selectedText = null;
-    });
+    parent.append(card);
   }
   private unreadBadge(key: string): HTMLElement { const badge = el("span", "lpt-unread-badge"); badge.dataset.unreadFor = key; badge.hidden = true; return badge; }
   private refreshBadges(): void {
@@ -479,7 +494,7 @@ export class PhoneView {
   }
   private markVisibleConversation(): void {
     if (!this.doc || !this.openState || this.app !== "Messages" || this.selectedText === null || !this.enabled("messages") || document.visibilityState === "hidden") return;
-    const visibleCard = Array.from(this.content.querySelectorAll<HTMLDetailsElement>(".lpt-conversation")).find(c => c.open && c.dataset.conversation === this.selectedText);
+    const visibleCard = Array.from(this.content.querySelectorAll<HTMLElement>(".lpt-thread")).find(c => c.dataset.conversation === this.selectedText);
     if (!visibleCard || !this.frame.getClientRects().length) return;
     const observed = this.doc.state.messages.filter(m => threadKey(m) === this.selectedText && isUnread(m,this.reads)).map(m => ({ id:m.id, receipt:receipt(m) }));
     if (!observed.length) return;

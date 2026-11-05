@@ -149,9 +149,9 @@ export function parseExpandedReply(content: string): { patch: Patch | null; inva
   for (const tag of tags.filter(t => t.name === "phone-text")) {
     const attrs = parseAttributes(tag.header); const text = decodeEntities(tag.body).trim();
     if (!tag.complete || !attrs || !named(attrs.from) || !text || text.length > 3000 || tag.body.includes("<") || text.includes("\u0000") ||
-      Object.keys(attrs).some(k => !["from", "time", "to"].includes(k)) ||
-      (attrs.time !== undefined && !short(attrs.time, 100)) || (attrs.to !== undefined && !named(attrs.to)) || texts.length >= 12) { badTexts = true; continue; }
-    texts.push({ from: attrs.from.trim(), text, ...(attrs.time ? { time: attrs.time } : {}), ...(attrs.to ? { to: attrs.to.trim() } : {}) });
+      Object.keys(attrs).some(k => !["from", "time", "to", "group"].includes(k)) ||
+      (attrs.group !== undefined && !named(attrs.group)) || (attrs.time !== undefined && !short(attrs.time, 100)) || (attrs.to !== undefined && !named(attrs.to)) || texts.length >= 12) { badTexts = true; continue; }
+    texts.push({ from: attrs.from.trim(), text, ...(attrs.time ? { time: attrs.time } : {}), ...(attrs.to ? { to: attrs.to.trim() } : {}),...(attrs.group?{group:attrs.group.trim()}:{}) });
   }
   const emails:import("./model").EmailData[]=[];let badEmails=false;
   for(const tag of tags.filter(t=>t.name==="phone-email")){try{const attrs=parseAttributes(tag.header);if(!tag.complete||!attrs||tag.body.includes("<")||emails.length>=12)throw Error("Invalid email");emails.push(validateEmail({...attrs,body:decodeEntities(tag.body)}));}catch{badEmails=true;}}

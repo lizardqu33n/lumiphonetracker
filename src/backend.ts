@@ -1,3 +1,4 @@
+import {loadPortraitSources} from "./portrait-sources";
 import type { LlmMessageDTO, SpindleAPI } from "lumiverse-spindle-types";
 import { BUILD_STEP, EXTENSION_NAME, isRecord } from "./shared";
 import { PhoneStore } from "./phone-store";
@@ -128,6 +129,9 @@ spindle.onFrontendMessage((payload, userId) => {
     else warn("Lumi Phone Tracker: frontend user context unavailable; request ignored.");
     return; // Never turn a reply into an operator-wide broadcast.
   }
+  if(isRecord(payload)&&payload.type==="phone_portraits"&&typeof payload.chatId==="string"&&payload.chatId.length<=256&&typeof payload.requestId==="string"&&payload.requestId.length<=100){
+    void(async()=>{requireReadPermissions();const doc=await store.preview(payload.chatId as string,userId);const sources=await loadPortraitSources(spindle,doc.chatId,userId,doc.currentPlayer);spindle.sendToFrontend({type:"phone_portraits_result",requestId:payload.requestId,chatId:doc.chatId,sources},userId);})().catch(()=>spindle.sendToFrontend({type:"phone_portraits_result",requestId:payload.requestId,chatId:payload.chatId,sources:{characters:[]}},userId));return;
+  }
   if(isRecord(payload) && ["phone_connections","phone_helper_now"].includes(String(payload.type)) && typeof payload.requestId==="string" && payload.requestId.length<=100 && typeof payload.chatId==="string" && payload.chatId.length<=256) {
     void(async()=>{
       requireReadPermissions();
@@ -172,7 +176,7 @@ spindle.onFrontendMessage((payload, userId) => {
     const chatId = typeof payload.chatId === "string" ? payload.chatId : payload.chatId===null?null:(await spindle.chats.getActive(userId))?.id;
     if (!chatId) { spindle.sendToFrontend({ type: "phone_snapshot", requestId, chatId: null }, userId); return; }
     let snapshot = payload.type === "phone_update" ? await store.update(userId, chatId,
-      typeof payload.revision === "number" ? payload.revision : -1, { settings: payload.settings, edit: payload.edit, dismissNotice: payload.dismissNotice }) : await store.sync(userId, chatId);
+      typeof payload.revision === "number" ? payload.revision : -1, { settings: payload.settings, edit: payload.edit, dismissNotice: payload.dismissNotice,portrait:payload.portrait }) : await store.sync(userId, chatId);
     if(payload.type==="phone_update") {
       helper.cancel(chatId); // Revision changed: stop an older in-flight extraction.
       if(snapshot.settings.source==="helper" && snapshot.helperOwner===userId) { await helper.connections(userId,chatId); snapshot=await store.sync(userId,chatId); }

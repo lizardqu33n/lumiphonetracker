@@ -3,13 +3,13 @@ import { isRecord } from "./shared";
 import { ALL_APPS } from "./model";
 export const APPS = ALL_APPS;
 export type App = typeof APPS[number];
-export interface Preferences { revision: number; css: string; dismissed: (App|"Home")[] }
+export interface Preferences { revision: number; css: string; dismissed: (App|"Home"|"Draft hint")[] }
 export const defaultPreferences = (): Preferences => ({ revision: 0, css: "", dismissed: [] });
 export function readPreferences(value: unknown): Preferences {
   if (!isRecord(value) || typeof value.css !== "string" || value.css.length > 32000 ||
     !Number.isSafeInteger(value.revision) || !Array.isArray(value.dismissed) ||
-    value.dismissed.some(a => ![...APPS,"Home","Settings"].includes(a as App))) throw new Error("Invalid appearance preferences");
-  return { revision: value.revision as number, css: value.css, dismissed: [...new Set(value.dismissed)].filter(a=>a!=="Settings") as (App|"Home")[] };
+    value.dismissed.some(a => ![...APPS,"Home","Draft hint","Settings"].includes(a as App))) throw new Error("Invalid appearance preferences");
+  return { revision: value.revision as number, css: value.css, dismissed: [...new Set(value.dismissed)].filter(a=>a!=="Settings") as (App|"Home"|"Draft hint")[] };
 }
 export class PreferenceStore {
   private queues = new Map<string, Promise<unknown>>();
@@ -24,8 +24,8 @@ export class PreferenceStore {
         prefs.css = change.css;
       }
       if (change.dismiss !== undefined) {
-        if (![...APPS,"Home"].includes(change.dismiss as App|"Home")) throw new Error("Invalid app");
-        if (!prefs.dismissed.includes(change.dismiss as App|"Home")) prefs.dismissed.push(change.dismiss as App|"Home");
+        if (![...APPS,"Home","Draft hint"].includes(change.dismiss as App|"Home"|"Draft hint")) throw new Error("Invalid app");
+        if (!prefs.dismissed.includes(change.dismiss as App|"Home"|"Draft hint")) prefs.dismissed.push(change.dismiss as App|"Home"|"Draft hint");
       }
       prefs.revision++; await this.io.write(user, prefs); return prefs;
     });

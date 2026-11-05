@@ -25,8 +25,8 @@ export interface Patch {
   scene: Partial<Record<SceneKey, Change>>; weather?: Change;
   contacts: ContactPatch[]; locations: PlacePatch[]; notes: Partial<Record<Section, NotePatch[]>>;
 }
-export interface TextData { from: string; text: string; time?: string; to?: string }
-export interface SavedMessage extends TextData { id: string; direction: "incoming" | "outgoing"; at: Origin }
+export interface TextData { from: string; text: string; time?: string; to?: string; group?:string }
+export interface SavedMessage extends TextData { id: string; direction: "incoming" | "outgoing"; at: Origin; date?:string }
 export interface Contact { name: string; player: boolean; fields: Partial<Record<ContactKey, Cell>>; lastSeen?: string; editedByUser?: boolean }
 export interface Place { name: string; description: string; relation: string; at: Origin; by: "ai" | "user"; updated: boolean }
 export interface Note { name: string; detail: string; context: string; resolved: boolean; sendToAI: boolean;
@@ -57,6 +57,7 @@ export interface ManualEdit {
 }
 export interface Accepted { bankProof?:BankData[];at: Origin; patch: Patch; emails?:EmailData[]; texts: TextData[]; role: "user" | "assistant"; name?: string; prose: string }
 export interface Document {
+  portraits?:Record<string,string>;
   callAdmissions?:string[];
   personalReads?:{seen:Record<string,string>;available?:boolean};
   schema: 2; chatId: string; revision: number; settings: Settings; edits: ManualEdit[];

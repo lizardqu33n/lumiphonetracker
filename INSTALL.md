@@ -1,6 +1,6 @@
 # Install Lumi Phone Tracker
 
-Version 0.10.2 includes the built files. You do not need to build or upload anything yourself.
+Version 0.11.0 includes the built files. You do not need to build or upload anything yourself.
 
 ## Install or update
 
@@ -16,7 +16,7 @@ Version 0.10.2 includes the built files. You do not need to build or upload anyt
 
 Remove older manual tracker-writing instructions or duplicate phone macros if you pasted them. No preset rewrite is required. The format macro changes its instructions with the settings, so this line works in both modes.
 
-Version 0.10.2 retains the fix for preset entries that bypass the macro interceptor. Keep using just {{phone_format}}. The pull handler reads the identity supplied inside that preset evaluation's host environment. This patch needs no additional permission. The existing macro_interceptor permission still supports other evaluation paths. If the host truly supplies no user or chat, the macro stays empty, logs the reason and lets generation continue.
+Version 0.11.0 retains the fix for preset entries that bypass the macro interceptor. Keep using just {{phone_format}}. The pull handler reads the identity supplied inside that preset evaluation's host environment. This patch needs no additional permission. The existing macro_interceptor permission still supports other evaluation paths. If the host truly supplies no user or chat, the macro stays empty, logs the reason and lets generation continue.
 
 
 Part 1 now requests compact shorthand from Main AI and Helper AI. Old saved JSON blocks still rebuild; do not rewrite old messages. No new permission or preset edit is needed. New AI contacts need confirmed Present names; with Present off, new names without saved presence are not admitted. Part 2 adds Refresh tracker in both modes and named Helper failure reasons. No additional permission is required.
@@ -116,3 +116,30 @@ After updating, use **Phone sidebar > Refresh tracker** to remove old
 NPC-to-NPC texts from Messages. Saved story messages are kept. Incorrect tags
 stay hidden in the story too; the server logs a short warning without text or
 names. No new permission, preset line or setting is needed.
+
+Messages now opens a list of conversations. Tap a row to read its thread. Back
+returns to the list. **Add to draft** still puts your reply into the main chat
+input for you to review; it does not send. Incoming texts belong only to your
+phone. An explicitly named group can use group="Established group name" in its
+text tags; the extension never guesses group membership. Keep your preset line
+as {{phone_format}}.
+
+In Contacts, open a row, choose **Edit contact**, then **Change portrait** or
+**Remove**, then **Save**. Choose a still PNG, JPEG or WebP under 5 MB. The extension makes a
+small 128 x 128 square and removes the original metadata. Custom portraits are
+shared with everyone who can use that chat. The total limit is 512 KB of encoded
+portrait data per chat, with a maximum of 20 KB per portrait. Nothing is uploaded
+to an external service, and portraits never go to the AI.
+
+Card/persona avatars are optional. The operator may grant **characters** plus
+**images** for the main character card, and **personas** plus **images** for each
+requesting user's own active persona. These permissions are declared in the
+manifest because Lumiverse gates the APIs; there is no documented separate
+optional_permissions field. The extension checks each grant at runtime and works
+without them, using colored initials or your custom portraits. It only reads
+these APIs. It never switches personas, edits cards or uploads host assets.
+
+Use Refresh tracker or switch away and back to reload avatar sources after
+permission changes. Unknown NPCs and ordinary group members without a documented
+card lookup use custom portraits or initials. See docs/PORTRAITS-THREADS.md for
+the documented API limits. The top strip and sidebar rework are the next step.
