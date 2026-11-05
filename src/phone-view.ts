@@ -2,6 +2,7 @@ import type { Cell, Contact, Document as PhoneDocument, ManualEdit, Note, Sectio
 import { CONTACT_KEYS, SCENE_KEYS, SECTIONS, normalize } from "./model";
 import { APPS, defaultPreferences, type App, type Preferences } from "./preferences";
 import { prepareCustomCSS } from "./custom-css";
+import { LAUNCHER_ICON } from "./launcher-icon";
 import { HOME_ICONS, type IconNode } from "./icons";
 import { conversations, emptyReads, isUnread, receipt, threadKey, type Conversation, type ReadState } from "./messages";
 import type { ConnectionsInfo } from "./helper";
@@ -90,7 +91,10 @@ export class PhoneView {
   private helperChoice=false;
   private helperBusy=false;
   constructor(private mount: ShadowRoot | HTMLElement, private customStyle: HTMLStyleElement, private actions: ViewActions) {
-    this.launcher.setAttribute("aria-label", "Open Lumi Phone Tracker"); this.launcher.append(icon("Phone"));
+    this.launcher.setAttribute("aria-label", "Open phone");
+    const launcherImage=el("img","lpt-launcher-image");
+    launcherImage.src=LAUNCHER_ICON;launcherImage.alt="";launcherImage.setAttribute("aria-hidden","true");launcherImage.draggable=false;
+    this.launcher.append(launcherImage);
     this.back.setAttribute("aria-label", "Back to Home"); this.back.append(icon("Back"));
     const close = button("", "lpt-close", () => this.close()); close.setAttribute("aria-label", "Close phone"); close.append(icon("Close"));
     const header = el("header", "lpt-header"); header.append(this.back, this.heading, close);

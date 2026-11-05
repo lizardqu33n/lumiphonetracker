@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.1 - Launcher icon only
+
+- Embedded the supplied flip-phone PNG as a static data URI with smooth scaling.
+- Preserved the launcher dimensions, placement, native click/keyboard behavior and existing unread behavior; used the requested Open phone label.
+- Documented the artwork class and checked 1x/2x density, custom CSS and badge layering. No new variables, permissions or Part 2 work.
+
 ## 0.7.0 - Part 1 only
 
 - Added compact line-based shorthand, exact evidence and inferred suffixes, word limits and independent valid-record acceptance. Old saved JSON blocks and Helper journals still rebuild.

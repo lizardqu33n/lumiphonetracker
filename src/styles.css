@@ -200,6 +200,8 @@
 
 /* Closed Floating Launcher */
 .lpt-launcher {
+  position: relative;
+  padding: 0;
   display: grid;
   place-items: center;
   width: var(--lpt-launcher-size);
@@ -215,6 +217,23 @@
 .lpt-launcher:hover {
   border-color: var(--lpt-accent);
   background: var(--lpt-elevated-bg);
+}
+
+/* Embedded static artwork; smooth browser scaling, never pixelated. */
+.lpt-launcher-image {
+  display: block;
+  width: calc(100% - var(--lpt-space));
+  height: calc(100% - var(--lpt-space));
+  object-fit: contain;
+  image-rendering: auto;
+  pointer-events: none;
+}
+.lpt-launcher > .lpt-unread-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+  margin-left: 0;
 }
 
 /* SVG Icons */

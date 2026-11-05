@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 const files = [
   "spindle.json", "package.json", "package-lock.json", "tsconfig.json", ".gitignore",
   "README.md", "INSTALL.md", "TESTING.md", "docs/ARCHITECTURE.md", "docs/BLOCK-FORMAT.md", "docs/PRESET-SNIPPET.txt",
-  "docs/USER-DOCS-REVIEW.md", "docs/TOKEN-REPORT.md", "docs/TOKEN-SAMPLES.json", "STYLING.md", "THIRD-PARTY-NOTICES.md", "licenses/LUCIDE-LICENSE.txt", "src/icons.ts", "docs/REQUIREMENTS.md", "docs/FINAL-ADDITIONS.md", "docs/STEP-3.md",
+  "docs/USER-DOCS-REVIEW.md", "docs/TOKEN-REPORT.md", "docs/TOKEN-SAMPLES.json", "STYLING.md", "THIRD-PARTY-NOTICES.md", "licenses/LUCIDE-LICENSE.txt", "src/icons.ts", "src/launcher-icon.ts", "docs/REQUIREMENTS.md", "docs/FINAL-ADDITIONS.md", "docs/STEP-3.md",
   "src/backend.ts", "src/frontend.ts", "src/shared.ts", "src/tags.ts", "src/parser.ts", "src/history.ts", "src/store.ts",
   "src/model.ts", "src/schema.ts", "src/engine.ts", "src/phone-store.ts", "src/phone-macros.ts", "src/retention.ts",
   "src/shorthand.ts", "src/diagnostics.ts", "src/preferences.ts", "src/custom-css.ts", "src/phone-view.ts", "src/styles.css", "src/assets.d.ts", "src/messages.ts", "src/message-reads.ts", "src/helper.ts",

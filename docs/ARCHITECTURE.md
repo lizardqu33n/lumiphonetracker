@@ -1,4 +1,6 @@
-# Current release: Part 1 / 0.7.0
+# Current release: Launcher icon / 0.7.1
+
+A static embedded PNG replaces only the launcher artwork. It introduces no host calls, settings or permissions. Part 2 remains pending.
 
 Main AI and Helper AI share shorthand parsing into the existing validated journal schema. Old key=JSON messages remain readable. See [BLOCK-FORMAT.md](BLOCK-FORMAT.md), [TOKEN-REPORT.md](TOKEN-REPORT.md) and [USER-DOCS-REVIEW.md](USER-DOCS-REVIEW.md). No new host calls or identity routes are added. Part 2 remains pending.
 

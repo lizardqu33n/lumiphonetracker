@@ -1,6 +1,14 @@
-# Verification report - 0.7.0 (Part 1)
+# Verification report - 0.7.1 (Launcher icon)
 
 Checked November 4, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **No live Lumiverse session or real model connection was used. A local Lumiverse build and its user-docs were inspected; that is not live-host verification. No paid model request was made.**
+
+## Launcher-only update (0.7.1)
+
+The provided PNG is embedded byte-for-byte as a static data URI in src/launcher-icon.ts. The actual file is 256 x 256 RGBA, not 128 x 128. It is assigned through an ordinary img.src property; there is no HTML injection or external image request. Image alt is empty/aria-hidden because the native button is labelled Open phone. Normal image-rendering:auto and object-fit:contain are used, with no pixelated scaling.
+
+Eighteen new browser checks run at deviceScaleFactor 1 and 2: decode/transparency, native resolution, about 40px artwork within the original 50px target at the original position, smooth scaling, decorative accessibility, badge layering, click and Enter activation, live custom-CSS sizing/shape/background, and no external image loading. The 1x/2x dark-theme screenshots, custom 2x view and overlaid-badge view were visually inspected. The badge used for the overlay test is a temporary test-only DOM fixture; no production unread badge behavior was added. Existing Home icons, read receipts and sidebar Reset are unchanged. No new variables or permissions.
+
+Still not verified: the real host's mobile launcher size/placement, actual device/WebView resampling and OS density, real-user custom CSS, or how the art looks in the user's live Lumiverse install. Headless desktop Edge density emulation is not physical mobile-device verification. Part 2 remains unstarted.
 
 ## Part 1: shorthand and compliance (0.7.0)
 
@@ -97,7 +105,7 @@ Sources: [macros](https://docs.lumiverse.chat/backend-api/macros/), [interceptor
 
 ## Passed in a browser with a mock host
 
-96 checks exercise actual frontend, store, read service and Helper AI controller. Host placement, events, connections, provider response and composer are substitutes.
+114 checks exercise actual frontend, store, read service and Helper AI controller. Host placement, events, connections, provider response and composer are substitutes.
 
 - Browser fixtures now establish Bea in an earlier shorthand scene before testing her absent card; an offscreen-only Ivo contact is not admitted. Older JSON rows remain in the same history, and no fixture data enters production bundles.
 - All seven icons/navigation, explanation dismissal, Scene/Weather edits, Contacts/player restrictions, Locations, Notes, grouped switches, safe text rendering and CSS customization.

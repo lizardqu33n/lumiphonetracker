@@ -19,10 +19,48 @@ const check = (condition: unknown, message: string) => { assert.ok(condition, me
 const ui = (page: Page) => page.locator(".lpt-island"); // Playwright traverses open native shadow roots.
 async function ready(page: Page) { await page.waitForFunction(() => !!document.querySelector(".lpt-island")?.shadowRoot?.querySelector(".lpt-root")); await page.waitForTimeout(80); }
 async function seed(page: Page, kind = "story") { await page.evaluate(k => (window as any).harness.seed(k), kind); await ready(page); }
-async function open(page: Page, app?: string) { await ui(page).getByRole("button", { name: "Open Lumi Phone Tracker", exact: true }).click(); if (app) await ui(page).locator(`[data-app="${app}"]`).click(); }
+async function open(page: Page, app?: string) { await ui(page).getByRole("button", { name: "Open phone", exact: true }).click(); if (app) await ui(page).locator(`[data-app="${app}"]`).click(); }
 async function home(page: Page) { await ui(page).getByRole("button", { name: "Back to Home", exact: true }).click(); }
 async function save(page: Page) { await ui(page).locator(".lpt-form").getByRole("button", { name: "Save", exact: true }).click(); await page.waitForFunction(() => !document.querySelector(".lpt-island")?.shadowRoot?.querySelector(".lpt-form")); }
 try {
+  for(const density of [1,2]) {
+    const context=await browser.newContext({viewport:{width:1100,height:850},deviceScaleFactor:density});
+    const iconPage=await context.newPage();const imageRequests:string[]=[];
+    iconPage.on("request",r=>{if(r.resourceType()==="image"&&r.url().startsWith("http"))imageRequests.push(r.url());});
+    await iconPage.goto(`http://127.0.0.1:${server.port}`);await ready(iconPage);
+    const launcher=ui(iconPage).getByRole("button",{name:"Open phone",exact:true});
+    const artwork=launcher.locator(".lpt-launcher-image");
+    const info=await artwork.evaluate(async node=>{
+      const img=node as HTMLImageElement;await img.decode();
+      const canvas=document.createElement("canvas");canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;
+      const ctx=canvas.getContext("2d")!;ctx.drawImage(img,0,0);const data=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+      return {embedded:img.src.startsWith("data:image/png;base64,"),width:img.naturalWidth,height:img.naturalHeight,
+        rendering:getComputedStyle(img).imageRendering,decorative:img.alt===""&&img.getAttribute("aria-hidden")==="true",
+        alpha:data.some((v,i)=>i%4===3&&v===0),pixels:data.some((v,i)=>i%4===3&&v===255)};
+    });
+    check(info.embedded&&info.width===256&&info.height===256&&info.alpha&&info.pixels,`Embedded transparent PNG decodes at ${density}x density`);
+    check(info.rendering==="auto"&&info.decorative,`Launcher uses normal smooth scaling and decorative artwork at ${density}x`);
+    const bounds=await launcher.boundingBox();const imageBounds=await artwork.boundingBox();
+    check(!!bounds&&bounds.width===50&&bounds.height===50&&bounds.x===24&&bounds.y===110,`Launcher keeps default size, position and click target at ${density}x`);
+    check(!!imageBounds&&imageBounds.width>=38&&imageBounds.width<=44&&info.width>=imageBounds.width*density,`Native art has enough pixels for the displayed launcher at ${density}x`);
+    await launcher.screenshot({path:`.test-artifacts/launcher-${density}x.png`});
+    await launcher.evaluate(b=>{const badge=document.createElement("span");badge.className="lpt-unread-badge";badge.textContent="2";badge.dataset.testBadge="true";b.append(badge);});
+    check(await launcher.locator(".lpt-unread-badge").isVisible()&&await launcher.locator(".lpt-unread-badge").evaluate(b=>getComputedStyle(b).position==="absolute"&&getComputedStyle(b).zIndex==="1"),`Any launcher badge stays above the image at ${density}x`);
+    await launcher.screenshot({path:`.test-artifacts/launcher-badge-${density}x.png`});
+    await launcher.locator('[data-test-badge]').evaluate(b=>b.remove());
+    await artwork.click();check(await ui(iconPage).locator(".lpt-frame").isVisible(),`Clicking the art still opens the phone at ${density}x`);
+    await ui(iconPage).getByRole("button",{name:"Close phone",exact:true}).click();await launcher.focus();await iconPage.keyboard.press("Enter");
+    check(await ui(iconPage).locator(".lpt-frame").isVisible(),`Keyboard activation still opens the phone at ${density}x`);
+    await ui(iconPage).getByRole("button",{name:"Close phone",exact:true}).click();
+    await open(iconPage,"Settings");
+    await ui(iconPage).locator(".lpt-advanced > summary").click();await ui(iconPage).locator(".lpt-custom-css > summary").click();
+    await ui(iconPage).locator(".lpt-css-editor").fill('.lpt-root { --lpt-launcher-size: 64px; --lpt-space: 4px; --lpt-card-bg: #123145; } .lpt-launcher { border-radius: 50%; }');
+    await iconPage.waitForTimeout(700);await ui(iconPage).getByRole("button",{name:"Close phone",exact:true}).click();await iconPage.waitForTimeout(100);
+    check(await launcher.evaluate(b=>b.getBoundingClientRect().width===64)&&await artwork.evaluate(n=>(n as HTMLImageElement).complete&&getComputedStyle(n).imageRendering==="auto"),`Custom CSS still sizes/restyles the launcher without replacing the PNG at ${density}x`);
+    await launcher.screenshot({path:`.test-artifacts/launcher-custom-${density}x.png`});
+    check(imageRequests.length===0,`No external image request at ${density}x`);
+    await context.close();
+  }
   const placementPage = await browser.newPage({ viewport: { width: 1100, height: 850 } });
   await placementPage.goto(`http://127.0.0.1:${server.port}/?auto-root`); await ready(placementPage);
   const initialHeight = await placementPage.locator(".lpt-viewport").evaluate(e => e.getBoundingClientRect().height);

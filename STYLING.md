@@ -8,6 +8,10 @@ That single Reset and its confirmation stay outside the phone's Shadow DOM. Cust
 
 All default rules are in [src/styles.css](src/styles.css). All declared --lpt- variables live on the same .lpt-root element. Some small decorative details are fixed CSS values; use the stable class selectors below to change those. There are no inline style attributes, external fonts, icon downloads or CDN requests. The frame, launcher and app content remain separate.
 
+The floating launcher now uses your embedded transparent flip-phone PNG. Its button still defaults to 50px; the artwork is about 40px, with normal smooth scaling. The supplied file is actually 256 x 256, retained unchanged. It has no external file/CDN dependency and no added CSS variables. Its colors stay as drawn; changing --lpt-accent does not recolor the PNG. The seven Home icons still use currentColor.
+
+`.lpt-launcher-image` is the stable artwork class. Its size follows --lpt-launcher-size and --lpt-space. The launcher remains a native button labelled **Open phone**. A direct .lpt-unread-badge child is positioned above the artwork; this styling does not add a new unread feature. The existing phone/sidebar Reset protection is unchanged.
+
 ## Variables
 
 Set these inside `.lpt-root { ... }`. Sizes need units such as px; counts, weights and opacity do not. The table lists base defaults. Theme-derived replacements and narrow-screen adjustments are explained below it.
@@ -134,7 +138,8 @@ These remain the existing UI hooks, not extra screens or settings. `.lpt-root[da
 | `.lpt-input` | Single-line text input. |
 | `.lpt-island` | Protected host-side holder of the shadow root (not custom-styled). |
 | `.lpt-label` | Form input label. |
-| `.lpt-launcher` | Closed floating phone button. |
+| `.lpt-launcher` | Closed floating phone button; unchanged target, with relative positioning for overlaid badges. |
+| `.lpt-launcher-image` | Embedded transparent PNG; smooth scaling, contained aspect ratio and no pointer-event interception. |
 | `.lpt-location` | Large exact-location field in Scene. |
 | `.lpt-locations` | Locations app content. |
 | `.lpt-manual-tag` | Read-only escaped tag for manual copy when composer drafting is unsupported. |
