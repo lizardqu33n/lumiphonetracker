@@ -1,3 +1,4 @@
+import { isHelperNotice } from "./helper-status";
 import { isRecord } from "./shared";
 import { chatPath } from "./store";
 import { emptyDocument, emptyState, readSettings, SECTIONS, normalize, type Document, type ManualEdit, type HelperEntry } from "./model";
@@ -199,11 +200,14 @@ export class PhoneStore {
       await this.io.write(chatId,JSON.stringify(next)); return next;
     });
   }
-  helperNotice(userId: string, chatId: string, text: "Tracker update failed" | "Connection not found", fallback = false): Promise<void> {
+  helperNotice(userId: string, chatId: string, text: string | null, fallback = false): Promise<void> {
     return this.serial(chatId,async()=>{
       if (!(await this.io.authorize(chatId,userId))) return;
       const raw = await this.io.read(chatId); const { doc } = await this.build(chatId,userId);
-      if (!doc.notices.includes(text)) doc.notices.push(text);
+      const old=JSON.stringify(doc.notices);
+      doc.notices=doc.notices.filter(n=>!isHelperNotice(n));
+      if(text)doc.notices.push(text);
+      if(JSON.stringify(doc.notices)===old&&!fallback)return;
       if (fallback && doc.settings.source === "helper" && doc.helperOwner === userId) doc.settings.source = "main";
       doc.revision++; await this.io.write(chatId,JSON.stringify(doc));
     });

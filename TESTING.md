@@ -1,6 +1,44 @@
-# Verification report - 0.7.1 (Launcher icon)
+# Verification report - 0.8.0 (Part 2)
 
 Checked November 4, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **No live Lumiverse session or real model connection was used. A local Lumiverse build and its user-docs were inspected; that is not live-host verification. No paid model request was made.**
+
+## Part 2: Helper failures and Refresh tracker (0.8.0)
+
+**135 code tests / 854 assertions; 119 browser checks pass.** Type checking,
+reproducible built-file checks and manifest/package checks also pass.
+
+- Strict operator mock runs the actual backend for two trusted users with separate
+  saved connections, generation userId, chat-authorized journals and per-user/chat
+  read receipts. Unauthorized refresh cannot list connections or call a model.
+- Each of the seven fixed categories is asserted in the return value, server log
+  and persisted notice, with no exception/story/model/profile data in the log.
+- Main refresh rebuilds from saved messages with generation permission denied and
+  zero provider calls. Helper refresh sends one request and returns its real result.
+- Complete Markdown fences and valid neighboring shorthand/legacy JSON fields are
+  accepted; incomplete structures, forbidden text output and invalid values stay
+  rejected. Empty explicit updates remain valid no-ops.
+- A provider ignoring cancellation is bounded by the deadline; its late result
+  never lands. Stale revision/source history, source changes and chat switches
+  preserve the prior protections. A stop/completion queue race has a regression.
+- Browser tests check the single Refresh button in both modes, Refreshed/category
+  results, cost note, disabled streaming, 1-10 messages, one completed-reply request,
+  missing-connection fallback, opaque screens and hostile-CSS sidebar Reset.
+  Existing launcher 1x/2x density, drafts, badges, editing and mobile regressions pass.
+
+The reported live Helper failure was not observed directly. Earlier connection
+and generation calls already carried userId; this is an audit/hardening and
+failure-reporting fix, not proof that the live failure was an identity error.
+See [PART-2.md](docs/PART-2.md) for the call audit, category meanings and API limits.
+
+**Still unverified:** a real second user and saved connection; native operator
+permissions and trusted event IDs; final provider routing, error shapes, costs and
+cancellation; frontend/backend streaming order and startup mid-stream; actual
+server prompt stripping, composer behavior, host mobile placement and concurrent
+processes/tabs. No paid request was made. A local host build/source review and
+strict mocks do not establish live-host behavior. No undocumented isGenerating
+property or guessed user/chat fallback was added.
+
+Historical checkpoints below retain their original scope; Part 2 is now complete.
 
 ## Launcher-only update (0.7.1)
 
@@ -8,7 +46,7 @@ The provided PNG is embedded byte-for-byte as a static data URI in src/launcher-
 
 Eighteen new browser checks run at deviceScaleFactor 1 and 2: decode/transparency, native resolution, about 40px artwork within the original 50px target at the original position, smooth scaling, decorative accessibility, badge layering, click and Enter activation, live custom-CSS sizing/shape/background, and no external image loading. The 1x/2x dark-theme screenshots, custom 2x view and overlaid-badge view were visually inspected. The badge used for the overlay test is a temporary test-only DOM fixture; no production unread badge behavior was added. Existing Home icons, read receipts and sidebar Reset are unchanged. No new variables or permissions.
 
-Still not verified: the real host's mobile launcher size/placement, actual device/WebView resampling and OS density, real-user custom CSS, or how the art looks in the user's live Lumiverse install. Headless desktop Edge density emulation is not physical mobile-device verification. Part 2 remains unstarted.
+Still not verified: the real host's mobile launcher size/placement, actual device/WebView resampling and OS density, real-user custom CSS, or how the art looks in the user's live Lumiverse install. Headless desktop Edge density emulation is not physical mobile-device verification. Part 2 was not included in that launcher checkpoint.
 
 ## Part 1: shorthand and compliance (0.7.0)
 
@@ -24,7 +62,7 @@ Key-item function, meaningful places, actual story establishment and changed-onl
 
 The same-data [TOKEN-REPORT.md](docs/TOKEN-REPORT.md) measures complete before/after strings, including whitespace: empty-chat phone_format 2,147 to 1,680 characters; populated 2,788 to 2,364; sample block 815 to 552. Tokens are only rough character-count/4 estimates, not model-tokenizer counts. Full outputs/sample blocks are bundled separately, never inserted into a chat.
 
-**Part 2 has not started.** Existing Helper failure notices/categories, Update now button, scheduling, connection picker, user ID flow and read receipts are unchanged. Only its requested output format/parser changed for Part 1. The generic Tracker update failed notice remains pending Part 2.
+**Historical Part 1 checkpoint:** Part 2 was not included. Existing Helper failure notices/categories, Update now button, scheduling, connection picker, user ID flow and read receipts are unchanged. Only its requested output format/parser changed for Part 1. The generic notice described that checkpoint; 0.8.0 now names failure categories.
 
 ## Stylesheet update
 
@@ -101,18 +139,18 @@ Sources: [macros](https://docs.lumiverse.chat/backend-api/macros/), [interceptor
 - Pinned chat and revision: late results remain in their requesting chat, cannot overwrite later edits/history, and are discarded when Main AI is selected. Cancellation signals are sent. This cannot prove an already-started provider request was free.
 - Separate helper result journal survives restart and rebuilds through the shared Scene/Weather/Contacts/Locations/Notes rules. Story edits/deletion/alternate swipes invalidate the affected result; edits only to stripped phone tags do not discard unrelated extracted story facts. Helper never writes story rows or texts. Player private fields are removed; null preserves old values.
 - User-edited values need a newer exact evidence quote, not a quote from an older row. Literal older facts are prevented from replacing newer confirmed fields. These are conservative text checks, not semantic proof of canon.
-- The actual backend is loaded with a strict operator-scoped mocked host. It checks user-scoped connections, the raw generation adapter, chat-authorized read receipts, zero default Main calls, explicit Helper Update now, and generation-hook registration. Unknown return data from the published raw API is checked for a content string.
+- The actual backend is loaded with a strict operator-scoped mocked host. It checks user-scoped connections, the raw generation adapter, chat-authorized read receipts, zero default Main calls, explicit Helper Refresh tracker, and generation-hook registration. Unknown return data from the published raw API is checked for a content string.
 
 ## Passed in a browser with a mock host
 
-114 checks exercise actual frontend, store, read service and Helper AI controller. Host placement, events, connections, provider response and composer are substitutes.
+119 checks exercise actual frontend, store, read service and Helper AI controller. Host placement, events, connections, provider response and composer are substitutes.
 
 - Browser fixtures now establish Bea in an earlier shorthand scene before testing her absent card; an offscreen-only Ivo contact is not admitted. Older JSON rows remain in the same history, and no fixture data enters production bundles.
 - All seven icons/navigation, explanation dismissal, Scene/Weather edits, Contacts/player restrictions, Locations, Notes, grouped switches, safe text rendering and CSS customization.
 - Retained zero-height placement regression (old code observed at exactly 0 height), delayed mounting, late appearance responses, same-session Reset, failed storage/placement recovery and the single protected sidebar Reset/confirmation.
 - Opaque backgrounds across Home and every app, frame/content/cards/sections under translucent theme fills, plus solid dark fallback without a theme fill.
 - Real-data Messages workflow: multi-sender conversations, badges clearing only the opened conversation, optional known time, restart read persistence, new/closed-phone notices, draft/caret preservation, append-without-send, cancellation, explicit simulated user Send before filing, manual recipient tags, default AI-player-text rejection, unsupported/wrong-chat composer safety and stale-form refusal after switching.
-- Helper AI source/connection choice, exact cost note, editable 1-10 message count, no request merely from choosing a mode/profile, explicit Update now, disabled updates during streaming, one request on completed saved reply, invalid-JSON notice/retained data/no retry, late source-chat saving, missing-profile fallback and visible Main AI selection without another call.
+- Helper AI source/connection choice, exact cost note, editable 1-10 message count, no request merely from choosing a mode/profile, explicit Refresh tracker, disabled updates during streaming, one request on completed saved reply, invalid-JSON notice/retained data/no retry, late source-chat saving, missing-profile fallback and visible Main AI selection without another call.
 - Desktop, mobile-sized and short/keyboard-sized viewports; no browser errors. Home, Scene, Messages, recovery and Helper Settings screenshots were visually inspected. Test-only fixtures/screenshots are not in production bundles.
 
 ## Not verified without a real Lumiverse install and connection
@@ -135,4 +173,4 @@ Sources: [macros](https://docs.lumiverse.chat/backend-api/macros/), [interceptor
 
 The earlier real-install v0.4.1 failure was user-reported. Its layout cause was reproduced locally and retained as a regression, but this environment has not validated 0.6.4 in that install. Publishing source to GitHub does not verify native installation or make a model request.
 
-Earlier reports: [Step 5](docs/STEP-5-TESTING.md), [Step 4](docs/STEP-4-TESTING.md), [Step 3](docs/STEP-3-TESTING.md). Previous archives are preserved. All original build steps are delivered. The new Part 1 is complete; Part 2 is pending explicit go-ahead.
+Earlier reports: [Step 5](docs/STEP-5-TESTING.md), [Step 4](docs/STEP-4-TESTING.md), [Step 3](docs/STEP-3-TESTING.md). Previous archives are preserved. All original build steps are delivered. Parts 1 and 2 are complete. Stop after Part 2 for review.

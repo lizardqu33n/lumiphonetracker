@@ -195,7 +195,8 @@ These remain the existing UI hooks, not extra screens or settings. `.lpt-root[da
 | `.lpt-toggle` | Native checkbox styled as a pill switch; its checked behavior is unchanged. |
 | `.lpt-transport` | Protected host layout wrapper (not custom-styled). |
 | `.lpt-unread-badge` | Unread number on Messages, each conversation and Contact Open texts. |
-| `.lpt-update-now` | Explicit Helper AI update button; disabled while busy. |
+| `.lpt-update-now` | Refresh tracker button in both modes; existing class kept, disabled while busy. |
+| `.lpt-refresh-result` | Short refresh result: Refreshed or a safe failure category. |
 | `.lpt-viewport` | Protected clipping boundary (not custom-styled). |
 | `.lpt-weather` | Weather app content. |
 | `.lpt-wider` | Wider location or removed-attire secondary line. |

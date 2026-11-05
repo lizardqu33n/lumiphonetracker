@@ -2,9 +2,9 @@
 
 A small phone for keeping track of story facts. Each chat has its own Scene, Weather, Locations, Notes, Contacts and Messages. Settings controls what is shown and what the AI is asked to track.
 
-**Version 0.7.1: all six build steps are delivered.** Source, manifest, built frontend/backend, tests and guides are included. The new Helper AI has been tested with mocks, not a real paid connection.
+**Version 0.8.0: all six build steps are delivered.** Source, manifest, built frontend/backend, tests and guides are included. The new Helper AI has been tested with mocks, not a real paid connection.
 
-Part 1 adds compact shorthand with old saved JSON support. Part 2 (Helper failures and Refresh tracker) is pending. See [block format](docs/BLOCK-FORMAT.md), [token report](docs/TOKEN-REPORT.md) and [user-docs review](docs/USER-DOCS-REVIEW.md).
+Part 1 adds compact shorthand with old saved JSON support. Part 2 adds Refresh tracker in both modes, category-only Helper failure warnings and safer small-model parsing. Main refresh makes no model request. See [block format](docs/BLOCK-FORMAT.md), [token report](docs/TOKEN-REPORT.md) and [user-docs review](docs/USER-DOCS-REVIEW.md).
 
 ## Start here
 

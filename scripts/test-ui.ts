@@ -288,6 +288,12 @@ try {
   check(await page.evaluate(() => (window as any).harness.composer().text) === "Leave this other draft alone", "A stale reply form cannot insert into another chat after switching");
   await seed(page); await open(page,"Settings");
   check(await ui(page).locator(".lpt-helper-source").inputValue() === "main" && await page.evaluate(() => (window as any).harness.helperCalls()) === 0, "Main AI is the default and makes no Helper AI requests");
+  check(await ui(page).getByRole("button",{name:"Refresh tracker",exact:true}).count()===1,"One Refresh tracker button is available in Main AI mode");
+  await page.evaluate(()=>(window as any).harness.generationEvent("GENERATION_STARTED","frontend-main"));
+  check(await ui(page).locator(".lpt-update-now").isDisabled(),"Documented frontend start event disables Main AI Refresh");
+  await page.evaluate(()=>(window as any).harness.generationEvent("GENERATION_STOPPED","frontend-main"));await page.waitForTimeout(80);
+  await ui(page).locator(".lpt-update-now").click();await page.waitForTimeout(100);
+  check(await ui(page).locator(".lpt-refresh-result").innerText()==="Refreshed"&&await page.evaluate(()=>(window as any).harness.helperCalls())===0,"Main Refresh reports Refreshed and makes no model request");
   await ui(page).locator(".lpt-helper-source").selectOption("helper");
   check((await ui(page).locator(".lpt-helper-settings").innerText()).includes("Requests may cost money depending on the model chosen."), "Helper AI shows the plain cost note");
   check(await page.evaluate(() => (window as any).harness.helperCalls()) === 0, "Choosing Helper AI without a connection makes no request");
@@ -297,9 +303,10 @@ try {
   const countInput=ui(page).locator(".lpt-setting").filter({has:page.locator(".lpt-setting-label",{hasText:/^Messages to read$/})}).locator("input");
   await countInput.fill("5"); await countInput.press("Tab"); await page.waitForTimeout(100);
   check(await countInput.getAttribute("min") === "1" && await countInput.getAttribute("max") === "10" && await page.evaluate(() => (window as any).harness.getDocument().settings.helperMessages) === 5, "Helper AI recent-message count is editable and bounded");
-  await page.evaluate(() => (window as any).harness.helperOutput('{"weather":"Soft rain outside"}'));
+  await page.evaluate(() => (window as any).harness.helperOutput('```text\nweather: Soft rain outside\ntime: unknown\n```'));
   await ui(page).locator(".lpt-update-now").click(); await page.waitForTimeout(130);
-  check(await page.evaluate(() => (window as any).harness.helperCalls()) === 1, "Update now makes exactly one explicit mocked Helper AI request");
+  check(await page.evaluate(() => (window as any).harness.helperCalls()) === 1, "Refresh tracker makes exactly one explicit mocked Helper AI request");
+  check(await ui(page).locator(".lpt-refresh-result").innerText()==="Refreshed","Helper accepts a complete fence and valid line beside a rejected line");
   await page.evaluate(() => (window as any).harness.helperStart("ui-completed-reply")); await page.waitForTimeout(100);
   check(await ui(page).locator(".lpt-update-now").isDisabled() && await page.evaluate(() => (window as any).harness.helperCalls()) === 1, "No Helper AI call is made during partial streaming");
   await page.evaluate(() => { (window as any).harness.helperOutput('{"weather":"Clear skies"}'); (window as any).harness.helperEnd("ui-completed-reply","The rain stops. Clear skies are now established."); });
@@ -309,6 +316,7 @@ try {
   await ui(page).locator(".lpt-update-now").click(); await page.waitForTimeout(150);
   check(await page.evaluate(() => (window as any).harness.getDocument().state.weather.value) === "Clear skies" && (await ui(page).locator(".lpt-notice").allTextContents()).some(t=>t.includes("Tracker update failed")), "Invalid Helper AI output keeps old data and shows a small failure notice");
   check(await page.evaluate(() => (window as any).harness.helperCalls()) === 3, "A Helper AI failure does not retry");
+  check(await ui(page).locator(".lpt-refresh-result").innerText()==="Invalid output"&&(await ui(page).locator(".lpt-notice").allTextContents()).some(t=>t.includes("Invalid output")),"Refresh result and small notice show the safe failure category");
   await page.locator(".harness-widget").screenshot({path:".test-artifacts/helper-settings.png"});
   await page.evaluate(() => { (window as any).harness.helperOutput("{}"); (window as any).harness.helperDelay(180); });
   await ui(page).locator(".lpt-update-now").click(); await page.waitForFunction(() => (window as any).harness.helperCalls() === 4);

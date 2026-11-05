@@ -18,6 +18,30 @@ function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+// src/helper-status.ts
+class HelperFailure extends Error {
+  category;
+  constructor(category) {
+    super(category);
+    this.category = category;
+    this.name = "HelperFailure";
+  }
+}
+var failureLabel = (category) => category[0].toUpperCase() + category.slice(1);
+var helperNoticeText = (category) => (category === "no connection" ? "Connection not found. " : "") + `Tracker update failed: ${failureLabel(category)}`;
+var isHelperNotice = (text) => text === "Connection not found" || text.startsWith("Connection not found. ") || text.startsWith("Tracker update failed");
+function failureCategory(error, fallback = "provider error") {
+  if (error instanceof HelperFailure)
+    return error.category;
+  const e = error;
+  const message = [e?.message, e?.code].filter((v) => typeof v === "string").join(" ");
+  if (/permission|userId is required|chat unavailable|allow chat access|unauthori[sz]ed|forbidden/i.test(message))
+    return "permission missing";
+  if (e?.name === "TimeoutError" || e?.name === "AbortError" || /timed? ?out|timeout/i.test(message))
+    return "timeout";
+  return fallback;
+}
+
 // src/tags.ts
 var NAMES = [TRACKER_TAG, TEXT_TAG];
 var space = (c) => c === " " || c === `
@@ -1505,8 +1529,12 @@ class PhoneStore {
         return;
       const raw = await this.io.read(chatId);
       const { doc } = await this.build(chatId, userId);
-      if (!doc.notices.includes(text))
+      const old = JSON.stringify(doc.notices);
+      doc.notices = doc.notices.filter((n) => !isHelperNotice(n));
+      if (text)
         doc.notices.push(text);
+      if (JSON.stringify(doc.notices) === old && !fallback)
+        return;
       if (fallback && doc.settings.source === "helper" && doc.helperOwner === userId)
         doc.settings.source = "main";
       doc.revision++;
@@ -1903,23 +1931,51 @@ class MessageReads {
 
 // src/helper.ts
 function helperValues(content, doc, rows = []) {
-  if (!content.trim() || content.length > 64000)
-    throw new Error("invalid_json");
+  if (!content.trim())
+    throw new HelperFailure("empty reply");
+  if (content.length > 64000)
+    throw new HelperFailure("invalid output");
+  let clean = content.trim();
+  const fence = clean.match(/^```(?:json|text|plaintext|phone-state)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/i);
+  if (fence)
+    clean = fence[1].trim();
+  else if (clean.includes("```"))
+    throw new HelperFailure("invalid output");
+  if (!clean)
+    throw new HelperFailure("empty reply");
+  if (/<\/?phone-text\b/i.test(clean))
+    throw new HelperFailure("validation rejected");
   let input;
-  if (content.trimStart().startsWith("{")) {
-    input = JSON.parse(content);
-    validateExpanded(input);
+  if (clean.startsWith("{")) {
+    let json;
+    try {
+      json = JSON.parse(clean);
+    } catch {
+      throw new HelperFailure("invalid output");
+    }
+    if (!isRecord(json))
+      throw new HelperFailure("validation rejected");
+    const allowed = [...SCENE_KEYS, "weather", "contacts", "locations", ...SECTIONS.filter((k) => k !== "misc")];
+    if (Object.keys(json).some((k) => !allowed.includes(k)))
+      throw new HelperFailure("validation rejected");
+    const patch = parseExpanded(Object.entries(json).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(`
+`));
+    if (!patch)
+      throw new HelperFailure("validation rejected");
+    input = { ...patchValues(patch), ...Object.fromEntries(Object.entries(json).filter(([, v]) => v === null)) };
   } else {
     let patch;
-    if (content.includes("<phone-state")) {
-      const parsed = parseExpandedReply(content);
+    if (clean.includes("<phone-state")) {
+      const parsed = parseExpandedReply(clean);
       if (parsed.prose.trim() || parsed.texts.length || parsed.badTexts)
-        throw new Error("invalid_output");
+        throw new HelperFailure("invalid output");
       patch = parsed.patch;
     } else
-      patch = parseExpanded(content);
-    if (!patch)
-      throw new Error("invalid_output");
+      patch = parseExpanded(clean);
+    if (!patch) {
+      const recognizable = /^\s*(?:loc|time|date|weather|present|c|p|people|items|rules|plots|done):/m.test(clean);
+      throw new HelperFailure(recognizable ? "validation rejected" : "invalid output");
+    }
     input = patchValues(patch);
   }
   const data = input;
@@ -1984,7 +2040,11 @@ function helperValues(content, doc, rows = []) {
         const old = doc.state.notes[section].find((x) => normalize(x.name) === normalize(String(c.name)));
         return old?.by !== "user" || evidenceAfter(c.evidence, old.at.index);
       });
-  validateExpanded(result);
+  try {
+    validateExpanded(result);
+  } catch {
+    throw new HelperFailure("validation rejected");
+  }
   return result;
 }
 function helperInput(ticket) {
@@ -2008,40 +2068,92 @@ function helperInput(ticket) {
     recent_messages: recent
   });
   if (payload.length > 2000000)
-    throw new Error("input_too_large");
+    throw new HelperFailure("validation rejected");
   return { messages: [{ role: "system", content: system }, { role: "user", content: payload }], prose };
 }
 
 class HelperAI {
   store;
   io;
+  timeoutMs;
   active = new Map;
   queues = new Map;
   draining = new Map;
   running = new Map;
   seenEnds = new Set;
-  constructor(store, io) {
+  constructor(store, io, timeoutMs = 90000) {
     this.store = store;
     this.io = io;
+    this.timeoutMs = timeoutMs;
+  }
+  notify(userId, chatId) {
+    try {
+      this.io.changed(userId, chatId);
+    } catch {}
+  }
+  async failure(userId, chatId, category, fallback = false) {
+    try {
+      this.io.warn(`Lumi Phone Tracker: Helper AI: ${category}.`);
+    } catch {}
+    if (userId && chatId)
+      await this.store.helperNotice(userId, chatId, helperNoticeText(category), fallback).catch(() => {});
+    if (userId && chatId)
+      this.notify(userId, chatId);
+    return { ok: false, category };
+  }
+  async profiles(userId) {
+    let timer;
+    try {
+      return await Promise.race([this.io.connections(userId), new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new HelperFailure("timeout")), 1e4);
+      })]);
+    } finally {
+      if (timer)
+        clearTimeout(timer);
+    }
   }
   async connections(userId, chatId) {
-    if (!this.io.allowed()) {
+    try {
+      if (!userId)
+        throw new HelperFailure("permission missing");
       const doc = await this.store.sync(userId, chatId);
-      if (doc.settings.source === "helper" && doc.helperOwner === userId) {
-        this.cancel(chatId);
-        await this.store.helperNotice(userId, chatId, "Tracker update failed", true);
-        this.io.changed(userId, chatId);
+      if (!this.io.allowed()) {
+        if (doc.settings.source === "helper" && doc.helperOwner === userId)
+          await this.failure(userId, chatId, "permission missing", true);
+        return { available: false, choices: [], note: "Allow generation permission in Extensions to use Helper AI." };
       }
-      return { available: false, choices: [], note: "Allow generation permission in Extensions to use Helper AI." };
+      const profiles = await this.profiles(userId);
+      if (doc.settings.source === "helper" && doc.helperOwner === userId && !profiles.some((c) => c.id === doc.settings.connection_id)) {
+        this.cancel(chatId);
+        await this.failure(userId, chatId, "no connection", true);
+      }
+      return { available: true, choices: profiles.map((c) => ({ id: c.id, label: [c.name, c.model].filter(Boolean).join(" \xC2\xB7 ") })), note: "" };
+    } catch (error) {
+      const category = failureCategory(error);
+      await this.failure(userId, chatId, category);
+      return { available: false, choices: [], note: helperNoticeText(category) };
     }
-    const profiles = await this.io.connections(userId);
-    const doc = await this.store.sync(userId, chatId);
-    if (doc.settings.source === "helper" && doc.helperOwner === userId && !profiles.some((c) => c.id === doc.settings.connection_id)) {
-      this.cancel(chatId);
-      await this.store.helperNotice(userId, chatId, "Connection not found", true);
-      this.io.changed(userId, chatId);
+  }
+  async refresh(userId, chatId) {
+    try {
+      if (!userId)
+        throw new HelperFailure("permission missing");
+      if (this.busy(chatId))
+        throw new HelperFailure("validation rejected");
+      const doc = await this.store.sync(userId, chatId);
+      if (this.active.get(chatId)?.size)
+        throw new HelperFailure("validation rejected");
+      if (doc.settings.source === "main") {
+        await this.store.helperNotice(userId, chatId, null);
+        this.notify(userId, chatId);
+        return { ok: true };
+      }
+      if (doc.helperOwner !== userId)
+        throw new HelperFailure("permission missing");
+      return await this.updateNow(userId, chatId);
+    } catch (error) {
+      return this.failure(userId, chatId, failureCategory(error, "validation rejected"));
     }
-    return { available: true, choices: profiles.map((c) => ({ id: c.id, label: [c.name, c.model].filter(Boolean).join(" \xB7 ") })), note: "" };
   }
   started(chatId, id) {
     const set = this.active.get(chatId) ?? new Set;
@@ -2052,6 +2164,8 @@ class HelperAI {
     if (!payload.chatId || payload.chatId.length > 256 || !payload.generationId || payload.generationId.length > 900)
       return;
     this.active.get(payload.chatId)?.delete(payload.generationId);
+    if (!userId && !payload.error && payload.messageId && typeof payload.content === "string")
+      this.failure("", payload.chatId, "permission missing");
     if (userId && !payload.error && payload.messageId && typeof payload.content === "string") {
       const key = JSON.stringify([userId, payload.chatId, payload.generationId]);
       if (!this.seenEnds.has(key)) {
@@ -2084,9 +2198,9 @@ class HelperAI {
   }
   async updateNow(userId, chatId) {
     if (this.busy(chatId))
-      return;
+      return this.failure(userId, chatId, "validation rejected");
     try {
-      await this.run({ userId, chatId, attempt: `manual:${crypto.randomUUID()}` });
+      return await this.run({ userId, chatId, attempt: `manual:${crypto.randomUUID()}` });
     } finally {
       this.drain(chatId);
     }
@@ -2111,64 +2225,73 @@ class HelperAI {
     } finally {
       if (this.draining.get(chatId) === task)
         this.draining.delete(chatId);
+      if (this.queues.get(chatId)?.length && !this.active.get(chatId)?.size && !this.running.has(chatId))
+        this.drain(chatId);
     }
   }
   async run(job) {
     const { userId, chatId } = job;
-    let reason = "request_failed";
     let ticket = null;
     const controller = new AbortController;
-    if (this.running.has(chatId) || this.active.get(chatId)?.size || !this.io.allowed())
-      return;
-    this.running.set(chatId, controller);
     let timer;
+    let timedOut = false;
+    let abortHandler;
+    if (this.running.has(chatId) || this.active.get(chatId)?.size)
+      return { ok: false, category: "validation rejected" };
+    this.running.set(chatId, controller);
     try {
+      if (!userId)
+        throw new HelperFailure("permission missing");
+      const initial = await this.store.sync(userId, chatId);
+      if (initial.settings.source !== "helper")
+        return { ok: true };
+      if (initial.helperOwner !== userId)
+        throw new HelperFailure("permission missing");
+      if (!this.io.allowed())
+        throw new HelperFailure("permission missing");
       ticket = await this.store.helperStart(userId, chatId, job.attempt, job.expected);
       if (!ticket)
-        return;
-      this.io.changed(userId, chatId);
-      const profiles = await this.io.connections(userId);
-      if (!profiles.some((c) => c.id === ticket.doc.settings.connection_id)) {
-        await this.store.helperNotice(userId, chatId, "Connection not found", true);
-        this.io.changed(userId, chatId);
-        return;
-      }
+        return { ok: true };
+      this.notify(userId, chatId);
+      const profiles = await this.profiles(userId);
+      if (!profiles.some((c) => c.id === ticket.doc.settings.connection_id))
+        return await this.failure(userId, chatId, "no connection", true);
       const input = helperInput(ticket);
       const current = await this.store.preview(chatId, userId);
-      if (controller.signal.aborted || this.active.get(chatId)?.size || !this.io.allowed() || current.settings.source !== "helper" || current.helperOwner !== userId || current.revision !== ticket.doc.revision)
-        return;
-      timer = setTimeout(() => controller.abort(), 90000);
-      const result = await this.io.generate({ messages: input.messages, connection_id: ticket.doc.settings.connection_id, userId, parameters: { max_tokens: 2400 }, signal: controller.signal });
-      if (controller.signal.aborted || this.active.get(chatId)?.size) {
-        reason = "stale_result";
-        throw new Error(reason);
-      }
-      let values;
-      try {
-        values = helperValues(result.content, ticket.doc, ticket.recent);
-      } catch {
-        reason = "invalid_json";
-        throw new Error(reason);
-      }
-      if (!await this.store.helperFinish(userId, ticket, values, input.prose)) {
-        reason = "stale_result";
-        throw new Error(reason);
-      }
-      this.io.changed(userId, chatId);
-    } catch {
-      if (ticket) {
-        this.io.warn(`Lumi Phone Tracker: Helper AI warning ${JSON.stringify({ chatId, reason })}`);
-        await this.store.helperNotice(userId, chatId, "Tracker update failed").catch(() => {});
-        this.io.changed(userId, chatId);
-      } else
-        this.io.warn("Lumi Phone Tracker: Helper AI warning (chat unavailable).");
+      if (!this.io.allowed())
+        throw new HelperFailure("permission missing");
+      if (controller.signal.aborted || this.active.get(chatId)?.size || current.settings.source !== "helper" || current.helperOwner !== userId || current.revision !== ticket.doc.revision)
+        throw new HelperFailure("validation rejected");
+      timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, this.timeoutMs);
+      const aborted = new Promise((_, reject) => {
+        abortHandler = () => reject(new HelperFailure(timedOut ? "timeout" : "validation rejected"));
+        controller.signal.addEventListener("abort", abortHandler, { once: true });
+      });
+      const result = await Promise.race([this.io.generate({ messages: input.messages, connection_id: ticket.doc.settings.connection_id, userId, parameters: { max_tokens: 2400 }, signal: controller.signal }), aborted]);
+      if (controller.signal.aborted || this.active.get(chatId)?.size)
+        throw new HelperFailure(timedOut ? "timeout" : "validation rejected");
+      if (!result || typeof result.content !== "string")
+        throw new HelperFailure("invalid output");
+      const values = helperValues(result.content, ticket.doc, ticket.recent);
+      if (!await this.store.helperFinish(userId, ticket, values, input.prose))
+        throw new HelperFailure("validation rejected");
+      await this.store.helperNotice(userId, chatId, null);
+      this.notify(userId, chatId);
+      return { ok: true };
+    } catch (error) {
+      return await this.failure(userId, chatId, failureCategory(error));
     } finally {
       if (timer)
         clearTimeout(timer);
+      if (abortHandler)
+        controller.signal.removeEventListener("abort", abortHandler);
       if (this.running.get(chatId) === controller)
         this.running.delete(chatId);
-      if (ticket)
-        this.io.changed(userId, chatId);
+      if (userId)
+        this.notify(userId, chatId);
     }
   }
 }
@@ -2224,7 +2347,7 @@ var helper = new HelperAI(store, {
   generate: async (input) => {
     const result = await spindle.generate.raw({ type: "raw", ...input });
     if (!isRecord(result) || typeof result.content !== "string")
-      throw new Error("Invalid response");
+      throw new HelperFailure("invalid output");
     return { content: result.content, finish_reason: typeof result.finish_reason === "string" ? result.finish_reason : "" };
   },
   changed: (userId, chatId) => spindle.sendToFrontend({ type: "phone_helper_changed", chatId }, userId),
@@ -2303,7 +2426,10 @@ function requireReadPermissions() {
 }
 spindle.onFrontendMessage((payload, userId) => {
   if (typeof userId !== "string" || !userId.trim()) {
-    warn("Lumi Phone Tracker: frontend user context unavailable; request ignored.");
+    if (isRecord(payload) && ["phone_connections", "phone_helper_now"].includes(String(payload.type)))
+      warn("Lumi Phone Tracker: Helper AI: permission missing.");
+    else
+      warn("Lumi Phone Tracker: frontend user context unavailable; request ignored.");
     return;
   }
   if (isRecord(payload) && ["phone_connections", "phone_helper_now"].includes(String(payload.type)) && typeof payload.requestId === "string" && payload.requestId.length <= 100 && typeof payload.chatId === "string" && payload.chatId.length <= 256) {
@@ -2314,10 +2440,14 @@ spindle.onFrontendMessage((payload, userId) => {
         const info = await helper.connections(userId, payload.chatId);
         spindle.sendToFrontend({ type: "phone_connections_result", requestId: payload.requestId, chatId: payload.chatId, info }, userId);
       } else {
-        await helper.updateNow(userId, payload.chatId);
-        spindle.sendToFrontend({ type: "phone_helper_now_result", requestId: payload.requestId, chatId: payload.chatId }, userId);
+        const result = await helper.refresh(userId, payload.chatId);
+        spindle.sendToFrontend({ type: "phone_helper_now_result", requestId: payload.requestId, chatId: payload.chatId, result }, userId);
       }
-    })().catch(() => spindle.sendToFrontend({ type: "phone_helper_error", requestId: payload.requestId, chatId: payload.chatId }, userId));
+    })().catch((error) => {
+      const category = failureCategory(error);
+      warn(`Lumi Phone Tracker: Helper AI: ${category}.`);
+      spindle.sendToFrontend({ type: "phone_helper_error", requestId: payload.requestId, chatId: payload.chatId, category }, userId);
+    });
     return;
   }
   if (isRecord(payload) && payload.type === "phone_mark_read" && typeof payload.requestId === "string" && payload.requestId.length <= 100 && typeof payload.chatId === "string" && payload.chatId.length <= 256 && typeof payload.key === "string" && payload.key.length <= 400 && Array.isArray(payload.observed) && payload.observed.length <= 1e5 && payload.observed.every((m) => isRecord(m) && typeof m.id === "string" && m.id.length <= 2000 && typeof m.receipt === "string" && m.receipt.length <= 20000)) {

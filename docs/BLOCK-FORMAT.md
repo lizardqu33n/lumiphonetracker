@@ -124,8 +124,12 @@ Helper AI is asked for the same shorthand and uses the same parser. It may retur
 a state block or bare lines. Valid lines survive bad ones; an empty state block
 means no change. Its journal stays in the existing validated internal schema,
 so old journals rebuild. Earlier raw JSON Helper replies remain accepted for
-compatibility but are no longer requested. Helper output containing narration or
-text tags is rejected; the helper never creates texts.
+compatibility but are no longer requested. One complete outer Markdown code fence
+(json, text, plaintext, phone-state, or no language) is accepted. No missing
+brackets/quotes are guessed and no prose-wrapped block is extracted. Valid
+legacy JSON fields survive a bad known field, while unknown top-level fields
+or text tags reject the response. An empty reply is a failure; an explicit empty
+block or {} is a valid no-change result. The helper never creates texts.
 
 Texts keep the separate tag and existing authorship/draft rules:
 
@@ -135,4 +139,5 @@ Texts keep the separate tag and existing authorship/draft rules:
 
 Omit unknown optional attributes. Content appears only in Messages. User scoping,
 recent-text retention, hiding, prompt stripping and player-text defaults are
-unchanged. Part 2 failure categories and Refresh tracker are NOT implemented.
+unchanged. Part 2 failure categories and Refresh tracker are documented in
+[PART-2.md](PART-2.md).

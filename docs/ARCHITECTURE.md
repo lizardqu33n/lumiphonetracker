@@ -1,8 +1,8 @@
-# Current release: Launcher icon / 0.7.1
+# Current release: Part 2 / 0.8.0
 
-A static embedded PNG replaces only the launcher artwork. It introduces no host calls, settings or permissions. Part 2 remains pending.
+Refresh tracker rebuilds saved Main AI data or makes one explicit Helper request. Failures use safe categories, connections are authorized before listing, and late results retain chat/revision guards. See [PART-2.md](PART-2.md) for the identity audit. No new permission or setting. The embedded launcher PNG is unchanged.
 
-Main AI and Helper AI share shorthand parsing into the existing validated journal schema. Old key=JSON messages remain readable. See [BLOCK-FORMAT.md](BLOCK-FORMAT.md), [TOKEN-REPORT.md](TOKEN-REPORT.md) and [USER-DOCS-REVIEW.md](USER-DOCS-REVIEW.md). No new host calls or identity routes are added. Part 2 remains pending.
+Main AI and Helper AI share shorthand parsing into the existing validated journal schema. Old key=JSON messages remain readable. See [BLOCK-FORMAT.md](BLOCK-FORMAT.md), [TOKEN-REPORT.md](TOKEN-REPORT.md) and [USER-DOCS-REVIEW.md](USER-DOCS-REVIEW.md). No new host calls or identity routes are added. Part 2 is complete; see [PART-2.md](PART-2.md).
 
 Native preset assembly can bypass macro interceptors. Its phone macros now resolve in the pull handler using the host's per-invocation env.extra.userId and env.chat.id, checking agreement with any top-level IDs. These exact compatibility fields are verified in official host source; the minimal pull DTO does not guarantee them. The macro interceptor still handles eligible non-preset paths. No active-chat lookup or cross-user cache is used. See [TESTING.md](../TESTING.md) for the corrected regression and compatibility limit.
 

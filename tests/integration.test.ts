@@ -34,7 +34,7 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     registerInterceptor: (handler: typeof interceptor, options: unknown) => { interceptor = handler; registrationOptions = options; },
     onFrontendMessage: (fn: typeof receive) => { receive = fn; return () => {}; },
     on: (event: string,fn:(payload:unknown,userId?:string)=>void) => { events.push(event);handlers.set(event,fn); return () => {}; },
-    connections:{list:async(user:string)=>{scoped(user,"connections.list");return [{id:"small",name:"Existing profile",model:"Test model"}];}},
+    connections:{list:async(user:string)=>{scoped(user,"connections.list");return [{id:user==="v"?"v-small":"small",name:"Existing profile",model:"Test model"}];}},
     generate:{raw:async(input:Record<string,unknown>)=>{scoped(input.userId,"generate.raw");generations.push(input);return {content:"{}",finish_reason:"stop"};}},
     chats: { get: async (id: string, user: string) => {scoped(user,"chats.get");return (user === "u" && id !== "c") || (user === "v" && id === "c") ? { id } : null;}, getActive: async (user:string) => {scoped(user,"chats.getActive");return { id: "a" };} },
     chat: { getMessages: async (chat: string) => chat === "empty" ? [] : [{ id: "m1", chat_id: chat, index_in_chat: 0, role: "assistant", content: `<phone-state>location="${chat}"</phone-state><phone-text from="Ada">Actual saved test text</phone-text>`, swipe_id: 0 }] },
@@ -138,6 +138,8 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     const beforeMissingUser=calls.length;
     receive({type:"phone_preferences_update",requestId:"missing",change:{css:""},userId:"u"},undefined as never);
     receive({type:"phone_sync",requestId:"missing",chatId:"a",userId:"u"},undefined as never);
+    receive({type:"phone_helper_now",requestId:"missing-helper",chatId:"a",userId:"u"},undefined as never);
+    expect(warnings.at(-1)).toBe("Lumi Phone Tracker: Helper AI: permission missing.");
     await Bun.sleep(5); expect(calls.length).toBe(beforeMissingUser);
     for (const chatId of ["a", "b"]) {
       const response = new Promise<Record<string, unknown>>(resolve => {
@@ -177,7 +179,7 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     const before=await request({type:"phone_sync",chatId:"a"},"u");
     const selected=await request({type:"phone_update",chatId:"a",revision:(before.snapshot as {revision:number}).revision,settings:{source:"helper",connection_id:"small"}},"u");
     expect((selected.snapshot as {settings:{source:string}}).settings.source).toBe("helper");expect(generations.length).toBe(0);
-    const done=await request({type:"phone_helper_now",chatId:"a"},"u");expect(done.type).toBe("phone_helper_now_result");expect(generations.length).toBe(1);
+    const done=await request({type:"phone_helper_now",chatId:"a"},"u");expect(done.type).toBe("phone_helper_now_result");expect(done.result).toEqual({ok:true});expect(generations.length).toBe(1);
     const countBeforeMissingEvent=generations.length;
     handlers.get("GENERATION_ENDED")!({chatId:"a",generationId:"unscoped",messageId:"m1",content:"PRIVATE"});
     await Bun.sleep(10); expect(generations.length).toBe(countBeforeMissingEvent);
@@ -189,6 +191,17 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     expect(generations.length).toBe(2);
     handlers.get("GENERATION_STOPPED")!({chatId:"a",generationId:"stopped-with-user"},"u");
     expect(calls).toContain("userStorage.setJson");expect(calls).toContain("macros.resolve");expect(calls).toContain("chats.get");
+    const cBefore=await request({type:"phone_sync",chatId:"c"},"v");
+    await request({type:"phone_update",chatId:"c",revision:(cBefore.snapshot as {revision:number}).revision,settings:{source:"helper",connection_id:"v-small"}},"v");
+    const cRefresh=await request({type:"phone_helper_now",chatId:"c"},"v");expect(cRefresh.result).toEqual({ok:true});
+    expect(generations.at(-1)!.userId).toBe("v");expect(generations.at(-1)!.connection_id).toBe("v-small");
+    const cSaved=JSON.parse(String(persisted.get("c/lpt_phone_v2")));expect(cSaved.helperOwner).toBe("v");expect(cSaved.helperEntries.length).toBe(1);
+    const cText=(cBefore.snapshot as {state:{messages:{id:string;from:string;to?:string;time?:string;text:string}[]}}).state.messages[0];
+    const cObserved=[{id:cText.id,receipt:JSON.stringify([cText.from,cText.to??null,cText.time??null,cText.text])}];
+    expect((await request({type:"phone_mark_read",chatId:"c",key:"ada",observed:cObserved},"v")).type).toBe("phone_reads_result");
+    expect([...persisted.keys()].some(k=>k.startsWith("v/message-reads/"))).toBe(true);
+    const beforeForbidden=generations.length;
+    expect((await request({type:"phone_helper_now",chatId:"c"},"u")).category).toBe("permission missing");expect(generations.length).toBe(beforeForbidden);
     expect(generations[0].type).toBe("raw");expect(generations[0].connection_id).toBe("small");expect(generations[0].userId).toBe("u");expect((generations[0].messages as unknown[]).length).toBe(2);
   } finally { (globalThis as unknown as { spindle?: unknown }).spindle = prior; }
 });

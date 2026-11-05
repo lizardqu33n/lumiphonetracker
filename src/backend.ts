@@ -9,6 +9,7 @@ import { PreferenceStore, defaultPreferences } from "./preferences";
 import { MessageReads, emptyReads } from "./message-reads";
 import { chatPath } from "./store";
 import { HelperAI } from "./helper";
+import { HelperFailure, failureCategory } from "./helper-status";
 
 declare const spindle: SpindleAPI;
 const warn = (text: string): void => { try { spindle.log.warn(text); } catch { /* Logging cannot block generation. */ } };
@@ -53,7 +54,7 @@ const helper = new HelperAI(store, {
   connections: async userId => (await spindle.connections.list(userId)).map(c => ({ id:c.id, name:c.name, model:c.model })),
   generate: async input => {
     const result=await spindle.generate.raw({type:"raw",...input});
-    if(!isRecord(result)||typeof result.content!=="string")throw new Error("Invalid response");
+    if(!isRecord(result)||typeof result.content!=="string")throw new HelperFailure("invalid output");
     return {content:result.content,finish_reason:typeof result.finish_reason==="string"?result.finish_reason:""};
   },
   changed: (userId,chatId) => spindle.sendToFrontend({type:"phone_helper_changed",chatId},userId),
@@ -122,7 +123,8 @@ function requireReadPermissions(): void {
 }
 spindle.onFrontendMessage((payload, userId) => {
   if (typeof userId !== "string" || !userId.trim()) {
-    warn("Lumi Phone Tracker: frontend user context unavailable; request ignored.");
+    if(isRecord(payload)&&["phone_connections","phone_helper_now"].includes(String(payload.type)))warn("Lumi Phone Tracker: Helper AI: permission missing.");
+    else warn("Lumi Phone Tracker: frontend user context unavailable; request ignored.");
     return; // Never turn a reply into an operator-wide broadcast.
   }
   if(isRecord(payload) && ["phone_connections","phone_helper_now"].includes(String(payload.type)) && typeof payload.requestId==="string" && payload.requestId.length<=100 && typeof payload.chatId==="string" && payload.chatId.length<=256) {
@@ -133,10 +135,13 @@ spindle.onFrontendMessage((payload, userId) => {
         const info=await helper.connections(userId,payload.chatId as string);
         spindle.sendToFrontend({type:"phone_connections_result",requestId:payload.requestId,chatId:payload.chatId,info},userId);
       } else {
-        await helper.updateNow(userId,payload.chatId as string);
-        spindle.sendToFrontend({type:"phone_helper_now_result",requestId:payload.requestId,chatId:payload.chatId},userId);
+        const result=await helper.refresh(userId,payload.chatId as string);
+        spindle.sendToFrontend({type:"phone_helper_now_result",requestId:payload.requestId,chatId:payload.chatId,result},userId);
       }
-    })().catch(()=>spindle.sendToFrontend({type:"phone_helper_error",requestId:payload.requestId,chatId:payload.chatId},userId));
+    })().catch(error=>{
+      const category=failureCategory(error);warn(`Lumi Phone Tracker: Helper AI: ${category}.`);
+      spindle.sendToFrontend({type:"phone_helper_error",requestId:payload.requestId,chatId:payload.chatId,category},userId);
+    });
     return;
   }
   if (isRecord(payload) && payload.type === "phone_mark_read" && typeof payload.requestId === "string" && payload.requestId.length <= 100 &&

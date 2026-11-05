@@ -7,6 +7,7 @@ import css from "./styles.css" with { type: "text" };
 import { addReplyDraft, emptyReads, type ReadState } from "./messages";
 import { readState } from "./message-reads";
 import type { ConnectionsInfo } from "./helper";
+import { HelperFailure, readRefreshResult } from "./helper-status";
 
 export function setup(ctx: SpindleFrontendContext): () => void {
   const disposers: (() => void)[] = [];
@@ -28,6 +29,9 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   const updates = new Map<string, { chatId: string; epoch: number; resolve: (doc: PhoneDocument) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   const prefsRequests = new Map<string, { appearanceEpoch: number; resolve: (prefs: Preferences) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   const readRequests = new Map<string, { chatId: string; epoch: number; resolve: (reads: ReadState) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+  const streaming=new Map<string,Set<string>>();
+  let backendBusy=false;
+  const busy=()=>backendBusy||!!(activeChat&&streaming.get(activeChat)?.size);
   const helperRequests = new Map<string, { chatId:string; epoch:number; resolve:(value:unknown)=>void; reject:(error:Error)=>void; timer:ReturnType<typeof setTimeout> }>();
   const removeHostStyle = ctx.dom.addStyle(css);
   disposers.push(removeHostStyle);
@@ -71,10 +75,10 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   };
   const requestHelper = (type:"phone_connections"|"phone_helper_now"):Promise<unknown> => {
     if(!activeChat||disposed)return Promise.reject(new Error("Open a chat first."));
-    if(type==="phone_helper_now" && current?.settings.source!=="helper")return Promise.reject(new Error("Choose Helper AI first."));
+    if(type==="phone_helper_now" && busy())return Promise.reject(new HelperFailure("validation rejected"));
     const chatId=activeChat,requestId=crypto.randomUUID();
     return new Promise((resolve,reject)=>{
-      const timer=setTimeout(()=>{helperRequests.delete(requestId);reject(new Error("Tracker update failed"));},type==="phone_helper_now"?105000:15000);
+      const timer=setTimeout(()=>{helperRequests.delete(requestId);reject(new HelperFailure("timeout"));},type==="phone_helper_now"?105000:15000);
       helperRequests.set(requestId,{chatId,epoch,resolve,reject,timer});ctx.sendToBackend({type,chatId,requestId});
     });
   };
@@ -133,7 +137,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
       viewport.append(island); transport.append(viewport); widget.root.append(placementStyle, transport);
       view = new PhoneView(shadow, custom, { update, preferences: prefsChange, markRead,
         connections: async()=>await requestHelper("phone_connections") as ConnectionsInfo,
-        updateNow: async()=>{await requestHelper("phone_helper_now");},
+        updateNow: async()=>{const result=readRefreshResult(await requestHelper("phone_helper_now"));sendSync();return result;},
         draft: (chatId, to, text) => {
           if (disposed || activeChat !== chatId || current?.chatId !== chatId || !current.settings.enabled.messages) throw new Error("The chat changed. Reopen the original conversation.");
           return addReplyDraft(ctx, chatId, current.currentPlayer ?? "", to, text);
@@ -176,8 +180,8 @@ export function setup(ctx: SpindleFrontendContext): () => void {
       if(!["phone_connections_result","phone_helper_now_result","phone_helper_error"].includes(String(payload.type)))return;
       clearTimeout(helperRequest.timer);helperRequests.delete(payload.requestId);
       if(helperRequest.epoch!==epoch||helperRequest.chatId!==activeChat||payload.chatId!==activeChat){helperRequest.reject(new Error("The chat changed."));return;}
-      if(payload.type==="phone_helper_error"){helperRequest.reject(new Error("Tracker update failed"));return;}
-      helperRequest.resolve(payload.info);return;
+      if(payload.type==="phone_helper_error"){helperRequest.reject(new HelperFailure(readRefreshResult({ok:false,category:payload.category}).category!));return;}
+      helperRequest.resolve(payload.type==="phone_helper_now_result"?payload.result:payload.info);return;
     }
     const readRequest = readRequests.get(payload.requestId);
     if (readRequest) {
@@ -212,7 +216,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
       if (payload.chatId !== activeChat || !isRecord(payload.snapshot) || payload.snapshot.chatId !== activeChat) { edit.reject(new Error("The chat changed.")); return; }
       current = payload.snapshot as unknown as PhoneDocument;
       try { const value = readState(payload.reads); if (value.revision >= reads.revision) reads = value; } catch { /* Keep known read state. */ }
-      view?.receiveReads(reads); view?.receiveHelperBusy(payload.helperBusy===true); edit.resolve(current); return;
+      view?.receiveReads(reads); backendBusy=payload.helperBusy===true;view?.receiveHelperBusy(busy()); edit.resolve(current); return;
     }
     if (payload.requestId !== pendingSync) return;
     if (payload.type === "phone_error") { view?.setError(String(payload.message)); return; }
@@ -221,10 +225,10 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     activeChat = typeof payload.chatId === "string" ? payload.chatId : null;
     current = isRecord(payload.snapshot) && payload.snapshot.chatId === activeChat ? payload.snapshot as unknown as PhoneDocument : null;
     try { const value = readState(payload.reads); if (value.revision >= reads.revision) reads = value; } catch { /* Keep known read state. */ }
-    view?.receive(current, reads); view?.receiveHelperBusy(payload.helperBusy===true);
+    view?.receive(current, reads); backendBusy=payload.helperBusy===true;view?.receiveHelperBusy(busy());
   }));
   const switchChat = (chatId: string | null) => {
-    epoch++; pendingSync = ""; activeChat = chatId; current = null; reads = emptyReads(); view?.receive(null, reads);
+    epoch++; backendBusy=false;pendingSync = ""; activeChat = chatId; current = null; reads = emptyReads(); view?.receive(null, reads);
     for (const [id, p] of readRequests) { clearTimeout(p.timer); p.reject(new Error("The chat changed.")); readRequests.delete(id); }
     for (const [id, p] of updates) { clearTimeout(p.timer); p.reject(new Error("The chat changed. Your original chat keeps its saved changes.")); updates.delete(id); }
     for(const [id,p]of helperRequests){clearTimeout(p.timer);p.reject(new Error("The chat changed."));helperRequests.delete(id);}
@@ -233,6 +237,13 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   disposers.push(ctx.events.on("CHAT_SWITCHED", (payload: unknown) => { if (isRecord(payload)) switchChat(typeof payload.chatId === "string" ? payload.chatId : null); }));
   for (const event of ["MESSAGE_SENT", "MESSAGE_EDITED", "MESSAGE_DELETED", "MESSAGE_SWIPED", "SWIPE_EDITED", "CHAT_CHANGED"]) disposers.push(ctx.events.on(event, (payload: unknown) => {
     if (isRecord(payload) && activeChat && payload.chatId === activeChat) sendSync();
+  }));
+  for(const name of ["GENERATION_STARTED","GENERATION_ENDED","GENERATION_STOPPED"])disposers.push(ctx.events.on(name,(payload:unknown)=>{
+    if(!isRecord(payload)||typeof payload.chatId!=="string"||typeof payload.generationId!=="string")return;
+    const ids=streaming.get(payload.chatId)??new Set<string>();
+    if(name==="GENERATION_STARTED")ids.add(payload.generationId);else ids.delete(payload.generationId);
+    if(ids.size)streaming.set(payload.chatId,ids);else streaming.delete(payload.chatId);
+    if(payload.chatId===activeChat){view?.receiveHelperBusy(busy());if(name!=="GENERATION_STARTED")sendSync();}
   }));
   const fit = () => view?.fit(); window.addEventListener("resize", fit); window.visualViewport?.addEventListener("resize", fit);
   disposers.push(() => { window.removeEventListener("resize", fit); window.visualViewport?.removeEventListener("resize", fit); });

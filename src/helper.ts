@@ -5,6 +5,7 @@ import { change, validateExpanded, parseExpanded, parseExpandedReply } from "./s
 import type { StoryRow } from "./engine";
 import { transformTags } from "./tags";
 import { isRecord } from "./shared";
+import { HelperFailure, failureCategory, helperNoticeText, type HelperFailureCategory, type RefreshResult } from "./helper-status";
 import { patchValues } from "./shorthand";
 import { sceneMacro, locationsMacro, notesMacro, renderMacro, trackerInstructions } from "./phone-macros";
 
@@ -17,17 +18,36 @@ export interface HelperIO {
   warn(text: string): void;
 }
 export function helperValues(content: string, doc: Document, rows:StoryRow[]=[]): Record<string, unknown> {
-  if (!content.trim() || content.length > 64000) throw new Error("invalid_json");
+  if(!content.trim())throw new HelperFailure("empty reply");
+  if(content.length>64000)throw new HelperFailure("invalid output");
+  let clean=content.trim();
+  // One complete outer code fence is presentation, not data repair.
+  const fence=clean.match(/^```(?:json|text|plaintext|phone-state)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/i);
+  if(fence)clean=fence[1].trim();
+  else if(clean.includes("```"))throw new HelperFailure("invalid output");
+  if(!clean)throw new HelperFailure("empty reply");
+  if(/<\/?phone-text\b/i.test(clean))throw new HelperFailure("validation rejected");
   let input:unknown;
-  if(content.trimStart().startsWith("{")) { input=JSON.parse(content);validateExpanded(input); } // Earlier helper responses remain readable.
-  else {
+  if(clean.startsWith("{")) {
+    let json:unknown;try{json=JSON.parse(clean);}catch{throw new HelperFailure("invalid output");}
+    if(!isRecord(json))throw new HelperFailure("validation rejected");
+    const allowed=[...SCENE_KEYS,"weather","contacts","locations",...SECTIONS.filter(k=>k!=="misc")];
+    if(Object.keys(json).some(k=>!allowed.includes(k)))throw new HelperFailure("validation rejected");
+    // Validate legacy JSON one top-level field at a time through the common parser.
+    const patch=parseExpanded(Object.entries(json).map(([k,v])=>`${k}=${JSON.stringify(v)}`).join("\n"));
+    if(!patch)throw new HelperFailure("validation rejected");input={...patchValues(patch),...Object.fromEntries(Object.entries(json).filter(([,v])=>v===null))};
+  } else {
     let patch;
-    if(content.includes("<phone-state")) {
-      const parsed=parseExpandedReply(content);
-      if(parsed.prose.trim()||parsed.texts.length||parsed.badTexts)throw new Error("invalid_output");
+    if(clean.includes("<phone-state")) {
+      const parsed=parseExpandedReply(clean);
+      if(parsed.prose.trim()||parsed.texts.length||parsed.badTexts)throw new HelperFailure("invalid output");
       patch=parsed.patch;
-    } else patch=parseExpanded(content);
-    if(!patch)throw new Error("invalid_output");input=patchValues(patch);
+    } else patch=parseExpanded(clean);
+    if(!patch) {
+      const recognizable=/^\s*(?:loc|time|date|weather|present|c|p|people|items|rules|plots|done):/m.test(clean);
+      throw new HelperFailure(recognizable?"validation rejected":"invalid output");
+    }
+    input=patchValues(patch);
   }
   const data = input as Record<string, unknown>; const result: Record<string,unknown> = {};
   for (const key of SCENE_KEYS) if (doc.settings.enabled[`scene.${key}`] && data[key] !== undefined) result[key]=data[key];
@@ -65,7 +85,7 @@ export function helperValues(content: string, doc: Document, rows:StoryRow[]=[])
   for(const section of SECTIONS.filter(s=>s!=="misc"))if(Array.isArray(result[section]))result[section]=(result[section] as Record<string,unknown>[]).filter(c=>{
     const old=doc.state.notes[section].find(x=>normalize(x.name)===normalize(String(c.name)));return old?.by!=="user"||evidenceAfter(c.evidence,old.at.index);
   });
-  validateExpanded(result); return result;
+  try{validateExpanded(result);}catch{throw new HelperFailure("validation rejected");}return result;
 }
 export function helperInput(ticket: HelperTicket): { messages: NonNullable<GenerationRequestDTO["messages"]>; prose: string } {
   const doc=ticket.doc;
@@ -79,7 +99,7 @@ export function helperInput(ticket: HelperTicket): { messages: NonNullable<Gener
   ].join("\n");
   const payload=JSON.stringify({player:doc.currentPlayer??null,current_tracker:current,notes_per_section:doc.settings.notesPerSection,
     full_sections:SECTIONS.filter(s=>s!=="misc"&&doc.settings.enabled[`notes.${s}`]&&doc.state.notes[s].filter(n=>!n.resolved).length>=doc.settings.notesPerSection),recent_messages:recent});
-  if (payload.length>2000000) throw new Error("input_too_large");
+  if (payload.length>2000000) throw new HelperFailure("validation rejected");
   return {messages:[{role:"system",content:system},{role:"user",content:payload}],prose};
 }
 
@@ -90,24 +110,58 @@ export class HelperAI {
   private draining=new Map<string,Promise<void>>();
   private running=new Map<string,AbortController>();
   private seenEnds=new Set<string>();
-  constructor(private store:PhoneStore, private io:HelperIO) {}
+  constructor(private store:PhoneStore, private io:HelperIO, private timeoutMs=90000) {}
+  private notify(userId:string,chatId:string):void {
+    try{this.io.changed(userId,chatId);}catch{/* Frontend delivery cannot fail tracking. */}
+  }
+  private async failure(userId:string,chatId:string,category:HelperFailureCategory,fallback=false):Promise<RefreshResult> {
+    try{this.io.warn(`Lumi Phone Tracker: Helper AI: ${category}.`);}catch{/* Never expose exceptions. */}
+    if(userId&&chatId)await this.store.helperNotice(userId,chatId,helperNoticeText(category),fallback).catch(()=>{});
+    if(userId&&chatId)this.notify(userId,chatId);
+    return {ok:false,category};
+  }
+  private async profiles(userId:string):Promise<{id:string;name:string;model:string}[]> {
+    let timer:ReturnType<typeof setTimeout>|undefined;
+    try{return await Promise.race([this.io.connections(userId),new Promise<never>((_,reject)=>{
+      timer=setTimeout(()=>reject(new HelperFailure("timeout")),10000);
+    })]);}finally{if(timer)clearTimeout(timer);}
+  }
   async connections(userId:string,chatId:string):Promise<ConnectionsInfo> {
-    if(!this.io.allowed()) {
+    try {
+      if(!userId)throw new HelperFailure("permission missing");
+      const doc=await this.store.sync(userId,chatId); // Authorize before listing profiles.
+      if(!this.io.allowed()) {
+        if(doc.settings.source==="helper"&&doc.helperOwner===userId)await this.failure(userId,chatId,"permission missing",true);
+        return {available:false,choices:[],note:"Allow generation permission in Extensions to use Helper AI."};
+      }
+      const profiles=await this.profiles(userId);
+      if(doc.settings.source==="helper"&&doc.helperOwner===userId&&!profiles.some(c=>c.id===doc.settings.connection_id)) {
+        this.cancel(chatId);await this.failure(userId,chatId,"no connection",true);
+      }
+      return {available:true,choices:profiles.map(c=>({id:c.id,label:[c.name,c.model].filter(Boolean).join(" Â· ")})),note:""};
+    } catch(error) {
+      const category=failureCategory(error);await this.failure(userId,chatId,category);
+      return {available:false,choices:[],note:helperNoticeText(category)};
+    }
+  }
+  async refresh(userId:string,chatId:string):Promise<RefreshResult> {
+    try {
+      if(!userId)throw new HelperFailure("permission missing");
+      if(this.busy(chatId))throw new HelperFailure("validation rejected");
       const doc=await this.store.sync(userId,chatId);
-      if(doc.settings.source==="helper"&&doc.helperOwner===userId){this.cancel(chatId);await this.store.helperNotice(userId,chatId,"Tracker update failed",true);this.io.changed(userId,chatId);}
-      return {available:false,choices:[],note:"Allow generation permission in Extensions to use Helper AI."};
-    }
-    const profiles=await this.io.connections(userId);
-    const doc=await this.store.sync(userId,chatId);
-    if(doc.settings.source==="helper" && doc.helperOwner===userId && !profiles.some(c=>c.id===doc.settings.connection_id)) {
-      this.cancel(chatId); await this.store.helperNotice(userId,chatId,"Connection not found",true); this.io.changed(userId,chatId);
-    }
-    return {available:true,choices:profiles.map(c=>({id:c.id,label:[c.name,c.model].filter(Boolean).join(" · ")})),note:""};
+      if(this.active.get(chatId)?.size)throw new HelperFailure("validation rejected");
+      if(doc.settings.source==="main") {
+        await this.store.helperNotice(userId,chatId,null);this.notify(userId,chatId);return {ok:true};
+      }
+      if(doc.helperOwner!==userId)throw new HelperFailure("permission missing");
+      return await this.updateNow(userId,chatId);
+    } catch(error) {return this.failure(userId,chatId,failureCategory(error,"validation rejected"));}
   }
   started(chatId:string,id:string):void { const set=this.active.get(chatId)??new Set(); set.add(id);this.active.set(chatId,set); }
   ended(userId:string|undefined, payload:{chatId:string;generationId:string;messageId?:string;content?:string;error?:string}):void {
     if(!payload.chatId||payload.chatId.length>256||!payload.generationId||payload.generationId.length>900)return;
     this.active.get(payload.chatId)?.delete(payload.generationId);
+    if(!userId&&!payload.error&&payload.messageId&&typeof payload.content==="string")void this.failure("",payload.chatId,"permission missing");
     if(userId && !payload.error && payload.messageId && typeof payload.content==="string") {
       const key=JSON.stringify([userId,payload.chatId,payload.generationId]);
       if(!this.seenEnds.has(key)) {
@@ -122,9 +176,9 @@ export class HelperAI {
   cancel(chatId:string):void { this.running.get(chatId)?.abort();this.queues.delete(chatId); }
   cancelAll():void { for(const key of this.running.keys())this.cancel(key);this.queues.clear();this.active.clear(); }
   busy(chatId:string):boolean { return !!this.active.get(chatId)?.size || this.running.has(chatId) || this.draining.has(chatId); }
-  async updateNow(userId:string,chatId:string):Promise<void> {
-    if(this.busy(chatId)) return; // No manual request during streaming or an existing update.
-    try{await this.run({userId,chatId,attempt:`manual:${crypto.randomUUID()}`});}finally{void this.drain(chatId);}
+  async updateNow(userId:string,chatId:string):Promise<RefreshResult> {
+    if(this.busy(chatId))return this.failure(userId,chatId,"validation rejected");
+    try{return await this.run({userId,chatId,attempt:`manual:${crypto.randomUUID()}`});}finally{void this.drain(chatId);}
   }
   async settled(chatId:string):Promise<void> { await this.draining.get(chatId); }
   private async drain(chatId:string):Promise<void> {
@@ -135,39 +189,49 @@ export class HelperAI {
       }
       if(!this.queues.get(chatId)?.length)this.queues.delete(chatId);
     })(); this.draining.set(chatId,task);
-    try{await task;}finally{if(this.draining.get(chatId)===task)this.draining.delete(chatId);}
+    try{await task;}finally{if(this.draining.get(chatId)===task)this.draining.delete(chatId);
+      if(this.queues.get(chatId)?.length&&!this.active.get(chatId)?.size&&!this.running.has(chatId))void this.drain(chatId);
+    }
   }
-  private async run(job:Job):Promise<void> {
-    const {userId,chatId}=job; let reason="request_failed"; let ticket:HelperTicket|null=null;
-    const controller=new AbortController();
-    if(this.running.has(chatId)||this.active.get(chatId)?.size||!this.io.allowed())return;
+  private async run(job:Job):Promise<RefreshResult> {
+    const {userId,chatId}=job;let ticket:HelperTicket|null=null;
+    const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;let timedOut=false;
+    let abortHandler:(()=>void)|undefined;
+    if(this.running.has(chatId)||this.active.get(chatId)?.size)return {ok:false,category:"validation rejected"};
     this.running.set(chatId,controller);
-    let timer:ReturnType<typeof setTimeout>|undefined;
     try {
+      if(!userId)throw new HelperFailure("permission missing");
+      // Sync first, so Main AI never makes a provider call or a generation-permission failure.
+      const initial=await this.store.sync(userId,chatId);
+      if(initial.settings.source!=="helper")return {ok:true};
+      if(initial.helperOwner!==userId)throw new HelperFailure("permission missing");
+      if(!this.io.allowed())throw new HelperFailure("permission missing");
       ticket=await this.store.helperStart(userId,chatId,job.attempt,job.expected);
-      if(!ticket)return;
-      this.io.changed(userId,chatId);
-      const profiles=await this.io.connections(userId);
-      if(!profiles.some(c=>c.id===ticket!.doc.settings.connection_id)) {
-        await this.store.helperNotice(userId,chatId,"Connection not found",true);this.io.changed(userId,chatId);return;
-      }
+      if(!ticket)return {ok:true};
+      this.notify(userId,chatId);
+      const profiles=await this.profiles(userId);
+      if(!profiles.some(c=>c.id===ticket!.doc.settings.connection_id))return await this.failure(userId,chatId,"no connection",true);
       const input=helperInput(ticket);
       const current=await this.store.preview(chatId,userId);
-      if(controller.signal.aborted||this.active.get(chatId)?.size||!this.io.allowed()||current.settings.source!=="helper"||current.helperOwner!==userId||current.revision!==ticket.doc.revision)return;
-      timer=setTimeout(()=>controller.abort(),90000);
-      // Raw bypasses chat assembly/interceptors: only these two bounded messages leave.
-      const result=await this.io.generate({messages:input.messages,connection_id:ticket.doc.settings.connection_id!,userId,parameters:{max_tokens:2400},signal:controller.signal});
-      if(controller.signal.aborted||this.active.get(chatId)?.size){reason="stale_result";throw new Error(reason);}
-      let values:Record<string,unknown>;
-      try{values=helperValues(result.content,ticket.doc,ticket.recent);}catch{reason="invalid_json";throw new Error(reason);}
-      if(!await this.store.helperFinish(userId,ticket,values,input.prose)){reason="stale_result";throw new Error(reason);}
-      this.io.changed(userId,chatId);
-    } catch {
-      if(ticket) {
-        this.io.warn(`Lumi Phone Tracker: Helper AI warning ${JSON.stringify({chatId,reason})}`);
-        await this.store.helperNotice(userId,chatId,"Tracker update failed").catch(()=>{});
-        this.io.changed(userId,chatId);
-      } else this.io.warn("Lumi Phone Tracker: Helper AI warning (chat unavailable).");
-    } finally { if(timer)clearTimeout(timer);if(this.running.get(chatId)===controller)this.running.delete(chatId);if(ticket)this.io.changed(userId,chatId); }
+      if(!this.io.allowed())throw new HelperFailure("permission missing");
+      if(controller.signal.aborted||this.active.get(chatId)?.size||current.settings.source!=="helper"||current.helperOwner!==userId||current.revision!==ticket.doc.revision)throw new HelperFailure("validation rejected");
+      timer=setTimeout(()=>{timedOut=true;controller.abort();},this.timeoutMs);
+      const aborted=new Promise<never>((_,reject)=>{
+        abortHandler=()=>reject(new HelperFailure(timedOut?"timeout":"validation rejected"));
+        controller.signal.addEventListener("abort",abortHandler,{once:true});
+      });
+      // Passing signal is documented. Racing it also bounds providers that ignore cancellation.
+      const result=await Promise.race([this.io.generate({messages:input.messages,connection_id:ticket.doc.settings.connection_id!,userId,parameters:{max_tokens:2400},signal:controller.signal}),aborted]);
+      if(controller.signal.aborted||this.active.get(chatId)?.size)throw new HelperFailure(timedOut?"timeout":"validation rejected");
+      if(!result||typeof result.content!=="string")throw new HelperFailure("invalid output");
+      const values=helperValues(result.content,ticket.doc,ticket.recent);
+      if(!await this.store.helperFinish(userId,ticket,values,input.prose))throw new HelperFailure("validation rejected");
+      await this.store.helperNotice(userId,chatId,null);this.notify(userId,chatId);return {ok:true};
+    } catch(error) {return await this.failure(userId,chatId,failureCategory(error));}
+    finally {
+      if(timer)clearTimeout(timer);if(abortHandler)controller.signal.removeEventListener("abort",abortHandler);
+      if(this.running.get(chatId)===controller)this.running.delete(chatId);
+      if(userId)this.notify(userId,chatId);
+    }
   }
 }

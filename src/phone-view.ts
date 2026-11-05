@@ -6,6 +6,7 @@ import { LAUNCHER_ICON } from "./launcher-icon";
 import { HOME_ICONS, type IconNode } from "./icons";
 import { conversations, emptyReads, isUnread, receipt, threadKey, type Conversation, type ReadState } from "./messages";
 import type { ConnectionsInfo } from "./helper";
+import { failureCategory, failureLabel, isHelperNotice, type RefreshResult } from "./helper-status";
 import { isRecord } from "./shared";
 
 export interface ViewActions {
@@ -14,7 +15,7 @@ export interface ViewActions {
   markRead(chatId: string, key: string, observed: { id: string; receipt: string }[]): Promise<ReadState>;
   draft(chatId: string, to: string, text: string): { manual: boolean; tag: string };
   connections():Promise<ConnectionsInfo>;
-  updateNow():Promise<void>;
+  updateNow():Promise<RefreshResult>;
   size(width: number, height: number, open: boolean): void;
 }
 const DESCRIPTIONS: Record<App, string> = {
@@ -113,7 +114,7 @@ export class PhoneView {
     const arrived = !changedChat && this.doc && doc?.settings.enabled.messages ? doc.state.messages.filter(m => m.direction === "incoming" && !previous.has(JSON.stringify([m.id, receipt(m)]))) : [];
     this.doc = doc;
     if (changedChat) {
-      this.chatEpoch++; this.pendingReads.clear(); this.reads = reads ?? emptyReads(); this.replyDrafts.clear(); this.manualDrafts.clear();
+      this.chatEpoch++;this.refreshPending=false;this.refreshStatus=""; this.pendingReads.clear(); this.reads = reads ?? emptyReads(); this.replyDrafts.clear(); this.manualDrafts.clear();
       this.clearTextNotice(); this.editing = false; this.app = "Home"; this.selectedText = null;
       this.helperChoice=false; this.helperBusy=false;
       if(doc)void this.loadConnections();
@@ -124,7 +125,12 @@ export class PhoneView {
     this.markVisibleConversation();
   }
   receiveReads(reads: ReadState): void { if (reads.revision >= this.reads.revision) { this.reads = reads; this.refreshBadges(); } }
-  receiveHelperBusy(busy:boolean):void {this.helperBusy=busy;const button=this.root.querySelector<HTMLButtonElement>(".lpt-update-now");if(button){button.disabled=busy;button.textContent=busy?"Please wait…":"Update now";}}
+  private refreshPending=false;
+  private refreshStatus="";
+  receiveHelperBusy(busy:boolean):void {
+    this.helperBusy=busy;const button=this.root.querySelector<HTMLButtonElement>(".lpt-update-now");
+    if(button)button.disabled=busy||this.refreshPending||!!(this.helperChoice&&this.doc?.settings.source!=="helper");
+  }
   private async loadConnections():Promise<void> {
     const epoch=this.chatEpoch;
     try{const info=await this.actions.connections();if(epoch!==this.chatEpoch)return;this.connectionsInfo=info;}
@@ -146,7 +152,7 @@ export class PhoneView {
   }
   open(app?: App): void { if (app) this.navigate(app); this.setOpen(true); this.back.hidden ? this.frame.querySelector<HTMLElement>(".lpt-app-button, .lpt-close")?.focus() : this.back.focus(); }
   close(): void { this.setOpen(false); this.launcher.focus(); }
-  destroy(): void { clearTimeout(this.cssTimer); clearTimeout(this.noticeTimer); this.chatEpoch++; this.observer.disconnect(); this.root.remove(); }
+  destroy(): void { clearTimeout(this.cssTimer); clearTimeout(this.noticeTimer); this.chatEpoch++;this.refreshPending=false;this.refreshStatus=""; this.observer.disconnect(); this.root.remove(); }
   private setOpen(open: boolean): void {
     this.openState = open; this.root.dataset.open = String(open); this.frame.hidden = !open; this.launcher.hidden = open;
     if (open) this.frame.insertBefore(this.textNotice, this.content); else this.root.insertBefore(this.textNotice, this.frame);
@@ -195,7 +201,7 @@ export class PhoneView {
     if (this.doc) for (const text of this.doc.state.notices) {
       const notice = el("div", "lpt-notice");
       notice.append(el("span", "lpt-notice-text", text), button("Dismiss", "lpt-dismiss", () => { void this.change({ dismissNotice: text }); }));
-      const helperGroup=this.app==="Settings"&&["Tracker update failed","Connection not found"].includes(text)?this.content.querySelector(".lpt-helper-settings"):null;
+      const helperGroup=this.app==="Settings"&&isHelperNotice(text)?this.content.querySelector(".lpt-helper-settings"):null;
       if(helperGroup)helperGroup.insertBefore(notice,helperGroup.children.item(1));else this.content.append(notice);
     }
     this.error.setAttribute("role", "alert"); this.status.setAttribute("aria-live", "polite"); this.content.append(this.error, this.status);
@@ -544,7 +550,6 @@ export class PhoneView {
     });sourceLabel.append(source);group.append(sourceLabel);
     group.append(el("p","lpt-help","Main AI uses your normal reply. Helper AI makes a separate request."));
     if(source.value==="helper") {
-      group.append(el("p","lpt-help","Requests may cost money depending on the model chosen."));
       const label=el("label","lpt-label","Connection");const select=el("select","lpt-input lpt-helper-connection");
       const empty=el("option","lpt-option","Choose a connection");empty.value="";select.append(empty);
       for(const choice of this.connectionsInfo.choices){const option=el("option","lpt-option",choice.label);option.value=choice.id;select.append(option);}
@@ -553,13 +558,17 @@ export class PhoneView {
       if(this.connectionsInfo.note)group.append(el("p","lpt-help",this.connectionsInfo.note));
       if(this.doc!.settings.source!=="helper")group.append(el("p","lpt-help","Choose a connection to turn Helper AI on."));
       this.number(group,"Messages to read","Only these recent messages and the compact tracker are sent.","helperMessages",1,10);
-      if(this.doc!.settings.source==="helper") {
-        const update=button(this.helperBusy?"Please wait…":"Update now","lpt-button lpt-update-now",()=>{
-          const epoch=this.chatEpoch;update.disabled=true;
-          void this.actions.updateNow().catch(()=>{if(epoch===this.chatEpoch)this.setError("Tracker update failed");}).finally(()=>{if(epoch===this.chatEpoch)update.disabled=this.helperBusy;});
-        });update.disabled=this.helperBusy;group.append(update);
-      }
     }
+    if(source.value==="helper")group.append(el("p","lpt-help","Requests may cost money depending on the model chosen."));
+    const update=button("Refresh tracker","lpt-button lpt-update-now",()=>{
+      const epoch=this.chatEpoch;this.refreshPending=true;this.refreshStatus="";update.disabled=true;
+      void this.actions.updateNow().then(result=>{
+        if(epoch===this.chatEpoch)this.refreshStatus=result.ok?"Refreshed":failureLabel(result.category??"invalid output");
+      }).catch(error=>{if(epoch===this.chatEpoch)this.refreshStatus=failureLabel(failureCategory(error,"validation rejected"));})
+        .finally(()=>{if(epoch===this.chatEpoch){this.refreshPending=false;this.render();}});
+    });
+    update.disabled=this.helperBusy||this.refreshPending||(source.value==="helper"&&this.doc!.settings.source!=="helper");group.append(update);
+    const status=el("p","lpt-status lpt-refresh-result",this.refreshStatus);status.setAttribute("role","status");status.setAttribute("aria-live","polite");group.append(status);
     parent.append(group);
   }
   private toggle(parent: HTMLElement, name: string, description: string, checked: boolean, update: (v: boolean) => unknown): void {

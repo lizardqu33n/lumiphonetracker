@@ -38,7 +38,7 @@ const sendToBackend = (payload: unknown) => {
       }
       if (!chat) { reply({ type: "phone_snapshot", requestId: id, chatId: null }); return; }
       if(payload.type==="phone_connections"){const info=await helper.connections(`owner-${chat}`,chat);reply({type:"phone_connections_result",requestId:id,chatId:chat,info});return;}
-      if(payload.type==="phone_helper_now"){await helper.updateNow(`owner-${chat}`,chat);reply({type:"phone_helper_now_result",requestId:id,chatId:chat});return;}
+      if(payload.type==="phone_helper_now"){const result=await helper.refresh(`owner-${chat}`,chat);reply({type:"phone_helper_now_result",requestId:id,chatId:chat,result});return;}
       if (payload.type === "phone_mark_read") {
         const snapshot = await store.sync(`owner-${chat}`,chat);
         const reads = await readStore.mark("user", chat, String(payload.key), payload.observed as { id: string; receipt: string }[], snapshot.state.messages);
@@ -129,6 +129,7 @@ const api = {
   composer: () => ({ ...composerState, focusCount, sendCalls }),
   setComposer(state: Partial<typeof composerState>) { composerState = { ...composerState, ...state }; },
   composerSupported(value: boolean) { ctx.host.capabilities["composer-v1"] = value ? 1 : 0; },
+  generationEvent(name:string,id:string){for(const fn of events.get(name)??[])fn({chatId:activeChat,generationId:id});},
   helperCalls:()=>helperCalls.length,
   helperDelay(ms:number){helperDelay=ms;},
   helperOutput(value:string){helperOutput=value;},

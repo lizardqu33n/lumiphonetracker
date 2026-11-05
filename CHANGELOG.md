@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.0 - Part 2 only
+
+- Refresh tracker replaces Update now in Settings in both modes. Main AI rebuilds from saved messages without a model request; Helper AI makes one explicit update. Streaming disables it.
+- Helper failures now name one of seven safe categories in the phone and server log. Old tracker data stays; no retry loop. Missing connections still fall back to Main AI.
+- Authorize the chat before listing connections. Retain trusted user IDs on connection, generation and per-user receipt calls; validate the pinned chat/revision before saving a result.
+- Accept complete outer code fences and independent valid fields with the common parser. Keep strict text, evidence, player-card and placeholder rules. Bound ignored provider cancellation and close a completed-reply queue race.
+- Added two-user/operator-scope, failure-category, timeout, parsing and browser regressions. No new permission, screen or setting. Live second-user/provider behavior remains unverified.
+
 ## 0.7.1 - Launcher icon only
 
 - Embedded the supplied flip-phone PNG as a static data URI with smooth scaling.

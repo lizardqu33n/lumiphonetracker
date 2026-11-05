@@ -330,6 +330,41 @@ function addReplyDraft(ctx, chatId, from, to, text) {
   return { manual: false, tag };
 }
 
+// src/helper-status.ts
+var HELPER_FAILURES = ["permission missing", "no connection", "provider error", "timeout", "empty reply", "invalid output", "validation rejected"];
+
+class HelperFailure extends Error {
+  category;
+  constructor(category) {
+    super(category);
+    this.category = category;
+    this.name = "HelperFailure";
+  }
+}
+var failureLabel = (category) => category[0].toUpperCase() + category.slice(1);
+var isHelperNotice = (text) => text === "Connection not found" || text.startsWith("Connection not found. ") || text.startsWith("Tracker update failed");
+function failureCategory(error, fallback = "provider error") {
+  if (error instanceof HelperFailure)
+    return error.category;
+  const e = error;
+  const message = [e?.message, e?.code].filter((v) => typeof v === "string").join(" ");
+  if (/permission|userId is required|chat unavailable|allow chat access|unauthori[sz]ed|forbidden/i.test(message))
+    return "permission missing";
+  if (e?.name === "TimeoutError" || e?.name === "AbortError" || /timed? ?out|timeout/i.test(message))
+    return "timeout";
+  return fallback;
+}
+function readRefreshResult(value) {
+  if (value && typeof value === "object" && "ok" in value) {
+    const r = value;
+    if (r.ok === true)
+      return { ok: true };
+    if (r.ok === false && HELPER_FAILURES.includes(r.category))
+      return { ok: false, category: r.category };
+  }
+  return { ok: false, category: "invalid output" };
+}
+
 // src/phone-view.ts
 var DESCRIPTIONS = {
   Scene: "Where the story is happening right now.",
@@ -487,6 +522,8 @@ class PhoneView {
     this.doc = doc;
     if (changedChat) {
       this.chatEpoch++;
+      this.refreshPending = false;
+      this.refreshStatus = "";
       this.pendingReads.clear();
       this.reads = reads ?? emptyReads();
       this.replyDrafts.clear();
@@ -517,13 +554,13 @@ class PhoneView {
       this.refreshBadges();
     }
   }
+  refreshPending = false;
+  refreshStatus = "";
   receiveHelperBusy(busy) {
     this.helperBusy = busy;
     const button2 = this.root.querySelector(".lpt-update-now");
-    if (button2) {
-      button2.disabled = busy;
-      button2.textContent = busy ? "Please wait…" : "Update now";
-    }
+    if (button2)
+      button2.disabled = busy || this.refreshPending || !!(this.helperChoice && this.doc?.settings.source !== "helper");
   }
   async loadConnections() {
     const epoch = this.chatEpoch;
@@ -583,6 +620,8 @@ class PhoneView {
     clearTimeout(this.cssTimer);
     clearTimeout(this.noticeTimer);
     this.chatEpoch++;
+    this.refreshPending = false;
+    this.refreshStatus = "";
     this.observer.disconnect();
     this.root.remove();
   }
@@ -669,7 +708,7 @@ class PhoneView {
         notice.append(el("span", "lpt-notice-text", text), button("Dismiss", "lpt-dismiss", () => {
           this.change({ dismissNotice: text });
         }));
-        const helperGroup = this.app === "Settings" && ["Tracker update failed", "Connection not found"].includes(text) ? this.content.querySelector(".lpt-helper-settings") : null;
+        const helperGroup = this.app === "Settings" && isHelperNotice(text) ? this.content.querySelector(".lpt-helper-settings") : null;
         if (helperGroup)
           helperGroup.insertBefore(notice, helperGroup.children.item(1));
         else
@@ -1284,7 +1323,6 @@ class PhoneView {
     group.append(sourceLabel);
     group.append(el("p", "lpt-help", "Main AI uses your normal reply. Helper AI makes a separate request."));
     if (source.value === "helper") {
-      group.append(el("p", "lpt-help", "Requests may cost money depending on the model chosen."));
       const label = el("label", "lpt-label", "Connection");
       const select = el("select", "lpt-input lpt-helper-connection");
       const empty = el("option", "lpt-option", "Choose a connection");
@@ -1308,22 +1346,33 @@ class PhoneView {
       if (this.doc.settings.source !== "helper")
         group.append(el("p", "lpt-help", "Choose a connection to turn Helper AI on."));
       this.number(group, "Messages to read", "Only these recent messages and the compact tracker are sent.", "helperMessages", 1, 10);
-      if (this.doc.settings.source === "helper") {
-        const update = button(this.helperBusy ? "Please wait…" : "Update now", "lpt-button lpt-update-now", () => {
-          const epoch = this.chatEpoch;
-          update.disabled = true;
-          this.actions.updateNow().catch(() => {
-            if (epoch === this.chatEpoch)
-              this.setError("Tracker update failed");
-          }).finally(() => {
-            if (epoch === this.chatEpoch)
-              update.disabled = this.helperBusy;
-          });
-        });
-        update.disabled = this.helperBusy;
-        group.append(update);
-      }
     }
+    if (source.value === "helper")
+      group.append(el("p", "lpt-help", "Requests may cost money depending on the model chosen."));
+    const update = button("Refresh tracker", "lpt-button lpt-update-now", () => {
+      const epoch = this.chatEpoch;
+      this.refreshPending = true;
+      this.refreshStatus = "";
+      update.disabled = true;
+      this.actions.updateNow().then((result) => {
+        if (epoch === this.chatEpoch)
+          this.refreshStatus = result.ok ? "Refreshed" : failureLabel(result.category ?? "invalid output");
+      }).catch((error) => {
+        if (epoch === this.chatEpoch)
+          this.refreshStatus = failureLabel(failureCategory(error, "validation rejected"));
+      }).finally(() => {
+        if (epoch === this.chatEpoch) {
+          this.refreshPending = false;
+          this.render();
+        }
+      });
+    });
+    update.disabled = this.helperBusy || this.refreshPending || source.value === "helper" && this.doc.settings.source !== "helper";
+    group.append(update);
+    const status = el("p", "lpt-status lpt-refresh-result", this.refreshStatus);
+    status.setAttribute("role", "status");
+    status.setAttribute("aria-live", "polite");
+    group.append(status);
     parent.append(group);
   }
   toggle(parent, name, description, checked, update) {
@@ -2524,6 +2573,9 @@ function setup(ctx) {
   const updates = new Map;
   const prefsRequests = new Map;
   const readRequests = new Map;
+  const streaming = new Map;
+  let backendBusy = false;
+  const busy = () => backendBusy || !!(activeChat && streaming.get(activeChat)?.size);
   const helperRequests = new Map;
   const removeHostStyle = ctx.dom.addStyle(styles_default);
   disposers.push(removeHostStyle);
@@ -2584,13 +2636,13 @@ function setup(ctx) {
   const requestHelper = (type) => {
     if (!activeChat || disposed)
       return Promise.reject(new Error("Open a chat first."));
-    if (type === "phone_helper_now" && current?.settings.source !== "helper")
-      return Promise.reject(new Error("Choose Helper AI first."));
+    if (type === "phone_helper_now" && busy())
+      return Promise.reject(new HelperFailure("validation rejected"));
     const chatId = activeChat, requestId = crypto.randomUUID();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         helperRequests.delete(requestId);
-        reject(new Error("Tracker update failed"));
+        reject(new HelperFailure("timeout"));
       }, type === "phone_helper_now" ? 105000 : 15000);
       helperRequests.set(requestId, { chatId, epoch, resolve, reject, timer });
       ctx.sendToBackend({ type, chatId, requestId });
@@ -2725,7 +2777,9 @@ function setup(ctx) {
         markRead,
         connections: async () => await requestHelper("phone_connections"),
         updateNow: async () => {
-          await requestHelper("phone_helper_now");
+          const result = readRefreshResult(await requestHelper("phone_helper_now"));
+          sendSync();
+          return result;
         },
         draft: (chatId, to, text) => {
           if (disposed || activeChat !== chatId || current?.chatId !== chatId || !current.settings.enabled.messages)
@@ -2801,10 +2855,10 @@ function setup(ctx) {
         return;
       }
       if (payload.type === "phone_helper_error") {
-        helperRequest.reject(new Error("Tracker update failed"));
+        helperRequest.reject(new HelperFailure(readRefreshResult({ ok: false, category: payload.category }).category));
         return;
       }
-      helperRequest.resolve(payload.info);
+      helperRequest.resolve(payload.type === "phone_helper_now_result" ? payload.result : payload.info);
       return;
     }
     const readRequest = readRequests.get(payload.requestId);
@@ -2876,7 +2930,8 @@ function setup(ctx) {
           reads = value;
       } catch {}
       view?.receiveReads(reads);
-      view?.receiveHelperBusy(payload.helperBusy === true);
+      backendBusy = payload.helperBusy === true;
+      view?.receiveHelperBusy(busy());
       edit.resolve(current);
       return;
     }
@@ -2898,10 +2953,12 @@ function setup(ctx) {
         reads = value;
     } catch {}
     view?.receive(current, reads);
-    view?.receiveHelperBusy(payload.helperBusy === true);
+    backendBusy = payload.helperBusy === true;
+    view?.receiveHelperBusy(busy());
   }));
   const switchChat = (chatId) => {
     epoch++;
+    backendBusy = false;
     pendingSync = "";
     activeChat = chatId;
     current = null;
@@ -2933,6 +2990,25 @@ function setup(ctx) {
     disposers.push(ctx.events.on(event, (payload) => {
       if (isRecord(payload) && activeChat && payload.chatId === activeChat)
         sendSync();
+    }));
+  for (const name of ["GENERATION_STARTED", "GENERATION_ENDED", "GENERATION_STOPPED"])
+    disposers.push(ctx.events.on(name, (payload) => {
+      if (!isRecord(payload) || typeof payload.chatId !== "string" || typeof payload.generationId !== "string")
+        return;
+      const ids = streaming.get(payload.chatId) ?? new Set;
+      if (name === "GENERATION_STARTED")
+        ids.add(payload.generationId);
+      else
+        ids.delete(payload.generationId);
+      if (ids.size)
+        streaming.set(payload.chatId, ids);
+      else
+        streaming.delete(payload.chatId);
+      if (payload.chatId === activeChat) {
+        view?.receiveHelperBusy(busy());
+        if (name !== "GENERATION_STARTED")
+          sendSync();
+      }
     }));
   const fit = () => view?.fit();
   window.addEventListener("resize", fit);
