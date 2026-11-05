@@ -58,7 +58,7 @@ const valueText = (cell?: Cell): string => {
   return typeof v === "string" ? v : Array.isArray(v) ? v.join("\n") : "name" in v ? v.name : v.worn.join("\n");
 };
 const marked = (cell?: Cell) => cell?.by === "user" ? "edited by you" : cell?.inferred ? "inferred" : "";
-interface FormField { key: string; label: string; value: string; multiline?: boolean; required?: boolean; max?: number; check?: boolean; options?:[string,string][] }
+interface FormField { key: string; label: string; value: string; multiline?: boolean; required?: boolean; max?: number; check?: boolean; number?:boolean; options?:[string,string][] }
 
 /** Ordinary DOM renderer mounted inside the phone's isolated shadow tree. */
 export class PhoneView {
@@ -234,7 +234,8 @@ export class PhoneView {
       const label = el("label", "lpt-label", f.label);
       const input = f.options?el("select","lpt-input"):f.multiline ? el("textarea", "lpt-textarea") : el("input", f.check ? "lpt-toggle" : "lpt-input");
       if(input instanceof HTMLSelectElement)for(const [value,title]of f.options??[]){const o=el("option","lpt-option",title);o.value=value;input.append(o);}
-      if (input instanceof HTMLInputElement) input.type = f.check ? "checkbox" : "text";
+      if (input instanceof HTMLInputElement) input.type = f.check ? "checkbox" : f.number?"number":"text";
+      if(input instanceof HTMLInputElement && f.number){input.min="1";input.max="20";input.step="1";}
       if (f.check && input instanceof HTMLInputElement) input.checked = f.value === "true";
       else input.value = f.value;
       input.required = f.required === true;if(!(input instanceof HTMLSelectElement))input.maxLength=f.max??500;
@@ -497,7 +498,7 @@ export class PhoneView {
       if(!this.enabled("calls")){this.empty("Calls is off. Change it in the sidebar's Phone tab.",section);return;}
       section.append(button("+ Add call","lpt-add",()=>add("call")));
       if(!this.doc!.state.calls.length)this.empty("No calls recorded. This fills only when the story establishes a call.",section);
-      for(const c of [...this.doc!.state.calls].reverse()){const card=el("article","lpt-card lpt-call");const name=this.doc!.state.contacts.find(x=>normalize(x.name)===normalize(c.name))?.name??c.name;card.append(el("h2","lpt-card-title",name),el("p","lpt-call-direction",c.direction==="in"?"Incoming":c.direction==="out"?"Outgoing":"Missed"));if(c.time)card.append(el("p","lpt-muted",c.time));this.activityControls(card,"call",c as unknown as Record<string,unknown>,add);section.append(card);}
+      for(const c of [...this.doc!.state.calls].reverse()){const card=el("article","lpt-card lpt-call");const name=this.doc!.state.contacts.find(x=>normalize(x.name)===normalize(c.name))?.name??c.name;card.append(el("h2","lpt-card-title",name),el("p","lpt-call-direction",(c.direction==="in"?"Incoming":c.direction==="out"?"Outgoing":"Missed")+((c.count??1)>1?` x${c.count}`:"")));if(c.time)card.append(el("p","lpt-muted",c.time));this.activityControls(card,"call",c as unknown as Record<string,unknown>,add);section.append(card);}
     }else if(app==="Email"){
       if(!this.enabled("email")){this.empty("Email is off. Change it in the sidebar's Phone tab.",section);return;}
       section.append(button("+ Add email record","lpt-add",()=>add("email")));
@@ -511,8 +512,8 @@ export class PhoneView {
   }
   private activityControls(parent:HTMLElement,target:"call"|"email"|"bank"|"transaction",entry:Record<string,unknown>,add:(type:typeof target,entry:Record<string,unknown>)=>void):void{const controls=el("div","lpt-actions");controls.append(button("Edit","lpt-button",()=>add(target,entry)));this.deleteAction(controls,{target,name:String(entry.id)});parent.append(controls);if(entry.by==="user"&&isRecord(entry.at)&&entry.at.variant==="manual")parent.append(el("small","lpt-marker","edited by you"));}
   private activityForm(parent:HTMLElement,target:"call"|"email"|"bank"|"transaction",entry?:Record<string,unknown>):void{
-    const fields=target==="call"?[["name","Name or number"],["direction","Direction"],["time","Time (optional)"]]:target==="email"?[["from","Sender"],["to","To (optional)"],["subject","Subject"],["body","Body"],["time","Time (optional)"]]:target==="bank"?[["name","Account"],["balance","Stated balance"],["time","As of (optional)"]]:[["description","Description"],["amount","Stated amount"],["time","Time (optional)"]];
-    this.form(parent,fields.map(([key,label])=>({key,label,value:String(entry?.[key]??(key==="direction"?"in":"")),...(key==="direction"?{options:[["in","Incoming"],["out","Outgoing"],["missed","Missed"]] as [string,string][]}:{}),required:!label.includes("optional"),multiline:key==="body",max:key==="body"?1500:key==="description"?240:key==="subject"?200:100})),values=>({edit:{target,...(entry?{name:String(entry.id)}:{}),value:Object.fromEntries(Object.entries(values).filter(([,v])=>v!==""))}}));
+    const fields=target==="call"?[["name","Name or number"],["direction","Direction"],["time","Time (optional)"],["count","Repeat count"]]:target==="email"?[["from","Sender"],["to","To (optional)"],["subject","Subject"],["body","Body"],["time","Time (optional)"]]:target==="bank"?[["name","Account"],["balance","Stated balance"],["time","As of (optional)"]]:[["description","Description"],["amount","Stated amount"],["time","Time (optional)"]];
+    this.form(parent,fields.map(([key,label])=>({key,label,value:String(entry?.[key]??(key==="direction"?"in":key==="count"?1:"")),...(key==="direction"?{options:[["in","Incoming"],["out","Outgoing"],["missed","Missed"]] as [string,string][]}:{}),number:key==="count",required:!label.includes("optional"),multiline:key==="body",max:key==="body"?1500:key==="description"?240:key==="subject"?200:100})),values=>({edit:{target,...(entry?{name:String(entry.id)}:{}),value:Object.fromEntries(Object.entries(values).filter(([,v])=>v!=="").map(([k,v])=>[k,k==="count"?Number(v):v]))}}));
   }
   private markVisibleActivity():void{
     if(!this.doc||!this.openState||document.visibilityState==="hidden"||!this.frame.getClientRects().length)return;

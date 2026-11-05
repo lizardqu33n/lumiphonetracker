@@ -1,8 +1,8 @@
 # Style your phone
 
-Version 0.6.1 uses the supplied stylesheet as the default look: a notch and home bar, individual app tints, solid cards, message bubbles and pill switches. Class names, navigation and tracker behavior are unchanged.
+Version 0.10.1 bundles the supplied styles(1).css and sidebar.css as the default look: pastel tiles, plum outlines, heart markers and solid dark story surfaces. This default does not use the custom CSS character limit. Class names, navigation and tracker behavior are unchanged.
 
-Open **sidebar > Phone > Appearance > Custom CSS** to override the defaults live. Your saved custom CSS still overrides a new default after an update; it is not deleted automatically. To see the new default alone, use **Reset appearance** at the top of the Phone sidebar in the Phone sidebar tab.
+Open **sidebar > Phone > Appearance > Custom CSS** to override the defaults live. Your saved custom CSS still overrides a new default after an update; it is not deleted automatically. To see the new default alone, use **Reset appearance** at the top of the Phone sidebar tab.
 
 That single Reset and its confirmation stay outside the phone's Shadow DOM. Custom phone CSS cannot style them or escape the protected clipping area. Reset clears only appearance and reopens the phone without a page refresh, even after hostile CSS. It never deletes story data. If saving fails, the current view is restored and the sidebar tells you to try saving again.
 
@@ -79,7 +79,7 @@ not documented, so these buttons are native elements with small themed styles.
 
 | Sidebar class | What it is |
 | --- | --- |
-| `.lpt-sidebar` | Host sidebar root, with vertical scrolling and no phone style variables. |
+| `.lpt-sidebar` | Host sidebar root, with vertical scrolling and its own --lpt-side- variables. |
 | `.lpt-sidebar-settings` | Chat label and the five collapsible sections. |
 | `.lpt-recovery-actions` | Sticky Open / Refresh / Reset area. |
 | `.lpt-recovery-action` | One top button and its own short result. |
@@ -95,7 +95,7 @@ not documented, so these buttons are native elements with small themed styles.
 | `.lpt-side-appearance` | User-wide live phone CSS editor. |
 | `.lpt-side-advanced` | Existing numeric settings and two optional AI switches. |
 | `.lpt-store-row` | Built-in app row, identified by data-store-app. |
-| `.lpt-store-icon` | Static bundled Lucide app icon, using currentColor. |
+| `.lpt-store-icon` | Container for the bundled app PNG, with no external loading. |
 | `.lpt-store-name` | App's plain name. |
 | `.lpt-store-added` | On phone label. |
 | `.lpt-store-button` | Add or Remove button. |
@@ -122,81 +122,155 @@ and button classes still apply to story controls inside the phone.
 
 ## Variables
 
-Set these inside `.lpt-root { ... }`. Sizes need units such as px; counts, weights and opacity do not. The table lists base defaults. Theme-derived replacements and narrow-screen adjustments are explained below it.
+Phone defaults live on `.lpt-root` in src/styles.css. The attached theme uses
+explicit pastel/dark colors rather than changing with the host palette. All
+story surfaces are opaque; launcher transparency is intentional. A gloss or
+checker pattern sits on a solid base. System fonts are named locally, never downloaded.
+The optional plain-dark override is included as a comment at the end of styles.css.
 
-| Variable | Base default | What it changes |
+| Variable | Default | What it changes |
 | --- | --- | --- |
-| `--lpt-phone-bg` | `#121017` | Opaque outer phone frame; dark fallback, composited theme fill when supported. |
-| `--lpt-screen-bg` | `#15131c` | Opaque Home/app/header/scroll area behind cards. |
-| `--lpt-card-bg` | `#1f1c29` | Slightly different solid card and section background. |
-| `--lpt-elevated-bg` | `#292536` | Raised surfaces, hover fills and incoming bubbles with theme support. |
+| `--lpt-outline` | `#420642` | Phone outline. |
+| `--lpt-lilac-1` | `#dec6f6` | Lilac palette shade 1, used by pastel surfaces. |
+| `--lpt-lilac-2` | `#d2aef6` | Lilac palette shade 2, used by pastel surfaces. |
+| `--lpt-lilac-3` | `#c696f6` | Lilac palette shade 3, used by pastel surfaces. |
+| `--lpt-pink-1` | `#f6a2d2` | Pink palette shade 1, used by buttons and tiles. |
+| `--lpt-pink-2` | `#f67ec6` | Pink palette shade 2, used by buttons and tiles. |
+| `--lpt-blue` | `#a2d2f6` | Phone blue. |
+| `--lpt-yellow` | `#f6de8a` | Phone yellow. |
+| `--lpt-hot-pink` | `#c2187f` | Phone hot pink. |
+| `--lpt-phone-bg` | `#1f0f2e` | Solid dark outer phone frame. |
+| `--lpt-screen-bg` | `#261338` | Opaque Home/app/header/scroll area behind cards. |
+| `--lpt-card-bg` | `#2e1743` | Slightly different solid card and section background. |
+| `--lpt-elevated-bg` | `#3d2059` | Solid raised surfaces and hover fills. |
 | `--lpt-fill` | `var(--lpt-screen-bg)` | Compatibility background token following the screen color. |
 | `--lpt-subtle` | `var(--lpt-card-bg)` | Compatibility secondary token following the card color. |
-| `--lpt-text` | `var(--lumiverse-text, #f0edf6)` | Main text color. |
-| `--lpt-muted` | `var(--lumiverse-text-muted, #9b95aa)` | Secondary text color. |
-| `--lpt-accent` | `var(--lumiverse-accent, #a485f7)` | Highlights and selected controls. |
-| `--lpt-accent-text` | `var(--lumiverse-accent-fg, #120f1d)` | Text on accent-colored buttons. |
-| `--lpt-border` | `#2d293b` | Normal borders; theme-derived when relative colors are supported. |
-| `--lpt-hover-border` | `#47405c` | Hover borders; theme-derived when relative colors are supported. |
-| `--lpt-frame-edge` | `#353047` | Phone frame edge and inset highlight. |
-| `--lpt-notch-bg` | `#09080c` | Top notch pill background. |
+| `--lpt-text` | `#f7ecff` | Main text color. |
+| `--lpt-muted` | `#cdb4ee` | Secondary text color. |
+| `--lpt-on-pastel` | `#420642` | Phone on pastel. |
+| `--lpt-on-pastel-soft` | `#4a1260` | Phone on pastel soft. |
+| `--lpt-accent` | `var(--lpt-pink-2)` | Highlights and selected controls. |
+| `--lpt-accent-text` | `#420642` | Text on accent-colored buttons. |
+| `--lpt-focus-color` | `#f6de8a` | Phone focus color. |
+| `--lpt-border` | `#5b3a85` | Normal plum borders. |
+| `--lpt-hover-border` | `var(--lpt-lilac-3)` | Lighter hover borders. |
+| `--lpt-frame-edge` | `var(--lpt-lilac-1)` | Phone frame edge and inset highlight. |
+| `--lpt-card-outline` | `var(--lpt-lilac-2)` | Phone card outline. |
+| `--lpt-shadow-hard` | `#4b2478` | Phone shadow hard. |
+| `--lpt-gloss` | `linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0, rgba(255, 255, 255, 0.22) 48%, rgba(255, 255, 255, 0) 50%, rgba(255, 255, 255, 0) 100%)` | Phone gloss. |
+| `--lpt-notch-bg` | `var(--lpt-outline)` | Top notch pill background. |
 | `--lpt-notch-width` | `76px` | Top notch pill width. |
 | `--lpt-notch-height` | `18px` | Top notch pill height. |
 | `--lpt-home-bar-width` | `112px` | Bottom decorative home bar width. |
-| `--lpt-home-bar-height` | `4px` | Bottom decorative home bar thickness. |
-| `--lpt-home-bar-color` | `#3f3952` | Bottom decorative home bar color. |
-| `--lpt-tint-scene` | `#b494ff` | Scene Home icon color and tinted tile fill. |
-| `--lpt-tint-weather` | `#72bdf5` | Weather Home icon color and tinted tile fill. |
-| `--lpt-tint-locations` | `#66d4a5` | Locations Home icon color and tinted tile fill. |
-| `--lpt-tint-notes` | `#f0bf6c` | Notes Home icon color and tinted tile fill. |
-| `--lpt-tint-contacts` | `#f08ca6` | Contacts Home icon color and tinted tile fill. |
-| `--lpt-tint-messages` | `#8ea2ff` | Messages Home icon color and tinted tile fill. |
-| `--lpt-tint-settings` | `#b0a9c4` | Settings Home icon color and tinted tile fill. |
-| `--lpt-bubble-in-bg` | `#272333` | Incoming message bubble background. |
-| `--lpt-bubble-out-bg` | `#362859` | Outgoing message bubble background. |
-| `--lpt-bubble-out-border` | `#5a4294` | Outgoing message bubble border. |
-| `--lpt-bubble-radius` | `18px` | Message bubble corner radius; lower sender-side corner is smaller. |
-| `--lpt-toggle-width` | `42px` | Pill switch width. |
-| `--lpt-toggle-height` | `24px` | Pill switch height and thumb size basis. |
+| `--lpt-home-bar-height` | `5px` | Bottom decorative home bar thickness. |
+| `--lpt-home-bar-color` | `var(--lpt-lilac-3)` | Bottom decorative home bar color. |
+| `--lpt-wallpaper-a` | `#261338` | Phone wallpaper a. |
+| `--lpt-wallpaper-b` | `#2d1843` | Phone wallpaper b. |
+| `--lpt-wallpaper-size` | `28px` | Phone wallpaper size. |
+| `--lpt-tint-scene` | `var(--lpt-lilac-2)` | Scene Home icon color and tinted tile fill. |
+| `--lpt-tint-weather` | `var(--lpt-blue)` | Weather Home icon color and tinted tile fill. |
+| `--lpt-tint-locations` | `var(--lpt-yellow)` | Locations Home icon color and tinted tile fill. |
+| `--lpt-tint-notes` | `var(--lpt-pink-1)` | Notes Home icon color and tinted tile fill. |
+| `--lpt-tint-contacts` | `var(--lpt-lilac-1)` | Contacts Home icon color and tinted tile fill. |
+| `--lpt-tint-messages` | `var(--lpt-blue)` | Messages Home icon color and tinted tile fill. |
+| `--lpt-tint-settings` | `var(--lpt-lilac-1)` | Settings Home icon color and tinted tile fill. |
+| `--lpt-tint-calls` | `var(--lpt-yellow)` | Phone tint calls. |
+| `--lpt-tint-email` | `var(--lpt-pink-1)` | Phone tint email. |
+| `--lpt-tint-bank` | `var(--lpt-lilac-2)` | Phone tint bank. |
+| `--lpt-btn-bg` | `var(--lpt-lilac-2)` | Phone btn bg. |
+| `--lpt-btn-soft-bg` | `var(--lpt-lilac-1)` | Phone btn soft bg. |
+| `--lpt-btn-primary-bg` | `var(--lpt-pink-2)` | Phone btn primary bg. |
+| `--lpt-btn-text` | `var(--lpt-on-pastel)` | Phone btn text. |
+| `--lpt-btn-edge` | `var(--lpt-outline)` | Phone btn edge. |
+| `--lpt-btn-hover-mix` | `#ffffff` | Phone btn hover mix. |
+| `--lpt-input-bg` | `#f7ecff` | Phone input bg. |
+| `--lpt-input-text` | `#420642` | Phone input text. |
+| `--lpt-input-placeholder` | `#6a3d85` | Phone input placeholder. |
+| `--lpt-input-border` | `var(--lpt-lilac-3)` | Phone input border. |
+| `--lpt-pill-bg` | `var(--lpt-blue)` | Phone pill bg. |
+| `--lpt-marker-bg` | `var(--lpt-yellow)` | Phone marker bg. |
+| `--lpt-pill-text` | `var(--lpt-on-pastel)` | Phone pill text. |
+| `--lpt-pill-edge` | `var(--lpt-outline)` | Phone pill edge. |
+| `--lpt-badge-bg` | `var(--lpt-hot-pink)` | Phone badge bg. |
+| `--lpt-badge-text` | `#ffffff` | Phone badge text. |
+| `--lpt-badge-edge` | `var(--lpt-outline)` | Phone badge edge. |
+| `--lpt-badge-ring` | `#f7ecff` | Phone badge ring. |
+| `--lpt-bubble-in-bg` | `var(--lpt-blue)` | Incoming message bubble background. |
+| `--lpt-bubble-in-text` | `var(--lpt-on-pastel)` | Phone bubble in text. |
+| `--lpt-bubble-in-border` | `var(--lpt-outline)` | Phone bubble in border. |
+| `--lpt-bubble-out-bg` | `var(--lpt-pink-1)` | Outgoing message bubble background. |
+| `--lpt-bubble-out-text` | `var(--lpt-on-pastel)` | Phone bubble out text. |
+| `--lpt-bubble-out-border` | `var(--lpt-outline)` | Outgoing message bubble border. |
+| `--lpt-bubble-muted` | `var(--lpt-on-pastel-soft)` | Phone bubble muted. |
+| `--lpt-bubble-radius` | `20px` | Message bubble corner radius; lower sender-side corner is smaller. |
+| `--lpt-marker-closed` | `"♡"` | Phone marker closed. |
+| `--lpt-marker-open` | `"♥"` | Phone marker open. |
+| `--lpt-sparkle-glyph` | `"✦"` | Phone sparkle glyph. |
+| `--lpt-empty-glyph` | `"♡"` | Phone empty glyph. |
+| `--lpt-marker-color` | `var(--lpt-pink-1)` | Phone marker color. |
+| `--lpt-toggle-width` | `52px` | Pill switch width. |
+| `--lpt-toggle-height` | `30px` | Pill switch height and thumb size basis. |
 | `--lpt-toggle-thumb` | `#ffffff` | Checked switch thumb color. |
-| `--lpt-radius` | `var(--lumiverse-radius, 12px)` | Small corners, following Lumiverse. |
-| `--lpt-card-radius` | `16px` | Cards, forms, notices and section corners. |
-| `--lpt-icon-radius` | `20px` | Home icon tile corners. |
-| `--lpt-frame-radius` | `40px` | Outer phone/window corners. |
+| `--lpt-toggle-off-bg` | `#3d2059` | Phone toggle off bg. |
+| `--lpt-toggle-off-thumb` | `var(--lpt-lilac-1)` | Phone toggle off thumb. |
+| `--lpt-radius` | `14px` | Small corners, following Lumiverse. |
+| `--lpt-card-radius` | `20px` | Cards, forms, notices and section corners. |
+| `--lpt-icon-radius` | `22px` | Home icon tile corners. |
+| `--lpt-frame-radius` | `44px` | Outer phone/window corners. |
 | `--lpt-space` | `8px` | Base spacing unit; other gaps are multiples. |
-| `--lpt-font` | `inherit` | Font family, inherited from Lumiverse. |
+| `--lpt-font` | `ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN", "Arial Rounded MT Bold", "Varela Round", system-ui, sans-serif` | Font family, inherited from Lumiverse. |
 | `--lpt-font-size` | `14px` | Normal text size. |
 | `--lpt-small-font-size` | `12px` | Labels, descriptions and markers. |
-| `--lpt-title-size` | `18px` | App heading size. |
+| `--lpt-title-size` | `19px` | App heading size. |
 | `--lpt-location-size` | `24px` | Large Scene location text. |
-| `--lpt-weight` | `450` | Normal text weight. |
-| `--lpt-strong-weight` | `650` | Heading and emphasized text weight. |
+| `--lpt-weight` | `500` | Normal text weight. |
+| `--lpt-strong-weight` | `750` | Heading and emphasized text weight. |
 | `--lpt-line-height` | `1.45` | Line spacing multiplier. |
 | `--lpt-width` | `356px` | Preferred open-phone width, clamped to screen. |
 | `--lpt-height` | `620px` | Preferred open-phone height, clamped to screen. |
 | `--lpt-launcher-size` | `50px` | Square launcher size; image fills its height with contained proportions. |
 | `--lpt-launcher-min-size` | `50px` | Minimum width and height, preserving the original tap target. Avoid lowering below 44px. |
-| `--lpt-launcher-shadow-color` | `rgba(0, 0, 0, 0.55)` | Soft shadow color behind the PNG only. |
-| `--lpt-launcher-shadow-blur` | `2px` | Image shadow softness; large values may be clipped at placement edges. |
-| `--lpt-launcher-shadow-y` | `1px` | Image shadow vertical offset. |
-| `--lpt-app-image-size` | `44px` | Contained Home app PNG size; sidebar has an independent 22px host style. |
+| `--lpt-launcher-shadow-color` | `rgba(31, 15, 46, 0.6)` | Soft shadow color behind the PNG only. |
+| `--lpt-launcher-shadow-blur` | `3px` | Image shadow softness; large values may be clipped at placement edges. |
+| `--lpt-launcher-shadow-y` | `2px` | Image shadow vertical offset. |
 | `--lpt-icon-size` | `26px` | Icon artwork size. |
-| `--lpt-app-tile-size` | `64px` | Home icon tile width and height; separate from SVG artwork size. |
+| `--lpt-app-image-size` | `44px` | Contained Home app PNG size; sidebar has an independent 22px host style. |
+| `--lpt-app-tile-size` | `66px` | Home icon tile width and height; separate from SVG artwork size. |
 | `--lpt-icon-stroke-size` | `2px` | Icon line thickness. |
-| `--lpt-control-size` | `38px` | Minimum button/input height. |
-| `--lpt-border-size` | `1px` | Normal border thickness. |
-| `--lpt-frame-border-size` | `2px` | Outer frame border thickness. |
-| `--lpt-focus-size` | `2px` | Keyboard focus outline thickness and offset. |
-| `--lpt-opacity-disabled` | `0.5` | Disabled control opacity. |
+| `--lpt-control-size` | `44px` | Minimum button/input height. |
+| `--lpt-border-size` | `2px` | Normal border thickness. |
+| `--lpt-card-border-size` | `3px` | Phone card border size. |
+| `--lpt-frame-border-size` | `4px` | Outer frame border thickness. |
+| `--lpt-focus-size` | `3px` | Keyboard focus outline thickness and offset. |
+| `--lpt-opacity-disabled` | `0.55` | Disabled control opacity. |
 | `--lpt-grid-columns` | `3` | Home icon columns. |
 | `--lpt-max-label-width` | `17rem` | Legacy phone settings label width; sidebar does not use this token. |
-| `--lpt-shadow` | `Three-layer shadow; see styles.css` | Layered outer phone shadow and inset frame highlight; does not affect launcher. |
-| `--lpt-icon-fill` | `color-mix(in srgb, var(--lpt-accent) 16%, var(--lpt-card-bg))` | Fallback tile fill; per-app tint rules take priority on Home. |
-| `--lpt-transition` | `150ms cubic-bezier(0.22, 1, 0.36, 1)` | Hover, press and switch animation timing. |
+| `--lpt-shadow` | `0 5px 0 0 var(--lpt-shadow-hard), 0 16px 26px -10px rgba(10, 3, 20, 0.6), inset 0 4px 0 0 rgba(255, 255, 255, 0.4), inset 0 -3px 0 0 rgba(66, 6, 66, 0.55)` | Layered outer phone shadow and inset frame highlight; does not affect launcher. |
+| `--lpt-icon-fill` | `var(--lpt-lilac-2)` | Fallback tile fill; per-app tint rules take priority on Home. |
+| `--lpt-transition` | `140ms cubic-bezier(0.22, 1, 0.36, 1)` | Hover, press and switch animation timing. |
 
-The documented Lumiverse sources are --lumiverse-fill, --lumiverse-fill-subtle, text, muted text, accent, accent foreground and radius. When relative-color calculations are supported, translucent fills are composited over the dark phone/screen/card bases with final alpha 1. Elevated surfaces, borders, frame edge and bubble colors are also derived. Without that browser support, the explicit dark base colors apply. Custom CSS may deliberately override them, including making them transparent.
+Sidebar defaults live on `.lpt-sidebar` in src/sidebar.css. Text, backgrounds
+and recovery controls continue to follow the existing host theme sources; pastel
+accents have the explicit defaults below. The phone CSS editor cannot reach them.
+Changing sidebar defaults requires editing the bundled sidebar stylesheet.
 
-At screen widths of **420px or less**, defaults change to frame radius 28px, app tile size 58px, title size 17px and location size 21px; content padding and grid gaps also tighten. Preferred phone dimensions still clamp to the screen. Home now flows only added apps through the grid; no fixed seventh tile is centered.
+| Variable | Default | What it changes |
+| --- | --- | --- |
+| `--lpt-side-outline` | `#420642` | Sidebar outline. |
+| `--lpt-side-btn-bg` | `#d2aef6` | Sidebar btn bg. |
+| `--lpt-side-btn-hover-bg` | `#dec6f6` | Sidebar btn hover bg. |
+| `--lpt-side-btn-text` | `#420642` | Sidebar btn text. |
+| `--lpt-side-switch-on` | `#f6a2d2` | Sidebar switch on. |
+| `--lpt-side-switch-thumb-on` | `#420642` | Sidebar switch thumb on. |
+| `--lpt-side-pill-bg` | `#a2d2f6` | Sidebar pill bg. |
+| `--lpt-side-pill-text` | `#420642` | Sidebar pill text. |
+| `--lpt-side-accent` | `#d9419f` | Sidebar accent. |
+| `--lpt-side-focus` | `#420642` | Sidebar focus. |
+| `--lpt-side-focus-ring` | `#f6de8a` | Sidebar focus ring. |
+| `--lpt-side-marker-closed` | `"♡"` | Sidebar marker closed. |
+| `--lpt-side-marker-open` | `"♥"` | Sidebar marker open. |
+| `--lpt-side-radius` | `14px` | Sidebar radius. |
+| `--lpt-side-edge` | `var(--lumiverse-text-muted, GrayText)` | Sidebar edge. |
 
 ## Stable classes
 
@@ -315,6 +389,10 @@ These remain the existing UI hooks, not extra screens or settings. `.lpt-root[da
 | `.lpt-weather` | Weather app content. |
 | `.lpt-wider` | Wider location or removed-attire secondary line. |
 
+| Class | What it is |
+| --- | --- |
+| `.lpt-side-scope` | Small per-chat or all-my-chats scope label. |
+
 ## Copy-paste examples
 
 Change the main accent and the Messages Home tint:
@@ -324,10 +402,14 @@ Change the main accent and the Messages Home tint:
   --lpt-accent: #78c6b2;
   --lpt-accent-text: #102521;
   --lpt-tint-messages: #78c6b2;
+  --lpt-btn-primary-bg: #78c6b2;
+  --lpt-badge-bg: #78c6b2;
 }
 ```
 
-App tints are independent. Change their --lpt-tint- variables to recolor other Home icons; --lpt-accent alone controls general accents, buttons and badges. Legacy Lucide geometry remains attributed; current Home/App Store art uses the supplied PNGs. [Icon attribution](THIRD-PARTY-NOTICES.md).
+The repeat-count editor reuses `.lpt-form`, `.lpt-label` and `.lpt-input`; the direction/count label reuses `.lpt-call-direction`. No new class is needed for counts.
+
+App tints are independent. Change their --lpt-tint- variables to recolor other Home icons; --lpt-accent controls general accents; buttons and badges have their own color variables. Legacy Lucide geometry remains attributed; current Home/App Store art uses the supplied PNGs. [Icon attribution](THIRD-PARTY-NOTICES.md).
 
 Make the phone bigger:
 

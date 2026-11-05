@@ -1,6 +1,37 @@
-# Verification report - 0.10.0 (Part 4)
+# Verification report - 0.10.1
 
 Checked November 5, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **No live Lumiverse session or real model connection was used. A local Lumiverse build and its user-docs were inspected; that is not live-host verification. No paid model request was made.**
+
+## 0.10.1: call sources, counts and supplied default theme
+
+**172 code tests / 1133 assertions; 173 browser checks pass.** Type checking,
+built-file reproducibility and manifest/package checks pass. No real host or
+paid connection was used.
+
+- Identical calls from separate messages remain separate. Rereads, selected
+  swipes and restarts stay idempotent; regeneration replaces just its source.
+- Helper request includes actual source IDs. Validation checks exact source
+  quotes, literal caller/time and explicit repeats. An actual Helper runner with
+  mocked generation pins the establishing source instead of its trigger; repeat
+  runs produce one record. Forged source/quote, wrong count and outgoing-player
+  bypasses are rejected. Existing pre-attribution journals retain their old
+  anchor because their true historical source cannot be recovered reliably.
+- x3 is one record and one unread item; missing count defaults to 1. Bad counts
+  are dropped independently. Browser checks show Missed x3 once and verify the
+  bounded numeric editor changes it to Missed x4 without adding a row.
+- Source-scoped edits/deletions, legacy ID/receipt migration and reserved old cap
+  slots are tested. No previously admitted record is displaced by newly distinct
+  historical repeats during migration.
+- Both supplied CSS files are bundled unchanged as defaults. Browser checks
+  cover all nine opaque app screens, the transparent 1x/2x launcher, narrow
+  sidebar, custom CSS, protected Reset after hostile CSS and same-session recovery.
+
+**Still unverified in a real install:** actual multi-user permissions and event
+routing, real selected-swipe/regeneration event timing, real Helper/provider
+wording and source-attribution compliance, paid connection behavior, mobile
+WebView/light-theme appearance and native sidebar placement. The conservative
+English call-proof checks may reject valid complex phrasing; they do not prove
+arbitrary natural-language semantics. No new host API is introduced.
 
 ## Part 4: optional Calls, Email and Bank (0.10.0)
 

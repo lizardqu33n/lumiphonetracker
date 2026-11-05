@@ -30,7 +30,7 @@ features must keep the scope the user specified.
 
 | App | What appears | Cap | Tracking switches |
 | --- | --- | --- | --- |
-| Calls | Newest-recorded-first log; Incoming, Outgoing or Missed; known time. Exact contact-name matches use the contact's display spelling. | 30 | Calls log |
+| Calls | Newest-recorded-first log; Incoming, Outgoing or Missed; known time and optional repeat count. Exact contact-name matches use the contact's display spelling. | 30 | Calls log |
 | Email | Sender/subject/time rows; inline expansion reads a plain-text body. | 30 | Email records |
 | Bank | Up to 3 accounts with last stated balance/as-of; shared recent transaction list, newest recorded first. | 3 accounts / 20 transactions | Balance, Transactions separately |
 
@@ -42,11 +42,10 @@ choices. The existing entry editor cannot bypass player-writing restrictions.
 
 Full apps drop NEW AI entries, keep old entries, and show the existing kind of
 dismissible full notice. No oldest-item eviction occurs. Deletions and edits keep
-tombstones so repeated old records do not silently return. Exact duplicate
-records are not logged twice. Without stable IDs in the requested shorthand,
-identical caller/direction/time or description/amount/time records cannot be
-proved distinct and are treated as repeats; users can explicitly add/correct a
-record. No device time is invented. Ordering is source/record order, not guessed
+tombstones so repeated old records do not silently return. Calls deduplicate by source message plus caller/direction/time: identical calls
+from separate messages remain separate, while rereading one source adds nothing.
+A stated repeat count of 1–20 stays in one row. Transactions retain their existing
+content-based deduplication. Users can explicitly add/correct records. No device time is invented. Ordering is source/record order, not guessed
 calendar interpretation of fictional time strings.
 
 Missed calls get a personal Home badge, cleared when Calls opens. Incoming
@@ -141,7 +140,7 @@ minimal-DTO limitation are unchanged.
 
 ## Testing and remaining limits
 
-**164 code tests (1060 assertions) and 171 browser checks pass.** See TESTING.md for the full report. Tests use actual extension code with mock host
+**See TESTING.md for the current code/browser totals and follow-up coverage.** See TESTING.md for the full report. Tests use actual extension code with mock host
 identity enforcement: two authorized users in one chat share entries/settings,
 with independent receipts/unread-email macros; a separate chat/user gets neither
 entries nor receipts. Cases cover defaults, Add/Remove retention, editing,
@@ -154,3 +153,5 @@ actual final network prompt, host tag painting/cold load, native mobile drawer,
 WebView scaling, cross-user event routing or distributed multi-worker races were
 tested. Code and browser mocks do not establish those real-install behaviors.
 No paid request, call, email or bank operation was made. Stop after Part 4.
+
+The 0.10.1 follow-up gives calls source-aware identities and editable 1–20 repeat counts. Caps, shared story data, personal receipts and player-writing protections stay unchanged. See BLOCK-FORMAT.md for attribution and saved-data migration. Supplied phone/sidebar CSS is bundled as the default; custom CSS continues to override it.

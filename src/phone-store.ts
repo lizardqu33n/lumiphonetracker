@@ -1,3 +1,4 @@
+import {callId} from "./calls";
 import { validateEmail,validateActivity } from "./activity";
 import { isHelperNotice } from "./helper-status";
 import { isRecord } from "./shared";
@@ -65,6 +66,12 @@ export function readDocument(raw: string, chatId: string): Document {
       texts: entry.texts as Document["accepted"][number]["texts"], role: entry.role as "assistant" | "user",
       ...(typeof entry.name === "string" ? { name: entry.name } : {}), prose: entry.prose });
   }
+  doc.rejected=doc.rejected.map(key=>{try{const parts:unknown=JSON.parse(key);if(Array.isArray(parts)&&parts[0]==="activity"&&parts[1]==="calls"&&typeof parts[2]==="string"){const id:unknown=JSON.parse(parts[2]);if(Array.isArray(id)&&typeof id[0]==="string"&&id[2]==="calls"){const call=validateActivity("calls",parts[3]) as import("./model").CallData;return JSON.stringify(["activity","calls",callId(id[0],call),call]);}}}catch{}return key;});
+  // Cache only admitted identities, never story values. Reserve existing slots during source-ID migration.
+  const aliases=new Map<string,string>();
+  for(const e of doc.accepted)for(const [i,c]of (e.patch.calls??[]).entries())aliases.set(JSON.stringify([e.at.id,e.at.variant,"calls",i]),callId(e.at.id,c));
+  for(const e of doc.helperEntries)for(const [i,c]of (validateExpanded(e.values).calls??[]).entries())aliases.set(JSON.stringify([e.at.id,e.at.variant,"calls",i]),callId(c.source??e.at.id,c));
+  if(isRecord(value.state)&&Array.isArray(value.state.calls))doc.callAdmissions=value.state.calls.flatMap(c=>isRecord(c)&&typeof c.id==="string"?[aliases.get(c.id)??c.id]:[]).slice(0,30);
   // Only validated admission names are read from the cached state. All values are replayed.
   if (isRecord(value.state) && isRecord(value.state.notes)) for (const section of SECTIONS) {
     const notes = value.state.notes[section]; if (!Array.isArray(notes)) continue;

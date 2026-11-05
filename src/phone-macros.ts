@@ -63,7 +63,7 @@ export function messagesMacro(doc: Document): string {
 }
 export function activitiesMacro(name:"phone_calls"|"phone_email"|"phone_bank",doc:Document):string {
  doc=effectiveDocument(doc);const enabled=doc.settings.enabled;
- if(name==="phone_calls")return enabled.calls?doc.state.calls.slice(-3).map(c=>`${clip(c.name,60)} | ${c.direction}${c.time?` | ${clip(c.time,60)}`:""}`).join("\n"):"";
+ if(name==="phone_calls")return enabled.calls?doc.state.calls.slice(-3).map(c=>`${clip(c.name,60)} | ${c.direction}${c.time?` | ${clip(c.time,60)}`:""}${(c.count??1)>1?` | x${c.count}`:""}`).join("\n"):"";
  if(name==="phone_email")return enabled.email&&doc.personalReads?.available!==false?doc.state.emails.filter(e=>e.direction==="incoming"&&activityUnread(e,doc.personalReads?.seen??{})).slice(-3).map(e=>`${clip(e.from,60)} | ${clip(e.subject,120)}`).join("\n"):"";
  return [...(enabled["bank.balance"]?doc.state.bank.map(b=>`${clip(b.name,60)} | last stated ${clip(b.balance,80)}${b.time?` | as of ${clip(b.time,60)}`:""}${b.by==="user"?" [edited by you]":""}`):[]),...(enabled["bank.transactions"]?doc.state.transactions.slice(-2).map(t=>`${clip(t.description,80)} | ${clip(t.amount,60)}${t.time?` | ${clip(t.time,40)}`:""}`):[])].join("\n");
 }
@@ -88,7 +88,7 @@ export function trackerInstructions(doc: Document, helper=false): string[] {
     lines.push("phys/mood/pos: max 12 words; attire items: max 6 words. Send both worn/off lists; keep known items. A blank list must be established; never both.");
     lines.push(s.inferMissing?'EMPTY contact fields only: one concrete value may end " ~ inferred"; never re-infer populated fields.':"Never infer missing values.");
   }
-  if(s.enabled.calls)lines.push('call: Name or number | in / out / missed | known time (omit time if unstated). Unknown caller is allowed; never "unknown".',s.aiPlayerTexts?"Only NEW actual calls.":'Player outgoing calls only if their own message establishes them; append ~ "exact whole player message" for a simple I call Name statement. Otherwise never write player calls.');
+  if(s.enabled.calls)lines.push('call: Name or number | in / out / missed | known time (omit time if unstated). Only NEW calls; optional | x1–x20 for stated repeats (default 1). Unknown caller is allowed; never "unknown".',s.aiPlayerTexts?"Only NEW actual calls.":'Player outgoing calls only if their own message establishes them; append ~ "exact whole player message" for a simple I call Name statement. Otherwise never write player calls.');
   if(s.enabled["bank.balance"])lines.push("bank: account | exact stated balance | known as-of time (omit if unstated)");
   if(s.enabled["bank.transactions"])lines.push("tx: description | exact stated amount | known time (omit if unstated)","Descriptions max 14 words. Only NEW transactions; never calculate or adjust balances. Keep the last stated balance without a new stated one.");
   if(s.enabled.calls||s.enabled["bank.balance"]||s.enabled["bank.transactions"])lines.push("New entries only; no repeated log entries. Figures must appear literally in recent story prose. No placeholders or invented currency/time.");

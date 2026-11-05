@@ -1,6 +1,6 @@
 # Install Lumi Phone Tracker
 
-Version 0.10.0 includes the built files. You do not need to build or upload anything yourself.
+Version 0.10.1 includes the built files. You do not need to build or upload anything yourself.
 
 ## Install or update
 
@@ -16,7 +16,7 @@ Version 0.10.0 includes the built files. You do not need to build or upload anyt
 
 Remove older manual tracker-writing instructions or duplicate phone macros if you pasted them. No preset rewrite is required. The format macro changes its instructions with the settings, so this line works in both modes.
 
-Version 0.10.0 retains the fix for preset entries that bypass the macro interceptor. Keep using just {{phone_format}}. The pull handler reads the identity supplied inside that preset evaluation's host environment. This patch needs no additional permission. The existing macro_interceptor permission still supports other evaluation paths. If the host truly supplies no user or chat, the macro stays empty, logs the reason and lets generation continue.
+Version 0.10.1 retains the fix for preset entries that bypass the macro interceptor. Keep using just {{phone_format}}. The pull handler reads the identity supplied inside that preset evaluation's host environment. This patch needs no additional permission. The existing macro_interceptor permission still supports other evaluation paths. If the host truly supplies no user or chat, the macro stays empty, logs the reason and lets generation continue.
 
 
 Part 1 now requests compact shorthand from Main AI and Helper AI. Old saved JSON blocks still rebuild; do not rewrite old messages. No new permission or preset edit is needed. New AI contacts need confirmed Present names; with Present off, new names without saved presence are not admitted. Part 2 adds Refresh tracker in both modes and named Helper failure reasons. No additional permission is required.
@@ -103,3 +103,5 @@ Appearance and dismissed explanations follow your user account. [STYLING.md](STY
 ## What still needs checking
 
 The documented installation route uses GitHub; the archive is a handoff copy, not a claimed local-installer feature. Actual installation, native stream/composer behavior, provider prompt stripping and Helper AI with a real connection were not tested here. See [TESTING.md](TESTING.md). Disable or uninstall through Extensions.
+
+The supplied pastel phone and sidebar styles are now built in. They do not use the custom CSS character limit. Saved custom CSS still takes priority; **Reset appearance** shows the new defaults and keeps all story data.

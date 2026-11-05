@@ -1,3 +1,4 @@
+import {callId,helperCallSource} from "./calls";
 import { applyActivities,applyActivityEdit } from "./activity";
 import { parseExpandedReply, change, validateExpanded, validateNote, short, type ParseIssue } from "./schema";
 import { parseReply as parseLegacy } from "./parser";
@@ -88,14 +89,29 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
   }
   next.playerNames = [...displayPlayers.values()];
   for (const [key, name] of displayPlayers) if (players.has(key) && state.contacts.length < 30) state.contacts.push({ name, player: true, fields: {} });
+  // Migrate old ordinal/swipe IDs once, from the validated saved source journal.
+  const callAliases=new Map<string,string>();
+  for(const entry of document.accepted)for(const [i,c]of (entry.patch.calls??[]).entries())callAliases.set(JSON.stringify([entry.at.id,entry.at.variant,"calls",i]),callId(entry.at.id,c));
+  for(const entry of document.helperEntries??[])for(const [i,c]of (validateExpanded(entry.values).calls??[]).entries())callAliases.set(JSON.stringify([entry.at.id,entry.at.variant,"calls",i]),callId(c.source??entry.at.id,c));
+  for(const edit of next.edits)if(edit.target==="call"&&edit.name)edit.name=callAliases.get(edit.name)??edit.name;
+  const callCandidates=new Set<string>();
+  for(const row of sorted){const parsed=parseExpandedReply(row.content);const prior=previous.get(JSON.stringify([row.id,JSON.stringify([row.swipe_id,row.swipe_dates?.[row.swipe_id]??null])]));for(const c of (parsed.patch?.calls??(parsed.patch===null?prior?.patch.calls:[])??[]))callCandidates.add(callId(row.id,c));}
+  for(const entry of document.helperEntries??[])if(entry.sources.every(s=>sorted.some(r=>r.id===s.id&&helperSourceSignature(r)===s.signature)))for(const c of validateExpanded(entry.values).calls??[])if(!c.source||helperCallSource(c,sorted))callCandidates.add(callId(c.source??entry.at.id,c));
+  for(const edit of next.edits)if(edit.target==="call"&&!edit.name&&!edit.remove)callCandidates.add(edit.id);
+  const deletedCalls=new Set(next.edits.filter(e=>e.target==="call"&&e.remove).map(e=>e.name??e.id));
+  const reservedCalls=new Set((document.callAdmissions??document.state.calls.map(c=>c.id)).map(id=>callAliases.get(id)??id).filter(id=>callCandidates.has(id)&&!deletedCalls.has(id)));
   const editsByIndex = new Map<number, ManualEdit[]>();
-  for (const edit of document.edits) {
+  for (const edit of next.edits) {
     const anchor = sorted.find(r => r.id === edit.after);
     const index = anchor?.index_in_chat ?? Math.min(edit.index, sorted.at(-1)?.index_in_chat ?? -1);
     editsByIndex.set(index, [...editsByIndex.get(index) ?? [], edit]);
   }
   const manualAt = (index: number) => {
-    for (const edit of editsByIndex.get(index) ?? []) applyManual(state, edit, players, tombstones,document.settings.aiPlayerTexts);
+    for (const edit of editsByIndex.get(index) ?? []) {
+      // A changed/deleted source cannot resurrect its old edited call as a manual add.
+      if(edit.target==="call"&&edit.name&&!state.calls.some(c=>c.id===edit.name))continue;
+      applyManual(state, edit, players, tombstones,document.settings.aiPlayerTexts);
+    }
   };
   manualAt(-1);
   for (const row of sorted) {
@@ -148,7 +164,7 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
       const needsBankFallback=parsed.patch===null||parsed.invalidFields.some(k=>k==="bank"||k.startsWith("bank:"));
       const proven=needsBankFallback?prior?.bankProof??[]:[];
       const proofRow:StoryRow={...row,content:proven.map(b=>[b.name,b.balance,b.evidence??""].join(" ")).join("\n")};
-      applyActivities(next,patch,emails,at,[...(lastUser?[lastUser]:[]),row,...(proven.length?[proofRow]:[])],players,row.role==="user",tombstones);
+      applyActivities(next,patch,emails,at,[...(lastUser?[lastUser]:[]),row,...(proven.length?[proofRow]:[])],players,row.role==="user",tombstones,reservedCalls);
       accepted.bankProof=(patch.bank??[]).filter(b=>state.bank.some(saved=>saved.at.id===at.id&&saved.at.variant===at.variant&&normalize(saved.name)===normalize(b.name)&&saved.balance===b.balance));
       for (const [ordinal, text] of texts.entries()) {
         let from = text.from; let direction: "incoming" | "outgoing" = "incoming";
@@ -169,7 +185,18 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
     for (const entry of document.helperEntries ?? []) if (entry.at.id === row.id &&
       entry.at.variant === at.variant && entry.sources.every(s => sorted.some(r => r.id === s.id && helperSourceSignature(r) === s.signature))) {
       const helperPatch=validateExpanded(entry.values);applyAI(next, helperPatch, entry.at, entry.prose, players, tombstones, knownNotes);
-      applyActivities(next,helperPatch,[],entry.at,sorted.filter(r=>entry.sources.some(s=>s.id===r.id)),players,false,tombstones);
+      const sources=sorted.filter(r=>entry.sources.some(s=>s.id===r.id));
+      for(const [ordinal,call] of (helperPatch.calls??[]).entries()) {
+        const source=helperCallSource(call,sources);
+        // Existing pre-attribution journals retain their old anchor; new Helper output requires verified source+quote.
+        if(!source && call.source)continue;
+        const origin=source?{id:source.id,index:source.index_in_chat,variant:JSON.stringify([source.swipe_id,source.swipe_dates?.[source.swipe_id]??null])}:entry.at;
+        applyActivities(next,{...helperPatch,calls:[call],bank:[],transactions:[]},[],origin,sources,players,false,tombstones,reservedCalls);
+        const saved=state.calls.find(c=>c.id===callId(origin.id,call));
+        const legacyId=JSON.stringify([entry.at.id,entry.at.variant,"calls",ordinal]);
+        if(saved && !saved.legacyIds?.includes(legacyId))saved.legacyIds=[...saved.legacyIds??[],legacyId];
+      }
+      applyActivities(next,{...helperPatch,calls:[]},[],entry.at,sources,players,false,tombstones,reservedCalls);
     }
     manualAt(row.index_in_chat);
   }
@@ -181,6 +208,8 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
     state.notes.misc.push({ name, detail, context: "Preserved from the earlier tracker", resolved: false,
       sendToAI: false, by: "ai", addedByUser: false, updated: false, at: { id: "legacy", index: -1, variant: "legacy" } });
   }
+  next.callAdmissions=state.calls.map(c=>c.id);
+  state.calls.sort((a,b)=>a.at.index-b.at.index);
   next.notices = [...state.notices];
   return next;
 }

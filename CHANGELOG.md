@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.1 - Call sources, repeat counts and supplied default theme
+
+- Keep identical calls from different source messages; rereading one source stays idempotent. Selected swipes and regeneration replace that message's calls. Call edits/deletions are source-scoped.
+- Add optional x1 through x20 counts, default 1, with a Repeat count editor. Show Missed x3 once, with one unread record. Reject bad counts independently.
+- Require verified source IDs and exact story quotes for new Helper calls. Repeated Helper runs cannot re-log the same source call. Preserve older saved IDs, receipts, corrections and cap admissions on migration.
+- Bundle the supplied styles(1).css and sidebar.css as the default theme, with no custom CSS length limit involved. Keep existing behavior, transparent launcher, opaque screens and the protected sidebar Reset. Saved custom CSS still overrides defaults.
+- Update format/styling/testing guides and built files. No new permission or model call.
+
 ## 0.10.0 - Part 4 only
 
 - Add optional Calls, Email and Bank, off by default in new/existing chats, with built-in Add/Remove, switches, editable records, caps and retained data.

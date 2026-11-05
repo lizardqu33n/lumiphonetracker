@@ -1,31 +1,110 @@
-/* Host sidebar only; never part of the phone's custom-CSS tree. */
-.lpt-sidebar {max-height:100dvh;overflow-y:auto;color:var(--lumiverse-text,CanvasText);font:inherit;padding:12px;box-sizing:border-box;max-width:100%;overflow-wrap:anywhere;}
-.lpt-sidebar * {box-sizing:border-box;}
+/* Host sidebar only; never part of the phone's custom-CSS tree.
+   Calm Y2K version: pastel buttons and switches, heart markers, readable text.
+   Text and backgrounds still follow Lumiverse's own theme variables.
+   Recolor the pastel parts by editing the --lpt-side-* values below. */
+.lpt-sidebar {
+  --lpt-side-outline: #420642;
+  --lpt-side-btn-bg: #d2aef6;
+  --lpt-side-btn-hover-bg: #dec6f6;
+  --lpt-side-btn-text: #420642;
+  --lpt-side-switch-on: #f6a2d2;
+  --lpt-side-switch-thumb-on: #420642;
+  --lpt-side-pill-bg: #a2d2f6;
+  --lpt-side-pill-text: #420642;
+  --lpt-side-accent: #d9419f;
+  --lpt-side-focus: #420642;
+  --lpt-side-focus-ring: #f6de8a;
+  --lpt-side-marker-closed: "♡";
+  --lpt-side-marker-open: "♥";
+  --lpt-side-radius: 14px;
+  --lpt-side-edge: var(--lumiverse-text-muted, GrayText);
+
+  max-height:100dvh;overflow-y:auto;color:var(--lumiverse-text,CanvasText);font:inherit;padding:12px;box-sizing:border-box;max-width:100%;overflow-wrap:anywhere;
+}
+
+/* Explicit list instead of a universal selector; same box-sizing effect. */
+.lpt-sidebar div,.lpt-sidebar span,.lpt-sidebar p,.lpt-sidebar label,.lpt-sidebar fieldset,.lpt-sidebar details,.lpt-sidebar summary,.lpt-sidebar button,.lpt-sidebar input,.lpt-sidebar textarea,.lpt-sidebar select {box-sizing:border-box;}
+
+/* ---- Recovery controls: unchanged from the original file, always visible ---- */
 .lpt-recovery-actions {display:grid;gap:8px;position:sticky;top:0;background:var(--lumiverse-bg,var(--lumiverse-fill,Canvas));z-index:1;padding:8px 0;}
 .lpt-recovery-action {display:grid;grid-template-columns:minmax(0,1fr);gap:3px;}
-.lpt-recovery-button,.lpt-store-button {font:inherit;color:var(--lumiverse-text,CanvasText);background:var(--lumiverse-fill-subtle,ButtonFace);border:1px solid var(--lumiverse-border,ButtonBorder);border-radius:var(--lumiverse-radius,8px);padding:7px 10px;cursor:pointer;min-height:40px;white-space:normal;}
+.lpt-recovery-button {font:inherit;color:var(--lumiverse-text,CanvasText);background:var(--lumiverse-fill-subtle,ButtonFace);border:1px solid var(--lumiverse-border,ButtonBorder);border-radius:var(--lumiverse-radius,8px);padding:7px 10px;cursor:pointer;min-height:40px;white-space:normal;}
+.lpt-recovery-status {font-size:.85em;line-height:1.4;margin:4px 0;color:var(--lumiverse-text-muted,GrayText);}
+
+/* ---- Focus: always visible on light or dark hosts (plum ring plus butter ring) ---- */
 .lpt-sidebar button:focus-visible,.lpt-sidebar input:focus-visible,.lpt-sidebar textarea:focus-visible,.lpt-sidebar select:focus-visible,.lpt-sidebar summary:focus-visible {outline:2px solid var(--lumiverse-accent,Highlight);outline-offset:2px;}
+.lpt-sidebar .lpt-store-button:focus-visible,.lpt-sidebar .lpt-side-number:focus-visible,.lpt-sidebar .lpt-helper-source:focus-visible,.lpt-sidebar .lpt-helper-connection:focus-visible,.lpt-sidebar .lpt-sidebar-css:focus-visible,.lpt-sidebar .lpt-side-checkbox:focus-visible,.lpt-sidebar .lpt-side-summary:focus-visible {outline:3px solid var(--lpt-side-focus);outline-offset:2px;box-shadow:0 0 0 6px var(--lpt-side-focus-ring);}
 .lpt-sidebar button:disabled {opacity:.55;cursor:default;}
-.lpt-recovery-status,.lpt-side-status,.lpt-side-help,.lpt-side-scope {font-size:.85em;line-height:1.4;margin:4px 0;color:var(--lumiverse-text-muted,GrayText);}
-.lpt-side-section {border-top:1px solid var(--lumiverse-border,ButtonBorder);padding:10px 0;}
-.lpt-side-summary {font-weight:600;cursor:pointer;padding:5px 0;}
+
+/* ---- Text bits ---- */
+.lpt-side-status,.lpt-side-help,.lpt-side-scope {font-size:.85em;line-height:1.4;margin:4px 0;color:var(--lumiverse-text-muted,GrayText);}
 .lpt-side-scope {font-weight:600;}
+
+/* ---- Collapsible sections with heart markers (shape changes, not just color) ---- */
+.lpt-side-section {border-top:2px dashed var(--lumiverse-border,ButtonBorder);padding:10px 0;}
+.lpt-side-summary {font-weight:600;cursor:pointer;padding:5px 0;min-height:44px;display:flex;align-items:center;list-style:none;}
+.lpt-side-summary::-webkit-details-marker {display:none;}
+.lpt-side-summary::before {content:var(--lpt-side-marker-closed);flex:none;margin-right:8px;font-size:1.15em;line-height:1;color:var(--lpt-side-accent);}
+.lpt-side-section[open] > .lpt-side-summary::before {content:var(--lpt-side-marker-open);}
+
+/* ---- App Store rows ---- */
 .lpt-store-row {display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;align-items:center;padding:10px 0;}
 .lpt-side-label {display:flex;flex-direction:column;gap:4px;min-width:0;}
-.lpt-store-added {color:var(--lumiverse-accent,Highlight);}
+.lpt-store-added {display:inline-block;width:fit-content;align-self:flex-start;padding:1px 9px;border:2px solid var(--lpt-side-outline);border-radius:999px;background:var(--lpt-side-pill-bg);color:var(--lpt-side-pill-text);font-size:.85em;font-weight:600;}
 .lpt-store-icon .lpt-icon {width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;}
-.lpt-side-setting {display:flex;gap:10px;align-items:center;justify-content:space-between;padding:9px 0;}
+
+/* ---- Bubbly pastel Add / Remove buttons ---- */
+.lpt-store-button {font:inherit;font-weight:600;color:var(--lpt-side-btn-text);background:var(--lpt-side-btn-bg);border:2px solid var(--lpt-side-outline);border-radius:999px;padding:8px 16px;cursor:pointer;min-height:44px;min-width:44px;white-space:normal;box-shadow:0 2px 0 0 var(--lpt-side-outline);transition:background-color 140ms ease,transform 140ms ease,box-shadow 140ms ease;}
+.lpt-store-button:hover:not(:disabled) {background:var(--lpt-side-btn-hover-bg);}
+.lpt-store-button:active:not(:disabled) {transform:translateY(2px);box-shadow:0 0 0 0 var(--lpt-side-outline);}
+
+/* ---- Settings rows and switches ---- */
+.lpt-side-setting {display:flex;gap:10px;align-items:center;justify-content:space-between;padding:9px 0;min-height:44px;}
 .lpt-side-setting .lpt-side-label {flex:1;}
 .lpt-side-switch {flex:none;}
 .lpt-side-group {border:0;margin:8px 0;padding:0;min-width:0;}
 .lpt-side-legend {font-weight:600;}
-.lpt-side-number,.lpt-helper-source,.lpt-helper-connection,.lpt-sidebar-css {font:inherit;color:var(--lumiverse-text,CanvasText);background:var(--lumiverse-fill,Canvas);border:1px solid var(--lumiverse-border,ButtonBorder);border-radius:var(--lumiverse-radius,8px);padding:6px;max-width:100%;}
+
+/* Native checkbox fallback drawn as a pill switch: thumb moves right when on. */
+.lpt-side-checkbox {appearance:none;-webkit-appearance:none;position:relative;flex:none;width:52px;height:30px;margin:0;border-radius:999px;border:2px solid var(--lpt-side-edge);background:var(--lumiverse-fill,Canvas);cursor:pointer;transition:background-color 140ms ease;}
+.lpt-side-checkbox::before {content:"";position:absolute;top:-9px;right:-6px;bottom:-9px;left:-6px;}
+.lpt-side-checkbox::after {content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--lpt-side-edge);transition:transform 140ms ease,background-color 140ms ease;}
+.lpt-side-checkbox:checked {background:var(--lpt-side-switch-on);border-color:var(--lpt-side-outline);}
+.lpt-side-checkbox:checked::after {background:var(--lpt-side-switch-thumb-on);transform:translateX(22px);}
+
+/* ---- Inputs ---- */
+.lpt-side-number,.lpt-helper-source,.lpt-helper-connection,.lpt-sidebar-css {font:inherit;color:var(--lumiverse-text,CanvasText);background:var(--lumiverse-fill,Canvas);border:2px solid var(--lumiverse-border,ButtonBorder);border-radius:var(--lpt-side-radius);padding:6px 10px;min-height:44px;max-width:100%;}
 .lpt-side-number {width:68px;flex:none;}
 .lpt-helper-source,.lpt-helper-connection {width:100%;}
 .lpt-sidebar-css {width:100%;min-height:160px;resize:vertical;}
 .lpt-side-chat {font-size:.9em;}
-@media(max-width:420px){.lpt-sidebar{padding:8px}.lpt-store-row{gap:5px}.lpt-store-button{padding:6px}.lpt-side-setting{gap:6px}}
+
+@media(max-width:420px){.lpt-sidebar{padding:8px}.lpt-store-row{gap:5px}.lpt-store-button{padding:6px 12px}.lpt-side-setting{gap:6px}}
 
 .lpt-recovery-status:empty,.lpt-side-status:empty {display:none;}
 
 .lpt-store-icon .lpt-app-image {width:22px;height:22px;object-fit:contain;image-rendering:auto;}
+
+@media (prefers-reduced-motion: reduce) {
+  .lpt-store-button,.lpt-side-checkbox,.lpt-side-checkbox::after {transition:none;}
+}
+
+/* ==========================================================================
+   PLAIN LOOK (turn the cute sidebar off): uncomment these overrides.
+
+.lpt-sidebar {
+  --lpt-side-outline: var(--lumiverse-border, ButtonBorder);
+  --lpt-side-btn-bg: var(--lumiverse-fill-subtle, ButtonFace);
+  --lpt-side-btn-hover-bg: var(--lumiverse-fill, Canvas);
+  --lpt-side-btn-text: var(--lumiverse-text, CanvasText);
+  --lpt-side-switch-on: var(--lumiverse-accent, Highlight);
+  --lpt-side-switch-thumb-on: var(--lumiverse-accent-fg, HighlightText);
+  --lpt-side-pill-bg: var(--lumiverse-fill-subtle, ButtonFace);
+  --lpt-side-pill-text: var(--lumiverse-text, CanvasText);
+  --lpt-side-accent: var(--lumiverse-text-muted, GrayText);
+  --lpt-side-focus: var(--lumiverse-accent, Highlight);
+  --lpt-side-focus-ring: transparent;
+  --lpt-side-marker-closed: "▸";
+  --lpt-side-marker-open: "▾";
+}
+   ========================================================================== */

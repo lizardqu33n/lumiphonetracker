@@ -152,7 +152,7 @@ balance, never by calculating from transactions. Omit an unstated time entirely.
 
 ```text
 <phone-state>
-call: Ada | missed | Evening
+call: Ada | missed | Evening | x3
 bank: Main | $500 | Evening
 tx: Rent | -$10 | Night
 </phone-state>
@@ -204,3 +204,46 @@ needs the exact newer quote using the existing ~ "quote" suffix. Figures that
 exist only in stripped tags or need interpretation are ignored safely. The
 format has no transaction account field, so transactions stay in a shared list;
 the extension never guesses an account. See PART-4.md for limits and provenance.
+
+## Call sources and repeat counts (0.10.1)
+
+`call: Ada | missed | 3 PM | x3` records one call-log row, shown as **Missed x3**.
+Time and count are optional. Without a time use `call: Ada | missed | x3`.
+Without a count it means 1. The count must be exactly x1 through x20: no
+fractions, signs, placeholders, empty slots or other spellings. A bad count drops
+that line only; independent valid lines still apply. Legacy JSON uses a numeric
+`count` property, with the same whole-number limits. Users can edit Repeat count.
+
+Call identity is source message ID + normalized caller + direction + stated time.
+Count and swipe are excluded. Two identical calls from different messages are
+two records. Identical lines reread from one source add nothing. Rebuild reads
+only selected swipes; regeneration replaces that source's contribution. Edits
+and deletions apply to that record, not every later call from the same caller.
+Do not repeat old calls in new blocks: write only NEW calls. Multiple identical
+calls established in one message use one row with its stated repeat count.
+One missed-call record contributes one unread item and arrival, regardless of count.
+
+New Helper calls use the same line parser with an internal attribution suffix:
+
+```text
+call: Ada | missed | 3 PM | x3 ~ {"source":"message-id","quote":"Ada has three missed calls at 3 PM."}
+```
+
+The extension supplies actual recent message IDs beside stripped story text.
+The Helper must copy the ID of the message establishing the call and an exact
+quote. Code checks source membership, unchanged source, literal quote, caller,
+call wording, stated time and explicit repeat count; unverified calls are dropped.
+Outgoing player calls still require the player-writing permission or the existing
+strict affirmative player-message proof. Attributed calls keep that source's
+identity even when a later reply triggered extraction. This is internal request
+data, not a new Lumiverse API or additional preset line.
+
+Old saved Helper journals without attribution retain their old source anchor so
+updating does not delete existing records; the extension cannot reliably recover
+an unstated historical source. New Helper output must provide verified attribution.
+Legacy ordinal/swipe IDs are migrated using the saved validated source journal.
+Existing cap slots, source corrections/deletions and unchanged read receipts are
+preserved; a changed displayed count becomes unread like any other correction.
+
+`{{phone_format}}` already includes Calls, Email and Bank continuity. Separate
+macros are optional alternatives; using both repeats the same continuity.

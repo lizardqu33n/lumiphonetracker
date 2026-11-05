@@ -2,7 +2,9 @@
 
 A small phone for keeping track of story facts. Each chat has its own Scene, Weather, Locations, Notes, Contacts and Messages, plus optional Calls, Email and Bank. The existing Phone sidebar tab controls apps, tracking and appearance.
 
-**Version 0.10.0: all six build steps are delivered.** Source, manifest, built frontend/backend, tests and guides are included. The new Helper AI has been tested with mocks, not a real paid connection.
+**Version 0.10.1: all six build steps are delivered.** Source, manifest, built frontend/backend, tests and guides are included. The new Helper AI has been tested with mocks, not a real paid connection.
+
+Version 0.10.1 adds the supplied pastel default phone/sidebar theme, source-aware calls and editable repeat counts. Existing custom CSS still overrides the default; use Reset appearance to see the new default alone.
 
 Version 0.10.0 adds optional Calls, Email and Bank in the sidebar App Store. All three start removed. Story data and tracker settings are shared on the chat; read state, appearance and dismissals stay per user. No owner-only data/settings restriction is added. See [Part 4](docs/PART-4.md).
 

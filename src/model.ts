@@ -15,11 +15,11 @@ export interface Change { value: Value; evidence?: string; inferred?: boolean }
 export interface ContactPatch { name: string; fields: Partial<Record<ContactKey, Change>> }
 export interface PlacePatch { name: string; description?: string; relation?: string; evidence?: string }
 export interface NotePatch { name: string; detail?: string; context?: string; resolved?: boolean; evidence?: string }
-export interface CallData {name:string;direction:"in"|"out"|"missed";time?:string;evidence?:string}
+export interface CallData {name:string;direction:"in"|"out"|"missed";time?:string;count?:number;source?:string;evidence?:string}
 export interface BankData {name:string;balance:string;time?:string;evidence?:string}
 export interface TransactionData {description:string;amount:string;time?:string}
 export interface EmailData {from:string;to?:string;subject:string;body:string;time?:string}
-export type ActivityEntry<T> = T & {id:string;at:Origin;by:"ai"|"user"};
+export type ActivityEntry<T> = T & {id:string;at:Origin;by:"ai"|"user";legacyIds?:string[]};
 export interface Patch {
   calls?:CallData[];bank?:BankData[];transactions?:TransactionData[];
   scene: Partial<Record<SceneKey, Change>>; weather?: Change;
@@ -57,6 +57,7 @@ export interface ManualEdit {
 }
 export interface Accepted { bankProof?:BankData[];at: Origin; patch: Patch; emails?:EmailData[]; texts: TextData[]; role: "user" | "assistant"; name?: string; prose: string }
 export interface Document {
+  callAdmissions?:string[];
   personalReads?:{seen:Record<string,string>;available?:boolean};
   schema: 2; chatId: string; revision: number; settings: Settings; edits: ManualEdit[];
   accepted: Accepted[]; state: State; playerNames: string[]; legacy?: unknown;

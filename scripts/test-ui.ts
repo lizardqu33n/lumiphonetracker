@@ -131,12 +131,12 @@ try {
   await activityPage.locator(".harness-widget").screenshot({path:".test-artifacts/home-nine-apps.png"});
   await activityPage.locator('.lpt-island [data-app="Calls"]').click();check((await activityPage.locator(".lpt-calls").innerText()).includes("No calls recorded"),"Calls starts empty without demo entries");await home(activityPage);
   await activityPage.locator('.lpt-island [data-app="Email"]').click();check((await activityPage.locator(".lpt-email.lpt-activity").innerText()).includes("No emails recorded"),"Email starts empty without demo entries");await home(activityPage);
-  await activityPage.evaluate(()=>(window as any).harness.activityStory('Main account has $500. A call is missed and an email arrives.<phone-state>\ncall: Ada | missed | Evening\nbank: Main | $500 | Evening\n</phone-state><phone-email from="Ada" subject="Meet" time="Evening">&lt;img src=x&gt; Plain text https://example.test</phone-email>'));
+  await activityPage.evaluate(()=>(window as any).harness.activityStory('Main account has $500. A call is missed and an email arrives.<phone-state>\ncall: Ada | missed | Evening | x3\nbank: Main | $500 | Evening\n</phone-state><phone-email from="Ada" subject="Meet" time="Evening">&lt;img src=x&gt; Plain text https://example.test</phone-email>'));
   await activityPage.waitForTimeout(130);
   check(await activityPage.locator('.lpt-island [data-app="Calls"] .lpt-unread-badge').innerText()==="1"&&await activityPage.locator('.lpt-island [data-app="Email"] .lpt-unread-badge').innerText()==="1","Missed call and incoming email get separate Home badges");
   check((await activityPage.locator(".lpt-text-notice").innerText()).includes("new calls or emails"),"New calls/email reuse the existing personal arrival notice");
   await activityPage.locator('.lpt-island [data-app="Calls"]').click();await activityPage.waitForTimeout(100);
-  check((await activityPage.locator(".lpt-call").innerText()).includes("Missed")&&await activityPage.locator('.lpt-calls a[href^="tel:"]').count()===0,"Call log shows its direction with no dialing action");
+  check((await activityPage.locator(".lpt-call").innerText()).includes("Missed x3")&&await activityPage.locator('.lpt-calls a[href^="tel:"]').count()===0,"One call record shows Missed x3 with no dialing action");
   await opaqueActivity(activityPage,"Calls");
   await home(activityPage);check(await activityPage.locator('.lpt-island [data-app="Calls"] .lpt-unread-badge').isHidden(),"Opening Calls clears missed-call unread state for this user");
   await activityPage.locator('.lpt-island [data-app="Email"]').click();check(await activityPage.locator(".lpt-email-unread").count()===1,"An unopened email has its own unread label");
@@ -150,7 +150,8 @@ try {
   check(await activityPage.locator(".lpt-bank").evaluate(e=>getComputedStyle(e).backgroundColor!=="rgba(0, 0, 0, 0)"),"Bank app background stays opaque");
   await opaqueActivity(activityPage,"Bank");
   await activityPage.locator(".harness-widget").screenshot({path:".test-artifacts/bank-app.png"});
-  await home(activityPage);await activityPage.locator('.lpt-island [data-app="Calls"]').click();await activityPage.locator(".lpt-call").getByRole("button",{name:"Edit",exact:true}).click();await activityPage.locator('.lpt-form [name="name"]').fill("Bea");await save(activityPage);check((await activityPage.locator(".lpt-call").innerText()).includes("Bea"),"User can correct a call log entry");
+  await home(activityPage);await activityPage.locator('.lpt-island [data-app="Calls"]').click();await activityPage.locator(".lpt-call").getByRole("button",{name:"Edit",exact:true}).click();await activityPage.locator('.lpt-form [name="name"]').fill("Bea");
+  const repeats=activityPage.locator('.lpt-form [name="count"]');check(await repeats.inputValue()==="3"&&await repeats.getAttribute("type")==="number"&&await repeats.getAttribute("min")==="1"&&await repeats.getAttribute("max")==="20","Repeat editor starts at 3 with whole-number 1–20 bounds");await repeats.fill("4");await save(activityPage);check(await activityPage.locator(".lpt-call").count()===1&&(await activityPage.locator(".lpt-call-direction").innerText())==="Missed x4","Editing repeat count updates one call entry");check((await activityPage.locator(".lpt-call").innerText()).includes("Bea"),"User can correct a call log entry");
   await activityPage.locator(".lpt-sidebar").getByRole("button",{name:"Remove Calls",exact:true}).click();await activityPage.waitForTimeout(100);check(await activityPage.locator('.lpt-island [data-app="Calls"]').count()===0&&await activityPage.evaluate(()=>(window as any).harness.getDocument().state.calls[0].name)==="Bea","Removing Calls hides it while retaining the user's correction");
   await activityPage.locator(".lpt-sidebar").getByRole("button",{name:"Add Calls",exact:true}).click();await activityPage.waitForTimeout(100);await activityPage.locator('.lpt-island [data-app="Calls"]').click();check((await activityPage.locator(".lpt-call").innerText()).includes("Bea"),"Re-adding Calls restores its retained entry");
   await activityPage.locator(".lpt-call").getByRole("button",{name:"Edit",exact:true}).click();await activityPage.locator('.lpt-form [name="name"]').fill("Stale form");
@@ -320,8 +321,8 @@ try {
   await page.evaluate(() => document.documentElement.style.setProperty("--lumiverse-fill", "initial"));
   check(await ui(page).locator(".lpt-frame").evaluate(e => {
     const canvas=document.createElement("canvas"); canvas.width=canvas.height=1; const ctx=canvas.getContext("2d")!;
-    ctx.fillStyle=getComputedStyle(e).backgroundColor; ctx.fillRect(0,0,1,1); return [...ctx.getImageData(0,0,1,1).data].join(",")==="18,16,23,255";
-  }), "Missing theme background uses the explicit solid dark fallback");
+    ctx.fillStyle=getComputedStyle(e).backgroundColor; ctx.fillRect(0,0,1,1); return [...ctx.getImageData(0,0,1,1).data].join(",")==="31,15,46,255";
+  }), "Supplied theme keeps its explicit opaque dark background when host fills are missing");
   await page.evaluate(() => { document.documentElement.style.removeProperty("--lumiverse-fill"); document.documentElement.style.removeProperty("--lumiverse-fill-subtle"); });
   await seed(page); await open(page);
   await page.evaluate(() => { (window as any).harness.incoming("Ada","At the station.","Dusk"); (window as any).harness.incoming("Bea","The bridge is closed."); });

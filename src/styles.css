@@ -1,96 +1,169 @@
-/* All phone defaults live on this one root[cite: 2]. Theme tokens are documented by Lumiverse[cite: 2]. */
+/* ==========================================================================
+   Phone tracker: cute Y2K theme (default look)
+   Phone CSS only. The sidebar is outside the Shadow DOM and uses sidebar.css.
+   Recolor the whole phone by editing the PALETTE block below.
+   To switch the cute theme off, paste the "plain dark" block found at the
+   very end of this file into the Advanced custom CSS box.
+   ========================================================================== */
+
 .lpt-root {
-  /* Core Surfaces (Strictly Opaque) */
-  --lpt-phone-bg: #121017;
-  --lpt-screen-bg: #15131c;
-  --lpt-card-bg: #1f1c29;
-  --lpt-elevated-bg: #292536;
+  /* ---- PALETTE (change these first) ---- */
+  --lpt-outline: #420642;
+  --lpt-lilac-1: #dec6f6;
+  --lpt-lilac-2: #d2aef6;
+  --lpt-lilac-3: #c696f6;
+  --lpt-pink-1: #f6a2d2;
+  --lpt-pink-2: #f67ec6;
+  --lpt-blue: #a2d2f6;
+  --lpt-yellow: #f6de8a;
+  --lpt-hot-pink: #c2187f;
+
+  /* ---- Core surfaces (all strictly opaque) ---- */
+  --lpt-phone-bg: #1f0f2e;
+  --lpt-screen-bg: #261338;
+  --lpt-card-bg: #2e1743;
+  --lpt-elevated-bg: #3d2059;
   --lpt-fill: var(--lpt-screen-bg);
   --lpt-subtle: var(--lpt-card-bg);
 
-  /* Typography & Accent Colors */
-  --lpt-text: var(--lumiverse-text, #f0edf6);
-  --lpt-muted: var(--lumiverse-text-muted, #9b95aa);
-  --lpt-accent: var(--lumiverse-accent, #a485f7);
-  --lpt-accent-text: var(--lumiverse-accent-fg, #120f1d);
+  /* ---- Text ---- */
+  --lpt-text: #f7ecff;
+  --lpt-muted: #cdb4ee;
+  --lpt-on-pastel: #420642;
+  --lpt-on-pastel-soft: #4a1260;
+  --lpt-accent: var(--lpt-pink-2);
+  --lpt-accent-text: #420642;
+  --lpt-focus-color: #f6de8a;
 
-  /* Borders & Highlights */
-  --lpt-border: #2d293b;
-  --lpt-hover-border: #47405c;
-  --lpt-frame-edge: #353047;
+  /* ---- Borders and sticker shadow ---- */
+  --lpt-border: #5b3a85;
+  --lpt-hover-border: var(--lpt-lilac-3);
+  --lpt-frame-edge: var(--lpt-lilac-1);
+  --lpt-card-outline: var(--lpt-lilac-2);
+  --lpt-shadow-hard: #4b2478;
 
-  /* Hardware Details (Notch & Home Bar) */
-  --lpt-notch-bg: #09080c;
+  /* ---- Gloss (a light overlay painted over a solid color) ---- */
+  --lpt-gloss: linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0, rgba(255, 255, 255, 0.22) 48%, rgba(255, 255, 255, 0) 50%, rgba(255, 255, 255, 0) 100%);
+
+  /* ---- Hardware details ---- */
+  --lpt-notch-bg: var(--lpt-outline);
   --lpt-notch-width: 76px;
   --lpt-notch-height: 18px;
   --lpt-home-bar-width: 112px;
-  --lpt-home-bar-height: 4px;
-  --lpt-home-bar-color: #3f3952;
+  --lpt-home-bar-height: 5px;
+  --lpt-home-bar-color: var(--lpt-lilac-3);
 
-  /* App Icon Tints (Soft Hues, Opaque Bases Calculated per App) */
-  --lpt-tint-scene: #b494ff;
-  --lpt-tint-weather: #72bdf5;
-  --lpt-tint-locations: #66d4a5;
-  --lpt-tint-notes: #f0bf6c;
-  --lpt-tint-contacts: #f08ca6;
-  --lpt-tint-messages: #8ea2ff;
-  --lpt-tint-settings: #b0a9c4;
+  /* ---- Home wallpaper (pure CSS checker) ---- */
+  --lpt-wallpaper-a: #261338;
+  --lpt-wallpaper-b: #2d1843;
+  --lpt-wallpaper-size: 28px;
 
-  /* Messaging Bubbles (Opaque) */
-  --lpt-bubble-in-bg: #272333;
-  --lpt-bubble-out-bg: #362859;
-  --lpt-bubble-out-border: #5a4294;
-  --lpt-bubble-radius: 18px;
+  /* ---- Home tile colors (pastel candy, one per app) ---- */
+  --lpt-tint-scene: var(--lpt-lilac-2);
+  --lpt-tint-weather: var(--lpt-blue);
+  --lpt-tint-locations: var(--lpt-yellow);
+  --lpt-tint-notes: var(--lpt-pink-1);
+  --lpt-tint-contacts: var(--lpt-lilac-1);
+  --lpt-tint-messages: var(--lpt-blue);
+  --lpt-tint-settings: var(--lpt-lilac-1);
+  --lpt-tint-calls: var(--lpt-yellow);
+  --lpt-tint-email: var(--lpt-pink-1);
+  --lpt-tint-bank: var(--lpt-lilac-2);
 
-  /* Toggle Switch Tokens */
-  --lpt-toggle-width: 42px;
-  --lpt-toggle-height: 24px;
+  /* ---- Buttons ---- */
+  --lpt-btn-bg: var(--lpt-lilac-2);
+  --lpt-btn-soft-bg: var(--lpt-lilac-1);
+  --lpt-btn-primary-bg: var(--lpt-pink-2);
+  --lpt-btn-text: var(--lpt-on-pastel);
+  --lpt-btn-edge: var(--lpt-outline);
+  --lpt-btn-hover-mix: #ffffff;
+
+  /* ---- Form fields ---- */
+  --lpt-input-bg: #f7ecff;
+  --lpt-input-text: #420642;
+  --lpt-input-placeholder: #6a3d85;
+  --lpt-input-border: var(--lpt-lilac-3);
+
+  /* ---- Pills, markers, badges ---- */
+  --lpt-pill-bg: var(--lpt-blue);
+  --lpt-marker-bg: var(--lpt-yellow);
+  --lpt-pill-text: var(--lpt-on-pastel);
+  --lpt-pill-edge: var(--lpt-outline);
+  --lpt-badge-bg: var(--lpt-hot-pink);
+  --lpt-badge-text: #ffffff;
+  --lpt-badge-edge: var(--lpt-outline);
+  --lpt-badge-ring: #f7ecff;
+
+  /* ---- Message bubbles ---- */
+  --lpt-bubble-in-bg: var(--lpt-blue);
+  --lpt-bubble-in-text: var(--lpt-on-pastel);
+  --lpt-bubble-in-border: var(--lpt-outline);
+  --lpt-bubble-out-bg: var(--lpt-pink-1);
+  --lpt-bubble-out-text: var(--lpt-on-pastel);
+  --lpt-bubble-out-border: var(--lpt-outline);
+  --lpt-bubble-muted: var(--lpt-on-pastel-soft);
+  --lpt-bubble-radius: 20px;
+
+  /* ---- Decorative glyphs (set to "" to remove) ---- */
+  --lpt-marker-closed: "♡";
+  --lpt-marker-open: "♥";
+  --lpt-sparkle-glyph: "✦";
+  --lpt-empty-glyph: "♡";
+  --lpt-marker-color: var(--lpt-pink-1);
+
+  /* ---- Toggle switch ---- */
+  --lpt-toggle-width: 52px;
+  --lpt-toggle-height: 30px;
   --lpt-toggle-thumb: #ffffff;
+  --lpt-toggle-off-bg: #3d2059;
+  --lpt-toggle-off-thumb: var(--lpt-lilac-1);
 
-  /* Radii & Spacing */
-  --lpt-radius: var(--lumiverse-radius, 12px);
-  --lpt-card-radius: 16px;
-  --lpt-icon-radius: 20px;
-  --lpt-frame-radius: 40px;
+  /* ---- Radii and spacing ---- */
+  --lpt-radius: 14px;
+  --lpt-card-radius: 20px;
+  --lpt-icon-radius: 22px;
+  --lpt-frame-radius: 44px;
   --lpt-space: 8px;
 
-  /* Typography Metrics */
-  --lpt-font: inherit;
+  /* ---- Type (system fonts only) ---- */
+  --lpt-font: ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN", "Arial Rounded MT Bold", "Varela Round", system-ui, sans-serif;
   --lpt-font-size: 14px;
   --lpt-small-font-size: 12px;
-  --lpt-title-size: 18px;
+  --lpt-title-size: 19px;
   --lpt-location-size: 24px;
-  --lpt-weight: 450;
-  --lpt-strong-weight: 650;
+  --lpt-weight: 500;
+  --lpt-strong-weight: 750;
   --lpt-line-height: 1.45;
 
-  /* Dimensions & Controls */
+  /* ---- Dimensions and controls ---- */
   --lpt-width: 356px;
   --lpt-height: 620px;
   --lpt-launcher-size: 50px;
   --lpt-launcher-min-size: 50px;
-  --lpt-launcher-shadow-color: rgba(0, 0, 0, 0.55);
-  --lpt-launcher-shadow-blur: 2px;
-  --lpt-launcher-shadow-y: 1px;
+  --lpt-launcher-shadow-color: rgba(31, 15, 46, 0.6);
+  --lpt-launcher-shadow-blur: 3px;
+  --lpt-launcher-shadow-y: 2px;
   --lpt-icon-size: 26px;
   --lpt-app-image-size: 44px;
-  --lpt-app-tile-size: 64px;
+  --lpt-app-tile-size: 66px;
   --lpt-icon-stroke-size: 2px;
-  --lpt-control-size: 38px;
-  --lpt-border-size: 1px;
-  --lpt-frame-border-size: 2px;
-  --lpt-focus-size: 2px;
-  --lpt-opacity-disabled: 0.5;
+  --lpt-control-size: 44px;
+  --lpt-border-size: 2px;
+  --lpt-card-border-size: 3px;
+  --lpt-frame-border-size: 4px;
+  --lpt-focus-size: 3px;
+  --lpt-opacity-disabled: 0.55;
   --lpt-grid-columns: 3;
   --lpt-max-label-width: 17rem;
 
-  /* Shadows & Transitions */
+  /* ---- Shadows and timing ---- */
   --lpt-shadow:
-    0 22px 54px -10px rgba(0, 0, 0, 0.72),
-    0 4px 16px -2px rgba(0, 0, 0, 0.48),
-    inset 0 1px 0 0 var(--lpt-frame-edge);
-  --lpt-icon-fill: color-mix(in srgb, var(--lpt-accent) 16%, var(--lpt-card-bg));
-  --lpt-transition: 150ms cubic-bezier(0.22, 1, 0.36, 1);
+    0 5px 0 0 var(--lpt-shadow-hard),
+    0 16px 26px -10px rgba(10, 3, 20, 0.6),
+    inset 0 4px 0 0 rgba(255, 255, 255, 0.4),
+    inset 0 -3px 0 0 rgba(66, 6, 66, 0.55);
+  --lpt-icon-fill: var(--lpt-lilac-2);
+  --lpt-transition: 140ms cubic-bezier(0.22, 1, 0.36, 1);
 
   color: var(--lpt-text);
   font-family: var(--lpt-font);
@@ -102,27 +175,23 @@
   max-width: 100%;
 }
 
-/* Composite translucent theme fills over explicit dark defaults, with alpha 1[cite: 2].
-   Older browsers retain the solid defaults[cite: 2]. All editable tokens stay on lpt-root[cite: 2]. */
-@supports (color: rgb(from red calc(r * alpha + 20 * (1 - alpha)) g b / 1)) {
-  .lpt-root {
-    --lpt-phone-bg: rgb(from var(--lumiverse-fill, #121017) calc(r * alpha + 18 * (1 - alpha)) calc(g * alpha + 16 * (1 - alpha)) calc(b * alpha + 23 * (1 - alpha)) / 1);
-    --lpt-screen-bg: rgb(from var(--lumiverse-fill, #15131c) calc(r * alpha + 21 * (1 - alpha)) calc(g * alpha + 19 * (1 - alpha)) calc(b * alpha + 28 * (1 - alpha)) / 1);
-    --lpt-card-bg: color-mix(in srgb, rgb(from var(--lumiverse-fill-subtle, #1f1c29) calc(r * alpha + 31 * (1 - alpha)) calc(g * alpha + 28 * (1 - alpha)) calc(b * alpha + 41 * (1 - alpha)) / 1) 93%, rgb(from var(--lumiverse-text, #f0edf6) r g b / 1) 7%);
-    --lpt-elevated-bg: color-mix(in srgb, var(--lpt-card-bg) 86%, rgb(from var(--lumiverse-text, #f0edf6) r g b / 1) 14%);
-    --lpt-border: color-mix(in srgb, var(--lpt-card-bg) 82%, rgb(from var(--lumiverse-text, #f0edf6) r g b / 1) 18%);
-    --lpt-hover-border: color-mix(in srgb, var(--lpt-card-bg) 66%, rgb(from var(--lumiverse-text, #f0edf6) r g b / 1) 34%);
-    --lpt-frame-edge: color-mix(in srgb, var(--lpt-phone-bg) 76%, rgb(from var(--lumiverse-text, #f0edf6) r g b / 1) 24%);
-    --lpt-bubble-in-bg: var(--lpt-elevated-bg);
-    --lpt-bubble-out-bg: color-mix(in srgb, var(--lpt-accent) 26%, var(--lpt-card-bg));
-    --lpt-bubble-out-border: color-mix(in srgb, var(--lpt-accent) 52%, var(--lpt-card-bg));
-  }
-}
+/* ==========================================================================
+   Opaque surface guarantees
+   ========================================================================== */
 
-/* Explicit Opaque Surface Guarantees */
 .lpt-frame,
 .lpt-root[data-open="true"] {
   background-color: var(--lpt-phone-bg);
+}
+
+.lpt-root[data-open="true"] {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--lpt-frame-radius);
+}
+
+.lpt-root[data-open="false"][data-notice="true"] {
+  width: 100%;
 }
 
 .lpt-content,
@@ -134,22 +203,16 @@
 .lpt-notes,
 .lpt-contacts,
 .lpt-messages,
-.lpt-settings {
+.lpt-settings,
+.lpt-activity,
+.lpt-calls,
+.lpt-bank {
   background-color: var(--lpt-screen-bg);
 }
 
 .lpt-card,
 .lpt-section {
   background-color: var(--lpt-card-bg);
-}
-
-.lpt-root[data-open="true"] {
-  width: 100%;
-  height: 100%;
-}
-
-.lpt-root[data-open="false"][data-notice="true"] {
-  width: 100%;
 }
 
 .lpt-size-probe {
@@ -166,6 +229,10 @@
   display: none !important;
 }
 
+/* ==========================================================================
+   Base controls and focus
+   ========================================================================== */
+
 .lpt-root button,
 .lpt-root input,
 .lpt-root textarea,
@@ -176,8 +243,8 @@
 }
 
 .lpt-option {
-  color: var(--lpt-text);
-  background: var(--lpt-screen-bg);
+  color: var(--lpt-input-text);
+  background: var(--lpt-input-bg);
 }
 
 .lpt-root button {
@@ -186,11 +253,8 @@
     background-color var(--lpt-transition),
     border-color var(--lpt-transition),
     color var(--lpt-transition),
+    box-shadow var(--lpt-transition),
     transform var(--lpt-transition);
-}
-
-.lpt-root button:active:not(:disabled) {
-  transform: scale(0.97);
 }
 
 .lpt-root button:disabled {
@@ -198,12 +262,25 @@
   cursor: default;
 }
 
-.lpt-root :focus-visible {
-  outline: var(--lpt-focus-size) solid var(--lpt-accent);
-  outline-offset: var(--lpt-focus-size);
+.lpt-root button:focus-visible,
+.lpt-root input:focus-visible,
+.lpt-root textarea:focus-visible,
+.lpt-root select:focus-visible,
+.lpt-root summary:focus-visible {
+  outline: var(--lpt-focus-size) solid var(--lpt-focus-color);
+  outline-offset: 2px;
 }
 
-/* Closed Floating Launcher: transparent square tap target, art fills its height. */
+/* Summaries sit flush inside clipped cards, so their ring is drawn inside. */
+.lpt-root .lpt-summary:focus-visible,
+.lpt-root .lpt-email-summary:focus-visible {
+  outline-offset: -6px;
+}
+
+/* ==========================================================================
+   Launcher: transparent box, soft drop shadow on the image only
+   ========================================================================== */
+
 .lpt-launcher {
   position: relative;
   padding: 0;
@@ -229,12 +306,10 @@
   box-shadow: none;
 }
 
-/* Keep keyboard focus inside the existing clipped placement. */
-.lpt-launcher:focus-visible {
+.lpt-root .lpt-launcher:focus-visible {
   outline-offset: calc(-2 * var(--lpt-focus-size));
 }
 
-/* Static artwork keeps its 88:128 aspect ratio with smooth scaling. */
 .lpt-launcher-image {
   display: block;
   width: 100%;
@@ -244,15 +319,20 @@
   filter: drop-shadow(0 var(--lpt-launcher-shadow-y) var(--lpt-launcher-shadow-blur) var(--lpt-launcher-shadow-color));
   pointer-events: none;
 }
+
 .lpt-launcher > .lpt-unread-badge {
   position: absolute;
   top: 0;
   right: 0;
   z-index: 1;
   margin-left: 0;
+  box-shadow: none;
 }
 
-/* SVG Icons */
+/* ==========================================================================
+   SVG icons (legacy artwork)
+   ========================================================================== */
+
 .lpt-icon {
   width: var(--lpt-icon-size);
   height: var(--lpt-icon-size);
@@ -267,14 +347,18 @@
   stroke-linejoin: round;
 }
 
-/* Outer Phone Frame, Top Notch Pill (::before), & Bottom Home Bar (::after) */
+/* ==========================================================================
+   Phone frame: glossy top edge, notch pill (::before), home bar (::after)
+   ========================================================================== */
+
 .lpt-frame {
   position: relative;
   width: 100%;
   height: 100%;
   max-width: 100%;
   max-height: 100%;
-  background: var(--lpt-phone-bg);
+  background-color: var(--lpt-phone-bg);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0, rgba(255, 255, 255, 0.05) 36px, rgba(255, 255, 255, 0) 80px);
   border: var(--lpt-frame-border-size) solid var(--lpt-frame-edge);
   border-radius: var(--lpt-frame-radius);
   box-shadow: var(--lpt-shadow);
@@ -289,9 +373,9 @@
   display: block;
   width: var(--lpt-notch-width);
   height: var(--lpt-notch-height);
-  margin: calc(var(--lpt-space) * 1.25) auto calc(var(--lpt-space) * 0.25);
+  margin: calc(var(--lpt-space) * 1.25) auto calc(var(--lpt-space) * 0.5);
   background: var(--lpt-notch-bg);
-  border: var(--lpt-border-size) solid var(--lpt-border);
+  border: var(--lpt-border-size) solid var(--lpt-frame-edge);
   border-radius: 999px;
   flex-shrink: 0;
   box-sizing: border-box;
@@ -302,24 +386,26 @@
   display: block;
   width: var(--lpt-home-bar-width);
   height: var(--lpt-home-bar-height);
-  margin: calc(var(--lpt-space) * 0.75) auto calc(var(--lpt-space) * 1.25);
+  margin: calc(var(--lpt-space) * 0.9) auto calc(var(--lpt-space) * 1.25);
   background: var(--lpt-home-bar-color);
   border-radius: 999px;
   flex-shrink: 0;
 }
 
-/* Collapse original speaker line so the ::before notch pill sits cleanly alone */
 .lpt-speaker {
   display: none;
 }
 
-/* Phone App Header */
+/* ==========================================================================
+   Header
+   ========================================================================== */
+
 .lpt-header {
   display: flex;
   gap: var(--lpt-space);
   align-items: center;
   padding: calc(var(--lpt-space) * 0.75) calc(var(--lpt-space) * 2);
-  border-bottom: var(--lpt-border-size) solid var(--lpt-border);
+  border-bottom: var(--lpt-card-border-size) solid var(--lpt-border);
   flex-shrink: 0;
   box-sizing: border-box;
 }
@@ -329,12 +415,20 @@
   flex: 1;
   font-size: var(--lpt-title-size);
   font-weight: var(--lpt-strong-weight);
-  letter-spacing: -0.015em;
+  letter-spacing: -0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.lpt-heading::after {
+  content: var(--lpt-sparkle-glyph);
+  margin-left: 0.4em;
+  font-size: 0.75em;
+  color: var(--lpt-marker-color);
+}
+
+/* Round back / close / dismiss buttons: lilac bubbles with plum glyphs */
 .lpt-back,
 .lpt-close,
 .lpt-dismiss {
@@ -343,41 +437,76 @@
   padding: calc(var(--lpt-space) * 0.5);
   min-width: var(--lpt-control-size);
   min-height: var(--lpt-control-size);
-  background: var(--lpt-card-bg);
-  border: var(--lpt-border-size) solid var(--lpt-border);
+  background-color: var(--lpt-btn-soft-bg);
+  background-image: var(--lpt-gloss);
+  border: var(--lpt-border-size) solid var(--lpt-btn-edge);
   border-radius: 999px;
-  color: var(--lpt-muted);
+  color: var(--lpt-btn-text);
+  box-shadow: 0 3px 0 0 var(--lpt-shadow-hard);
   box-sizing: border-box;
 }
 
 .lpt-back:hover,
 .lpt-close:hover,
 .lpt-dismiss:hover {
-  color: var(--lpt-text);
-  background: var(--lpt-elevated-bg);
-  border-color: var(--lpt-hover-border);
+  background-color: color-mix(in srgb, var(--lpt-btn-soft-bg) 70%, var(--lpt-btn-hover-mix) 30%);
 }
 
-/* Scrollable App Content Area */
+.lpt-back:active:not(:disabled),
+.lpt-close:active:not(:disabled),
+.lpt-dismiss:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 0 var(--lpt-shadow-hard);
+}
+
+/* ==========================================================================
+   Scrollable content area
+   ========================================================================== */
+
 .lpt-content {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
-  padding: calc(var(--lpt-space) * 2) calc(var(--lpt-space) * 2.25) calc(var(--lpt-space) * 3);
+  padding: calc(var(--lpt-space) * 2) calc(var(--lpt-space) * 2.5) calc(var(--lpt-space) * 3);
   scrollbar-width: thin;
-  scrollbar-color: var(--lpt-hover-border) var(--lpt-screen-bg);
+  scrollbar-color: var(--lpt-lilac-3) var(--lpt-screen-bg);
   box-sizing: border-box;
 }
 
-/* Home Screen App Grid */
+/* ==========================================================================
+   Home screen: opaque plum wallpaper with a subtle checker, glossy pastel tiles
+   ========================================================================== */
+
 .lpt-home {
   display: grid;
   grid-template-columns: repeat(var(--lpt-grid-columns), minmax(0, 1fr));
   gap: calc(var(--lpt-space) * 2.75) calc(var(--lpt-space) * 1.5);
   padding: calc(var(--lpt-space) * 2.5) calc(var(--lpt-space) * 0.5);
   box-sizing: border-box;
+  background-color: var(--lpt-wallpaper-a);
+  background-image:
+    linear-gradient(45deg, var(--lpt-wallpaper-b) 25%, transparent 25%, transparent 75%, var(--lpt-wallpaper-b) 75%),
+    linear-gradient(45deg, var(--lpt-wallpaper-b) 25%, transparent 25%, transparent 75%, var(--lpt-wallpaper-b) 75%);
+  background-size: var(--lpt-wallpaper-size) var(--lpt-wallpaper-size);
+  background-position: 0 0, calc(var(--lpt-wallpaper-size) / 2) calc(var(--lpt-wallpaper-size) / 2);
+}
+
+/* Where :has() works, the wallpaper fills the whole Home screen instead. */
+@supports selector(:has(div)) {
+  .lpt-home {
+    background-image: none;
+  }
+
+  .lpt-content:has(.lpt-home) {
+    background-color: var(--lpt-wallpaper-a);
+    background-image:
+      linear-gradient(45deg, var(--lpt-wallpaper-b) 25%, transparent 25%, transparent 75%, var(--lpt-wallpaper-b) 75%),
+      linear-gradient(45deg, var(--lpt-wallpaper-b) 25%, transparent 25%, transparent 75%, var(--lpt-wallpaper-b) 75%);
+    background-size: var(--lpt-wallpaper-size) var(--lpt-wallpaper-size);
+    background-position: 0 0, calc(var(--lpt-wallpaper-size) / 2) calc(var(--lpt-wallpaper-size) / 2);
+  }
 }
 
 .lpt-app-button {
@@ -386,6 +515,7 @@
   align-items: center;
   gap: calc(var(--lpt-space) * 1);
   padding: calc(var(--lpt-space) * 0.75) calc(var(--lpt-space) * 0.5);
+  min-height: var(--lpt-control-size);
   border: 0;
   background: transparent;
   border-radius: var(--lpt-card-radius);
@@ -398,61 +528,38 @@
   place-items: center;
   width: var(--lpt-app-tile-size);
   height: var(--lpt-app-tile-size);
-  background: var(--lpt-icon-fill);
-  border: var(--lpt-border-size) solid color-mix(in srgb, currentColor 26%, var(--lpt-border));
-  color: var(--lpt-accent);
+  background-color: var(--lpt-icon-fill);
+  background-image: var(--lpt-gloss);
+  border: 3px solid var(--lpt-outline);
+  color: var(--lpt-outline);
   border-radius: var(--lpt-icon-radius);
-  box-shadow: 0 6px 14px -4px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 4px 0 0 var(--lpt-shadow-hard);
   transition:
     transform var(--lpt-transition),
-    border-color var(--lpt-transition),
+    box-shadow var(--lpt-transition),
     background-color var(--lpt-transition);
   box-sizing: border-box;
 }
 
-/* Individual Opaque Soft Tints per Home App */
-.lpt-app-button[data-app="Scene"] .lpt-app-icon {
-  color: var(--lpt-tint-scene);
-  background: color-mix(in srgb, var(--lpt-tint-scene) 16%, var(--lpt-card-bg));
-}
-
-.lpt-app-button[data-app="Weather"] .lpt-app-icon {
-  color: var(--lpt-tint-weather);
-  background: color-mix(in srgb, var(--lpt-tint-weather) 16%, var(--lpt-card-bg));
-}
-
-.lpt-app-button[data-app="Locations"] .lpt-app-icon {
-  color: var(--lpt-tint-locations);
-  background: color-mix(in srgb, var(--lpt-tint-locations) 16%, var(--lpt-card-bg));
-}
-
-.lpt-app-button[data-app="Notes"] .lpt-app-icon {
-  color: var(--lpt-tint-notes);
-  background: color-mix(in srgb, var(--lpt-tint-notes) 16%, var(--lpt-card-bg));
-}
-
-.lpt-app-button[data-app="Contacts"] .lpt-app-icon {
-  color: var(--lpt-tint-contacts);
-  background: color-mix(in srgb, var(--lpt-tint-contacts) 16%, var(--lpt-card-bg));
-}
-
-.lpt-app-button[data-app="Messages"] .lpt-app-icon {
-  color: var(--lpt-tint-messages);
-  background: color-mix(in srgb, var(--lpt-tint-messages) 16%, var(--lpt-card-bg));
-}
-
-.lpt-app-button[data-app="Settings"] .lpt-app-icon {
-  color: var(--lpt-tint-settings);
-  background: color-mix(in srgb, var(--lpt-tint-settings) 16%, var(--lpt-card-bg));
-}
+.lpt-app-button[data-app="Scene"] .lpt-app-icon { background-color: var(--lpt-tint-scene); }
+.lpt-app-button[data-app="Weather"] .lpt-app-icon { background-color: var(--lpt-tint-weather); }
+.lpt-app-button[data-app="Locations"] .lpt-app-icon { background-color: var(--lpt-tint-locations); }
+.lpt-app-button[data-app="Notes"] .lpt-app-icon { background-color: var(--lpt-tint-notes); }
+.lpt-app-button[data-app="Contacts"] .lpt-app-icon { background-color: var(--lpt-tint-contacts); }
+.lpt-app-button[data-app="Messages"] .lpt-app-icon { background-color: var(--lpt-tint-messages); }
+.lpt-app-button[data-app="Settings"] .lpt-app-icon { background-color: var(--lpt-tint-settings); }
+.lpt-app-button[data-app="Calls"] .lpt-app-icon { background-color: var(--lpt-tint-calls); }
+.lpt-app-button[data-app="Email"] .lpt-app-icon { background-color: var(--lpt-tint-email); }
+.lpt-app-button[data-app="Bank"] .lpt-app-icon { background-color: var(--lpt-tint-bank); }
 
 .lpt-app-button:hover .lpt-app-icon {
   transform: translateY(-2px);
-  border-color: currentColor;
+  box-shadow: 0 6px 0 0 var(--lpt-shadow-hard);
 }
 
 .lpt-app-button:active .lpt-app-icon {
-  transform: scale(0.95);
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 0 var(--lpt-shadow-hard);
 }
 
 .lpt-app-label {
@@ -460,45 +567,78 @@
   font-weight: var(--lpt-strong-weight);
   color: var(--lpt-text);
   letter-spacing: 0.01em;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: center;
 }
 
-/* Unread Notification Badges */
+/* Embedded PNG artwork stays exactly as drawn: no filter, no recolor. */
+.lpt-app-image {
+  display: block;
+  width: var(--lpt-app-image-size);
+  height: var(--lpt-app-image-size);
+  object-fit: contain;
+  image-rendering: auto;
+  pointer-events: none;
+}
+
+.lpt-home-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--lpt-space);
+  padding: calc(var(--lpt-space) * 1) calc(var(--lpt-space) * 1) calc(var(--lpt-space) * 1) calc(var(--lpt-space) * 1.75);
+  background-color: var(--lpt-card-bg);
+  border: var(--lpt-border-size) solid var(--lpt-border);
+  border-radius: var(--lpt-card-radius);
+  color: var(--lpt-text);
+  font-size: var(--lpt-small-font-size);
+  overflow-wrap: anywhere;
+  box-sizing: border-box;
+}
+
+/* ==========================================================================
+   Unread badge: hot pink, white text, plum outline, light ring
+   ========================================================================== */
+
 .lpt-unread-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 6px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
   margin-left: var(--lpt-space);
   border-radius: 999px;
-  color: var(--lpt-accent-text);
-  background: var(--lpt-accent);
-  font-size: 11px;
-  font-weight: var(--lpt-strong-weight);
+  color: var(--lpt-badge-text);
+  background: var(--lpt-badge-bg);
+  border: 2px solid var(--lpt-badge-edge);
+  box-shadow: 0 0 0 2px var(--lpt-badge-ring);
+  font-size: 12px;
+  font-weight: 800;
   line-height: 1;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
   box-sizing: border-box;
 }
 
 .lpt-app-icon > .lpt-unread-badge {
   position: absolute;
-  top: -5px;
-  right: -5px;
+  top: -9px;
+  right: -9px;
   margin-left: 0;
-  border: 2px solid var(--lpt-screen-bg);
 }
 
-/* App Intro Banner, Notices & Empty States */
+/* ==========================================================================
+   Banners, notices, empty states
+   ========================================================================== */
+
 .lpt-description {
   display: flex;
   align-items: center;
   gap: var(--lpt-space);
   margin-bottom: calc(var(--lpt-space) * 2);
-  padding: calc(var(--lpt-space) * 1) calc(var(--lpt-space) * 1) calc(var(--lpt-space) * 1) calc(var(--lpt-space) * 1.5);
-  background: var(--lpt-card-bg);
+  padding: calc(var(--lpt-space) * 1) calc(var(--lpt-space) * 1) calc(var(--lpt-space) * 1) calc(var(--lpt-space) * 1.75);
+  background-color: var(--lpt-card-bg);
   border: var(--lpt-border-size) solid var(--lpt-border);
-  border-radius: var(--lpt-radius);
+  border-radius: var(--lpt-card-radius);
   color: var(--lpt-muted);
   font-size: var(--lpt-small-font-size);
   box-sizing: border-box;
@@ -522,9 +662,18 @@
   padding: calc(var(--lpt-space) * 3) calc(var(--lpt-space) * 2);
   margin: var(--lpt-space) 0;
   text-align: center;
-  background: var(--lpt-card-bg);
-  border: var(--lpt-border-size) dashed var(--lpt-border);
+  background-color: var(--lpt-card-bg);
+  border: var(--lpt-card-border-size) dashed var(--lpt-border);
   border-radius: var(--lpt-card-radius);
+}
+
+.lpt-empty::before {
+  content: var(--lpt-empty-glyph);
+  display: block;
+  margin-bottom: calc(var(--lpt-space) * 0.5);
+  font-size: 24px;
+  line-height: 1;
+  color: var(--lpt-marker-color);
 }
 
 .lpt-status {
@@ -538,19 +687,31 @@
   border-radius: var(--lpt-card-radius);
   padding: calc(var(--lpt-space) * 1.25) calc(var(--lpt-space) * 1.5);
   margin: var(--lpt-space) 0;
-  background: var(--lpt-card-bg);
+  background-color: var(--lpt-card-bg);
   color: var(--lpt-text);
   font-size: var(--lpt-small-font-size);
   overflow-wrap: anywhere;
   box-sizing: border-box;
 }
 
+/* Errors are dashed and start with "!" so they never rely on color alone. */
+.lpt-error {
+  border-style: dashed;
+  border-color: var(--lpt-focus-color);
+}
+
+.lpt-error::before {
+  content: "! ";
+  font-weight: 800;
+  color: var(--lpt-focus-color);
+}
+
 .lpt-text-notice {
   flex-shrink: 0;
   margin: var(--lpt-space) calc(var(--lpt-space) * 2) 0;
-  background: var(--lpt-elevated-bg);
+  background-color: var(--lpt-elevated-bg);
   font-weight: var(--lpt-strong-weight);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  box-shadow: 3px 3px 0 0 var(--lpt-shadow-hard);
 }
 
 .lpt-notice {
@@ -568,42 +729,55 @@
   display: none;
 }
 
-/* Tappable Fields (Scene, Weather, Contacts) */
+/* ==========================================================================
+   Tappable fields (Scene, Weather, Contacts)
+   ========================================================================== */
+
 .lpt-field {
   display: block;
   text-align: left;
   width: 100%;
-  border: var(--lpt-border-size) solid var(--lpt-border);
+  min-height: var(--lpt-control-size);
+  border: var(--lpt-card-border-size) solid var(--lpt-card-outline);
   border-radius: var(--lpt-card-radius);
-  background: var(--lpt-card-bg);
+  background-color: var(--lpt-card-bg);
+  box-shadow: 4px 4px 0 0 var(--lpt-shadow-hard);
   padding: calc(var(--lpt-space) * 1.5) calc(var(--lpt-space) * 1.75);
-  margin-bottom: calc(var(--lpt-space) * 1.25);
+  margin-bottom: calc(var(--lpt-space) * 1.5);
   overflow-wrap: anywhere;
   box-sizing: border-box;
 }
 
 .lpt-field:hover {
-  background: var(--lpt-elevated-bg);
+  background-color: var(--lpt-elevated-bg);
   border-color: var(--lpt-hover-border);
 }
 
+.lpt-field:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 0 var(--lpt-shadow-hard);
+}
+
 .lpt-card-body .lpt-field {
-  background: var(--lpt-screen-bg);
+  background-color: var(--lpt-screen-bg);
+  border-width: var(--lpt-border-size);
+  border-color: var(--lpt-border);
   border-radius: var(--lpt-radius);
+  box-shadow: none;
   padding: calc(var(--lpt-space) * 1.15) calc(var(--lpt-space) * 1.5);
   margin-bottom: var(--lpt-space);
 }
 
 .lpt-card-body .lpt-field:hover {
-  background: var(--lpt-elevated-bg);
+  background-color: var(--lpt-elevated-bg);
 }
 
 .lpt-field-label {
   display: block;
-  font-size: 11px;
+  font-size: var(--lpt-small-font-size);
   font-weight: var(--lpt-strong-weight);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   color: var(--lpt-muted);
   margin-bottom: calc(var(--lpt-space) * 0.35);
 }
@@ -616,16 +790,28 @@
 }
 
 .lpt-location {
-  background: var(--lpt-elevated-bg);
-  border-color: color-mix(in srgb, var(--lpt-accent) 42%, var(--lpt-border));
-  padding: calc(var(--lpt-space) * 2);
+  position: relative;
+  background-color: var(--lpt-elevated-bg);
+  border-color: var(--lpt-accent);
+  padding: calc(var(--lpt-space) * 2) calc(var(--lpt-space) * 4.5) calc(var(--lpt-space) * 2) calc(var(--lpt-space) * 2);
+}
+
+.lpt-location::after {
+  content: var(--lpt-sparkle-glyph);
+  position: absolute;
+  top: calc(var(--lpt-space) * 1);
+  right: calc(var(--lpt-space) * 1.5);
+  font-size: 20px;
+  line-height: 1;
+  color: var(--lpt-marker-color);
+  pointer-events: none;
 }
 
 .lpt-location .lpt-field-value {
   font-size: var(--lpt-location-size);
   font-weight: var(--lpt-strong-weight);
   line-height: 1.2;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.015em;
   margin-top: 2px;
 }
 
@@ -646,38 +832,50 @@
 }
 
 .lpt-present-name {
-  background: var(--lpt-elevated-bg);
-  border: var(--lpt-border-size) solid var(--lpt-border);
+  background-color: var(--lpt-pill-bg);
+  color: var(--lpt-pill-text);
+  border: var(--lpt-border-size) solid var(--lpt-pill-edge);
   border-radius: 999px;
-  padding: calc(var(--lpt-space) * 0.35) calc(var(--lpt-space) * 1.25);
+  padding: calc(var(--lpt-space) * 0.4) calc(var(--lpt-space) * 1.4);
   font-size: var(--lpt-small-font-size);
   font-weight: var(--lpt-strong-weight);
 }
 
 .lpt-marker {
   display: inline-block;
-  color: var(--lpt-accent);
-  background: color-mix(in srgb, var(--lpt-accent) 16%, var(--lpt-card-bg));
-  border: var(--lpt-border-size) solid color-mix(in srgb, var(--lpt-accent) 34%, var(--lpt-border));
+  color: var(--lpt-pill-text);
+  background-color: var(--lpt-marker-bg);
+  border: var(--lpt-border-size) solid var(--lpt-pill-edge);
   border-radius: 999px;
-  padding: 1px calc(var(--lpt-space) * 0.9);
-  font-size: 11px;
+  padding: 1px calc(var(--lpt-space) * 1);
+  font-size: var(--lpt-small-font-size);
   font-weight: var(--lpt-strong-weight);
   margin-top: calc(var(--lpt-space) * 0.5);
   margin-right: calc(var(--lpt-space) * 0.75);
 }
 
-/* Expandable Cards & Sections */
-.lpt-card {
-  border: var(--lpt-border-size) solid var(--lpt-border);
+/* ==========================================================================
+   Cards and sections: chunky corners, lilac outline, offset hard shadow
+   ========================================================================== */
+
+.lpt-card,
+.lpt-section,
+.lpt-call,
+.lpt-bank-account,
+.lpt-bank-transaction {
+  border: var(--lpt-card-border-size) solid var(--lpt-card-outline);
   border-radius: var(--lpt-card-radius);
-  margin: calc(var(--lpt-space) * 1.25) 0;
-  padding: 0;
-  background: var(--lpt-card-bg);
-  overflow: hidden;
+  background-color: var(--lpt-card-bg);
+  box-shadow: 4px 4px 0 0 var(--lpt-shadow-hard);
   overflow-wrap: anywhere;
-  transition: border-color var(--lpt-transition), background-color var(--lpt-transition);
   box-sizing: border-box;
+}
+
+.lpt-card {
+  margin: calc(var(--lpt-space) * 1.5) 0;
+  padding: 0;
+  overflow: hidden;
+  transition: border-color var(--lpt-transition), background-color var(--lpt-transition);
 }
 
 .lpt-card:hover {
@@ -685,24 +883,72 @@
 }
 
 .lpt-card[open] {
-  border-color: color-mix(in srgb, var(--lpt-accent) 45%, var(--lpt-border));
+  border-color: var(--lpt-accent);
 }
 
-.lpt-summary {
-  cursor: pointer;
+.lpt-section .lpt-card {
+  box-shadow: 2px 2px 0 0 var(--lpt-shadow-hard);
+}
+
+.lpt-call,
+.lpt-bank-account,
+.lpt-bank-transaction {
   padding: calc(var(--lpt-space) * 1.5) calc(var(--lpt-space) * 1.75);
+}
+
+/* Email summary rows; if one also carries .lpt-summary, the rule below wins. */
+.lpt-email-summary {
+  display: grid;
+  gap: calc(var(--lpt-space) * 0.5);
+  padding: calc(var(--lpt-space) * 1.5) calc(var(--lpt-space) * 1.75);
+  min-height: var(--lpt-control-size);
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+/* Collapsible heading with a heart marker (open and closed look different) */
+.lpt-summary {
+  position: relative;
+  display: block;
+  list-style: none;
+  cursor: pointer;
+  padding: calc(var(--lpt-space) * 1.5) calc(var(--lpt-space) * 1.75) calc(var(--lpt-space) * 1.5) 40px;
   min-height: var(--lpt-control-size);
   user-select: none;
   transition: background-color var(--lpt-transition);
   box-sizing: border-box;
 }
 
+.lpt-summary::-webkit-details-marker {
+  display: none;
+}
+
+.lpt-summary::before {
+  content: var(--lpt-marker-closed);
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 19px;
+  line-height: 1;
+  color: var(--lpt-marker-color);
+  pointer-events: none;
+}
+
+.lpt-card[open] > .lpt-summary::before,
+.lpt-advanced[open] > .lpt-summary::before,
+.lpt-custom-css[open] > .lpt-summary::before,
+.lpt-resolved[open] > .lpt-summary::before,
+.lpt-absent[open] > .lpt-summary::before {
+  content: var(--lpt-marker-open);
+}
+
 .lpt-summary:hover {
-  background: var(--lpt-elevated-bg);
+  background-color: var(--lpt-elevated-bg);
 }
 
 .lpt-card[open] > .lpt-summary {
-  background: var(--lpt-elevated-bg);
+  background-color: var(--lpt-elevated-bg);
   border-bottom: var(--lpt-border-size) solid var(--lpt-border);
 }
 
@@ -720,7 +966,7 @@
 
 .lpt-card-body {
   padding: calc(var(--lpt-space) * 1.5) calc(var(--lpt-space) * 1.75);
-  background: var(--lpt-card-bg);
+  background-color: var(--lpt-card-bg);
   box-sizing: border-box;
 }
 
@@ -731,14 +977,10 @@
   color: var(--lpt-text);
 }
 
-/* Grouped Sections (Notes, Absent Contacts, Resolved Plots) */
+/* Grouped sections (Notes, Absent contacts, Resolved plots) */
 .lpt-section {
   margin-bottom: calc(var(--lpt-space) * 2);
-  border: var(--lpt-border-size) solid var(--lpt-border);
-  border-radius: var(--lpt-card-radius);
   padding: calc(var(--lpt-space) * 1.5);
-  background: var(--lpt-card-bg);
-  box-sizing: border-box;
 }
 
 .lpt-section-title {
@@ -761,11 +1003,11 @@
 
 .lpt-counter {
   color: var(--lpt-muted);
-  background: var(--lpt-screen-bg);
+  background-color: var(--lpt-screen-bg);
   border: var(--lpt-border-size) solid var(--lpt-border);
   border-radius: 999px;
-  padding: 2px calc(var(--lpt-space) * 1);
-  font-size: 11px;
+  padding: 2px calc(var(--lpt-space) * 1.1);
+  font-size: var(--lpt-small-font-size);
   font-weight: var(--lpt-strong-weight);
 }
 
@@ -783,106 +1025,123 @@
   border-style: dashed;
 }
 
-/* Messages App & Conversation Bubbles */
+/* ==========================================================================
+   Messages: bubbles with a CSS tail, pill reply box
+   ========================================================================== */
+
 .lpt-conversation {
-  margin: calc(var(--lpt-space) * 1.25) 0;
+  margin: calc(var(--lpt-space) * 1.5) 0;
 }
 
 .lpt-text-list {
   display: flex;
   flex-direction: column;
-  gap: calc(var(--lpt-space) * 1.25);
-  padding: calc(var(--lpt-space) * 0.5) 0 calc(var(--lpt-space) * 1.25);
+  gap: calc(var(--lpt-space) * 1.5);
+  padding: calc(var(--lpt-space) * 0.5) calc(var(--lpt-space) * 0.75) calc(var(--lpt-space) * 1.25);
 }
 
 .lpt-text-message {
+  position: relative;
   display: flex;
   flex-direction: column;
   max-width: 85%;
   margin: 0;
-  padding: calc(var(--lpt-space) * 1.25) calc(var(--lpt-space) * 1.5);
+  padding: calc(var(--lpt-space) * 1.25) calc(var(--lpt-space) * 1.75);
   border-radius: var(--lpt-bubble-radius);
-  border: var(--lpt-border-size) solid var(--lpt-border);
-  background: var(--lpt-bubble-in-bg);
+  border: var(--lpt-border-size) solid var(--lpt-bubble-in-border);
+  background-color: var(--lpt-bubble-in-bg);
+  color: var(--lpt-bubble-in-text);
   overflow-wrap: anywhere;
+  box-sizing: border-box;
+}
+
+.lpt-text-message::after {
+  content: "";
+  position: absolute;
+  bottom: 11px;
+  width: 11px;
+  height: 11px;
+  transform: rotate(45deg);
   box-sizing: border-box;
 }
 
 .lpt-incoming {
   align-self: flex-start;
-  background: var(--lpt-bubble-in-bg);
-  border-color: var(--lpt-border);
-  border-bottom-left-radius: 4px;
+  background-color: var(--lpt-bubble-in-bg);
+  border-color: var(--lpt-bubble-in-border);
+  color: var(--lpt-bubble-in-text);
+  border-bottom-left-radius: 6px;
+}
+
+.lpt-incoming::after {
+  left: -7px;
+  background-color: var(--lpt-bubble-in-bg);
+  border-left: var(--lpt-border-size) solid var(--lpt-bubble-in-border);
+  border-bottom: var(--lpt-border-size) solid var(--lpt-bubble-in-border);
 }
 
 .lpt-outgoing {
   align-self: flex-end;
-  background: var(--lpt-bubble-out-bg);
+  background-color: var(--lpt-bubble-out-bg);
   border-color: var(--lpt-bubble-out-border);
-  border-bottom-right-radius: 4px;
+  color: var(--lpt-bubble-out-text);
+  border-bottom-right-radius: 6px;
+}
+
+.lpt-outgoing::after {
+  right: -7px;
+  background-color: var(--lpt-bubble-out-bg);
+  border-top: var(--lpt-border-size) solid var(--lpt-bubble-out-border);
+  border-right: var(--lpt-border-size) solid var(--lpt-bubble-out-border);
 }
 
 .lpt-text-sender {
-  font-size: 11px;
+  font-size: var(--lpt-small-font-size);
   font-weight: var(--lpt-strong-weight);
-  color: var(--lpt-muted);
+  color: var(--lpt-bubble-muted);
   margin: 0 0 2px;
 }
 
 .lpt-outgoing .lpt-text-sender {
-  color: var(--lpt-accent);
   text-align: right;
 }
 
 .lpt-text-body {
   white-space: pre-wrap;
   margin: 2px 0;
-  color: var(--lpt-text);
+  color: inherit;
 }
 
 .lpt-text-time {
-  color: var(--lpt-muted);
-  font-size: 11px;
+  color: var(--lpt-bubble-muted);
+  font-size: var(--lpt-small-font-size);
   margin-top: 4px;
   align-self: flex-end;
 }
 
-/* Message Composer / Reply Bar */
 .lpt-reply {
   display: grid;
   gap: var(--lpt-space);
   margin-top: var(--lpt-space);
   padding-top: calc(var(--lpt-space) * 1.5);
-  border-top: var(--lpt-border-size) solid var(--lpt-border);
+  border-top: var(--lpt-border-size) dashed var(--lpt-border);
 }
 
 .lpt-reply-input {
-  min-height: 44px;
+  min-height: 48px;
   max-height: 120px;
-  border-radius: 20px;
-  padding: calc(var(--lpt-space) * 1.25) calc(var(--lpt-space) * 1.75);
-  background: var(--lpt-screen-bg);
-  border: var(--lpt-border-size) solid var(--lpt-border);
+  width: 100%;
+  border-radius: 24px;
+  padding: calc(var(--lpt-space) * 1.4) calc(var(--lpt-space) * 2.25);
+  background-color: var(--lpt-input-bg);
+  color: var(--lpt-input-text);
+  border: var(--lpt-card-border-size) solid var(--lpt-input-border);
   resize: vertical;
   box-sizing: border-box;
 }
 
 .lpt-reply-input:focus {
   border-color: var(--lpt-accent);
-}
-
-.lpt-add-draft {
-  min-height: var(--lpt-control-size);
-  border-radius: 999px;
-  background: var(--lpt-accent);
-  color: var(--lpt-accent-text);
-  border: var(--lpt-border-size) solid var(--lpt-accent);
-  font-weight: var(--lpt-strong-weight);
-  padding: calc(var(--lpt-space) * 0.75) calc(var(--lpt-space) * 2);
-}
-
-.lpt-add-draft:hover:not(:disabled) {
-  filter: brightness(1.08);
 }
 
 .lpt-reply-status {
@@ -898,65 +1157,106 @@
 .lpt-manual-tag {
   font-family: monospace;
   font-size: var(--lpt-small-font-size);
-  background: var(--lpt-screen-bg);
+  background-color: var(--lpt-screen-bg);
+  color: var(--lpt-text);
 }
 
-/* Buttons & Action Bars */
+/* Message count label inside the Messages conversation rows keeps its own bubble */
+.lpt-open-texts .lpt-unread-badge {
+  margin-left: var(--lpt-space);
+}
+
+/* ==========================================================================
+   Buttons: bubbly glossy pills with a clear pressed state
+   ========================================================================== */
+
 .lpt-button,
 .lpt-add,
 .lpt-save,
 .lpt-cancel,
 .lpt-delete,
 .lpt-open-texts,
-.lpt-update-now {
+.lpt-update-now,
+.lpt-add-draft {
   min-height: var(--lpt-control-size);
-  border: var(--lpt-border-size) solid var(--lpt-border);
-  background: var(--lpt-elevated-bg);
-  color: var(--lpt-text);
-  padding: calc(var(--lpt-space) * 0.65) calc(var(--lpt-space) * 1.5);
-  border-radius: var(--lpt-radius);
+  min-width: var(--lpt-control-size);
+  border: var(--lpt-border-size) solid var(--lpt-btn-edge);
+  background-color: var(--lpt-btn-bg);
+  background-image: var(--lpt-gloss);
+  color: var(--lpt-btn-text);
+  padding: calc(var(--lpt-space) * 0.75) calc(var(--lpt-space) * 2);
+  border-radius: 999px;
   font-weight: var(--lpt-strong-weight);
-  font-size: var(--lpt-small-font-size);
+  font-size: var(--lpt-font-size);
+  box-shadow: 0 3px 0 0 var(--lpt-shadow-hard);
   box-sizing: border-box;
 }
 
+.lpt-cancel,
+.lpt-delete {
+  background-color: var(--lpt-btn-soft-bg);
+}
+
+.lpt-delete {
+  border-style: dashed;
+}
+
 .lpt-save,
-.lpt-update-now {
-  background: var(--lpt-accent);
-  color: var(--lpt-accent-text);
-  border-color: var(--lpt-accent);
+.lpt-update-now,
+.lpt-add-draft {
+  background-color: var(--lpt-btn-primary-bg);
 }
 
 .lpt-button:hover:not(:disabled),
 .lpt-add:hover:not(:disabled),
-.lpt-cancel:hover:not(:disabled),
-.lpt-delete:hover:not(:disabled),
 .lpt-open-texts:hover:not(:disabled) {
-  border-color: var(--lpt-hover-border);
-  background: color-mix(in srgb, var(--lpt-elevated-bg) 85%, var(--lpt-text) 15%);
+  background-color: color-mix(in srgb, var(--lpt-btn-bg) 72%, var(--lpt-btn-hover-mix) 28%);
+}
+
+.lpt-cancel:hover:not(:disabled),
+.lpt-delete:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--lpt-btn-soft-bg) 72%, var(--lpt-btn-hover-mix) 28%);
 }
 
 .lpt-save:hover:not(:disabled),
-.lpt-update-now:hover:not(:disabled) {
-  filter: brightness(1.08);
+.lpt-update-now:hover:not(:disabled),
+.lpt-add-draft:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--lpt-btn-primary-bg) 76%, var(--lpt-btn-hover-mix) 24%);
+}
+
+.lpt-button:active:not(:disabled),
+.lpt-add:active:not(:disabled),
+.lpt-save:active:not(:disabled),
+.lpt-cancel:active:not(:disabled),
+.lpt-delete:active:not(:disabled),
+.lpt-open-texts:active:not(:disabled),
+.lpt-update-now:active:not(:disabled),
+.lpt-add-draft:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 0 0 0 var(--lpt-shadow-hard);
+  background-image: none;
 }
 
 .lpt-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--lpt-space);
-  margin: calc(var(--lpt-space) * 1.25) 0 0;
+  gap: calc(var(--lpt-space) * 1.25);
+  margin: calc(var(--lpt-space) * 1.5) 0 calc(var(--lpt-space) * 0.5);
 }
 
-/* Forms & Text Inputs */
+/* ==========================================================================
+   Forms and inputs
+   ========================================================================== */
+
 .lpt-form {
   display: grid;
   gap: calc(var(--lpt-space) * 1.25);
-  margin: calc(var(--lpt-space) * 1.25) 0;
+  margin: calc(var(--lpt-space) * 1.5) 0;
   padding: calc(var(--lpt-space) * 1.75);
-  background: var(--lpt-card-bg);
-  border: var(--lpt-border-size) solid var(--lpt-accent);
+  background-color: var(--lpt-card-bg);
+  border: var(--lpt-card-border-size) solid var(--lpt-accent);
   border-radius: var(--lpt-card-radius);
+  box-shadow: 4px 4px 0 0 var(--lpt-shadow-hard);
   box-sizing: border-box;
 }
 
@@ -975,11 +1275,11 @@
 .lpt-helper-source,
 .lpt-helper-connection {
   width: 100%;
-  border: var(--lpt-border-size) solid var(--lpt-border);
-  background: var(--lpt-screen-bg);
-  color: var(--lpt-text);
+  border: var(--lpt-border-size) solid var(--lpt-input-border);
+  background-color: var(--lpt-input-bg);
+  color: var(--lpt-input-text);
   border-radius: var(--lpt-radius);
-  padding: calc(var(--lpt-space) * 1) calc(var(--lpt-space) * 1.25);
+  padding: calc(var(--lpt-space) * 1) calc(var(--lpt-space) * 1.5);
   min-height: var(--lpt-control-size);
   transition: border-color var(--lpt-transition);
   box-sizing: border-box;
@@ -994,6 +1294,14 @@
   border-color: var(--lpt-accent);
 }
 
+.lpt-input::placeholder,
+.lpt-textarea::placeholder,
+.lpt-reply-input::placeholder,
+.lpt-css-editor::placeholder {
+  color: var(--lpt-input-placeholder);
+  opacity: 1;
+}
+
 .lpt-textarea {
   min-height: calc(var(--lpt-control-size) * 2.2);
   resize: vertical;
@@ -1006,12 +1314,16 @@
   resize: vertical;
 }
 
-/* Legacy settings selectors retained for stylesheet compatibility; no phone Settings screen. */
+/* ==========================================================================
+   Legacy settings hooks (no phone Settings screen uses these today)
+   ========================================================================== */
+
 .lpt-settings-group,
 .lpt-helper-settings {
-  background: var(--lpt-card-bg);
-  border: var(--lpt-border-size) solid var(--lpt-border);
+  background-color: var(--lpt-card-bg);
+  border: var(--lpt-card-border-size) solid var(--lpt-card-outline);
   border-radius: var(--lpt-card-radius);
+  box-shadow: 4px 4px 0 0 var(--lpt-shadow-hard);
   padding: calc(var(--lpt-space) * 1.25) calc(var(--lpt-space) * 1.75);
   margin-bottom: calc(var(--lpt-space) * 2);
   box-sizing: border-box;
@@ -1022,8 +1334,9 @@
   gap: calc(var(--lpt-space) * 1.5);
   justify-content: space-between;
   align-items: center;
+  min-height: var(--lpt-control-size);
   padding: calc(var(--lpt-space) * 1.25) 0;
-  border-bottom: var(--lpt-border-size) solid var(--lpt-border);
+  border-bottom: var(--lpt-border-size) dashed var(--lpt-border);
 }
 
 .lpt-setting:last-child {
@@ -1048,7 +1361,7 @@
   line-height: 1.35;
 }
 
-/* Custom iOS/Phone Pill Toggle Switch */
+/* Pill switch: off = lilac thumb on the left, on = pink track, white thumb on the right */
 .lpt-toggle {
   appearance: none;
   -webkit-appearance: none;
@@ -1056,7 +1369,7 @@
   width: var(--lpt-toggle-width);
   height: var(--lpt-toggle-height);
   border-radius: 999px;
-  background: var(--lpt-screen-bg);
+  background-color: var(--lpt-toggle-off-bg);
   border: var(--lpt-border-size) solid var(--lpt-hover-border);
   cursor: pointer;
   flex-shrink: 0;
@@ -1065,25 +1378,37 @@
   box-sizing: border-box;
 }
 
+/* Invisible padding that grows the tap area to at least 44 x 44 */
+.lpt-toggle::before {
+  content: "";
+  position: absolute;
+  top: -9px;
+  right: -6px;
+  bottom: -9px;
+  left: -6px;
+}
+
 .lpt-toggle::after {
   content: "";
   position: absolute;
   top: 2px;
   left: 2px;
-  width: calc(var(--lpt-toggle-height) - 6px);
-  height: calc(var(--lpt-toggle-height) - 6px);
+  width: calc(var(--lpt-toggle-height) - 8px);
+  height: calc(var(--lpt-toggle-height) - 8px);
   border-radius: 50%;
-  background: var(--lpt-muted);
+  background-color: var(--lpt-toggle-off-thumb);
+  border: 2px solid var(--lpt-outline);
+  box-sizing: content-box;
   transition: transform var(--lpt-transition), background-color var(--lpt-transition);
 }
 
 .lpt-toggle:checked {
-  background: var(--lpt-accent);
-  border-color: var(--lpt-accent);
+  background-color: var(--lpt-accent);
+  border-color: var(--lpt-outline);
 }
 
 .lpt-toggle:checked::after {
-  background: var(--lpt-toggle-thumb);
+  background-color: var(--lpt-toggle-thumb);
   transform: translateX(calc(var(--lpt-toggle-width) - var(--lpt-toggle-height)));
 }
 
@@ -1092,13 +1417,12 @@
   text-align: center;
 }
 
-/* Secondary Advanced & Custom CSS Sections */
 .lpt-advanced,
 .lpt-custom-css {
   margin-top: calc(var(--lpt-space) * 2);
   border: var(--lpt-border-size) solid var(--lpt-border);
   border-radius: var(--lpt-card-radius);
-  background: var(--lpt-screen-bg);
+  background-color: var(--lpt-screen-bg);
   padding: 0 calc(var(--lpt-space) * 1.5);
   box-sizing: border-box;
 }
@@ -1108,45 +1432,209 @@
   color: var(--lpt-muted);
   font-size: var(--lpt-small-font-size);
   font-weight: var(--lpt-strong-weight);
-  padding: calc(var(--lpt-space) * 1.25) 0;
+  padding: calc(var(--lpt-space) * 1.25) 0 calc(var(--lpt-space) * 1.25) 28px;
+}
+
+.lpt-advanced > .lpt-summary::before,
+.lpt-custom-css > .lpt-summary::before {
+  left: 0;
 }
 
 .lpt-advanced[open],
 .lpt-custom-css[open] {
-  background: var(--lpt-card-bg);
+  background-color: var(--lpt-card-bg);
   padding-bottom: calc(var(--lpt-space) * 1.5);
 }
 
-/* Responsive adjustments for narrow mobile screens */
+/* ==========================================================================
+   Optional apps: Calls, Email, Bank (reuse the same card look)
+   ========================================================================== */
+
+.lpt-activity {
+  display: grid;
+  gap: var(--lpt-space);
+}
+
+.lpt-muted {
+  color: var(--lpt-muted);
+  font-size: var(--lpt-small-font-size);
+}
+
+.lpt-call-direction {
+  display: inline-block;
+  width: fit-content;
+  padding: 1px calc(var(--lpt-space) * 1);
+  border: var(--lpt-border-size) solid var(--lpt-pill-edge);
+  border-radius: 999px;
+  background-color: var(--lpt-pill-bg);
+  color: var(--lpt-pill-text);
+  font-size: var(--lpt-small-font-size);
+  font-weight: var(--lpt-strong-weight);
+}
+
+.lpt-email-from {
+  font-weight: var(--lpt-strong-weight);
+  color: var(--lpt-text);
+}
+
+.lpt-email-subject {
+  color: var(--lpt-text);
+}
+
+.lpt-email-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--lpt-text);
+}
+
+.lpt-email-unread {
+  display: inline-block;
+  width: fit-content;
+  padding: 1px calc(var(--lpt-space) * 1);
+  border: var(--lpt-border-size) solid var(--lpt-pill-edge);
+  border-radius: 999px;
+  background-color: var(--lpt-marker-bg);
+  color: var(--lpt-pill-text);
+  font-size: var(--lpt-small-font-size);
+  font-weight: var(--lpt-strong-weight);
+}
+
+.lpt-bank-balance {
+  font-size: var(--lpt-title-size);
+  font-weight: var(--lpt-strong-weight);
+  color: var(--lpt-text);
+}
+
+.lpt-transaction-amount {
+  font-weight: var(--lpt-strong-weight);
+  color: var(--lpt-text);
+}
+
+.lpt-bank-time {
+  color: var(--lpt-muted);
+  font-size: var(--lpt-small-font-size);
+}
+
+/* ==========================================================================
+   Narrow screens
+   ========================================================================== */
+
 @media (max-width: 420px) {
   .lpt-root {
-    --lpt-frame-radius: 28px;
-    --lpt-app-tile-size: 58px;
-    --lpt-title-size: 17px;
+    --lpt-frame-radius: 32px;
+    --lpt-frame-border-size: 3px;
+    --lpt-app-tile-size: 60px;
+    --lpt-title-size: 18px;
     --lpt-location-size: 21px;
   }
 
   .lpt-content {
-    padding: calc(var(--lpt-space) * 1.5) calc(var(--lpt-space) * 1.5) calc(var(--lpt-space) * 2.5);
+    padding: calc(var(--lpt-space) * 1.5) calc(var(--lpt-space) * 1.75) calc(var(--lpt-space) * 2.5);
   }
 
   .lpt-home {
     gap: calc(var(--lpt-space) * 2) var(--lpt-space);
   }
+
+  .lpt-text-message {
+    max-width: 90%;
+  }
 }
 
-/* Host-owned recovery surface: outside the phone shadow tree and never custom-styled[cite: 2]. */
+/* ==========================================================================
+   Reduced motion: no transitions
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .lpt-root {
+    --lpt-transition: 0.01ms linear;
+  }
+}
+
+/* ==========================================================================
+   Host-owned recovery surface (unchanged): outside the phone's custom styling
+   ========================================================================== */
+
 .lpt-transport { display: flex; flex-direction: column; height: 48px; width: 48px; overflow: hidden; }
 .lpt-viewport { flex: 1; min-height: 0; width: 100%; overflow: clip; contain: layout paint size; position: relative; }
 .lpt-island { display: block; width: 100%; height: 100%; }
 
-/* Embedded user art, with normal smooth scaling. Activity screens stay opaque. */
-.lpt-app-image {display:block;width:var(--lpt-app-image-size);height:var(--lpt-app-image-size);object-fit:contain;image-rendering:auto;pointer-events:none;}
-.lpt-activity {background-color:var(--lpt-screen-bg);}
-.lpt-activity {display:grid;gap:var(--lpt-space);}
-.lpt-email-summary {display:grid;gap:var(--lpt-space);padding:var(--lpt-space);cursor:pointer;}
-.lpt-email-body {white-space:pre-wrap;overflow-wrap:anywhere;}
-.lpt-email-unread {color:var(--lpt-accent);font-size:var(--lpt-small-font-size);}
-.lpt-bank-balance,.lpt-transaction-amount {font-weight:var(--lpt-strong-weight);}
+/* ==========================================================================
+   PLAIN DARK (turn the cute theme off)
+   Paste this block, uncommented, into Advanced custom CSS. It restores the
+   neutral dark look and removes gloss, hard shadows, hearts and sparkles.
 
-.lpt-call,.lpt-bank-account,.lpt-bank-transaction {padding:var(--lpt-space);}
+.lpt-root {
+  --lpt-phone-bg: #121017;
+  --lpt-screen-bg: #15131c;
+  --lpt-card-bg: #1f1c29;
+  --lpt-elevated-bg: #292536;
+  --lpt-text: #f0edf6;
+  --lpt-muted: #aaa4ba;
+  --lpt-accent: #a485f7;
+  --lpt-accent-text: #120f1d;
+  --lpt-focus-color: #a485f7;
+  --lpt-border: #2d293b;
+  --lpt-hover-border: #47405c;
+  --lpt-frame-edge: #353047;
+  --lpt-card-outline: #2d293b;
+  --lpt-shadow-hard: transparent;
+  --lpt-gloss: linear-gradient(transparent, transparent);
+  --lpt-notch-bg: #09080c;
+  --lpt-home-bar-color: #3f3952;
+  --lpt-wallpaper-a: #15131c;
+  --lpt-wallpaper-b: #15131c;
+  --lpt-icon-fill: #292536;
+  --lpt-tint-scene: #3a3350;
+  --lpt-tint-weather: #2f4254;
+  --lpt-tint-locations: #2c4a3d;
+  --lpt-tint-notes: #52432b;
+  --lpt-tint-contacts: #543440;
+  --lpt-tint-messages: #333b5c;
+  --lpt-tint-settings: #3b3846;
+  --lpt-tint-calls: #52432b;
+  --lpt-tint-email: #543440;
+  --lpt-tint-bank: #3a3350;
+  --lpt-outline: #47405c;
+  --lpt-btn-bg: #292536;
+  --lpt-btn-soft-bg: #292536;
+  --lpt-btn-primary-bg: #a485f7;
+  --lpt-btn-text: #f0edf6;
+  --lpt-btn-edge: #2d293b;
+  --lpt-input-bg: #15131c;
+  --lpt-input-text: #f0edf6;
+  --lpt-input-placeholder: #9b95aa;
+  --lpt-input-border: #2d293b;
+  --lpt-pill-bg: #292536;
+  --lpt-marker-bg: #292536;
+  --lpt-pill-text: #f0edf6;
+  --lpt-pill-edge: #2d293b;
+  --lpt-badge-bg: #a485f7;
+  --lpt-badge-text: #120f1d;
+  --lpt-badge-edge: #15131c;
+  --lpt-badge-ring: transparent;
+  --lpt-bubble-in-bg: #292536;
+  --lpt-bubble-in-text: #f0edf6;
+  --lpt-bubble-in-border: #2d293b;
+  --lpt-bubble-out-bg: #362859;
+  --lpt-bubble-out-text: #f0edf6;
+  --lpt-bubble-out-border: #5a4294;
+  --lpt-bubble-muted: #cfc9dc;
+  --lpt-marker-closed: "▸";
+  --lpt-marker-open: "▾";
+  --lpt-sparkle-glyph: "";
+  --lpt-empty-glyph: "";
+  --lpt-marker-color: #aaa4ba;
+  --lpt-toggle-off-bg: #15131c;
+  --lpt-toggle-off-thumb: #aaa4ba;
+  --lpt-border-size: 1px;
+  --lpt-card-border-size: 1px;
+  --lpt-frame-border-size: 2px;
+  --lpt-frame-radius: 40px;
+  --lpt-card-radius: 16px;
+  --lpt-font: inherit;
+  --lpt-weight: 450;
+  --lpt-strong-weight: 650;
+  --lpt-shadow: 0 22px 54px -10px rgba(0, 0, 0, 0.72), inset 0 1px 0 0 #353047;
+}
+   ========================================================================== */
