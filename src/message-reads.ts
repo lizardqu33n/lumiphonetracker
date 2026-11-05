@@ -1,3 +1,5 @@
+import { activityReceipt } from "./activity";
+import type { State } from "./model";
 import { isRecord } from "./shared";
 import { emptyReads, receipt, threadKey, type ReadState } from "./messages";
 import type { SavedMessage } from "./model";
@@ -17,11 +19,12 @@ export class MessageReads {
     this.queues.set(key, task); const done = () => { if (this.queues.get(key) === task) this.queues.delete(key); }; void task.then(done,done); return task;
   }
   read(user: string, chat: string): Promise<ReadState> { return this.serial(user, chat, async () => readState(await this.io.read(user,chat))); }
-  mark(user: string, chat: string, key: string, observed: { id: string; receipt: string }[], messages: SavedMessage[]): Promise<ReadState> {
+  mark(user: string, chat: string, key: string, observed: { id: string; receipt: string }[], messages: SavedMessage[], activity?:Pick<State,"calls"|"emails">): Promise<ReadState> {
     return this.serial(user,chat, async () => {
       const state = readState(await this.io.read(user,chat));
       const wanted = new Map(observed.map(m => [m.id,m.receipt]));
       for (const m of messages) if (m.direction === "incoming" && threadKey(m) === key && wanted.get(m.id) === receipt(m)) state.seen[m.id] = receipt(m);
+      for(const entry of key==="@calls"?activity?.calls.filter(c=>c.direction==="missed")??[]:key==="@email"?activity?.emails.filter(e=>e.direction==="incoming")??[]:[])if(wanted.get(entry.id)===activityReceipt(entry))state.seen[entry.id]=activityReceipt(entry);
       state.revision++; await this.io.write(user,chat,state); return state;
     });
   }

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.0 - Part 4 only
+
+- Add optional Calls, Email and Bank, off by default in new/existing chats, with built-in Add/Remove, switches, editable records, caps and retained data.
+- Add call/bank/transaction shorthand, hidden email tags, personal missed-call/email badges and short macro continuity. Helper extracts calls/bank only; main AI handles email/text tags in both modes.
+- Enforce player-writing OFF in code, including record-editor bypass attempts. Bank stores exact stated figures and never computes a balance. User edits and source/swipe changes retain protections.
+- Keep all story data, App Store state and tracker switches on the chat. Personal receipts, notices, CSS and dismissals use the trusted user scope; test two authorized users in one chat and separate chats.
+- Embed the supplied nine PNG app images unchanged, with no external loading. Preserve the separate launcher and protected sidebar Reset.
+- Update format/install/styling/testing guides. No new permission, dialing, email sending, bank connection, owner-only data rule or preset rewrite.
+
 ## 0.9.0 - Part 3 only
 
 - Move all settings into the existing Phone sidebar. Open, Refresh and Reset stay at the top with short results. Only App Store starts expanded; each section names its scope.

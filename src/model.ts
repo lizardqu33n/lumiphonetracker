@@ -4,7 +4,7 @@ export const SCENE_KEYS = ["location", "time", "date", "present"] as const;
 export const CONTACT_KEYS = ["roles", "physical", "mood", "position", "attire", "thoughts"] as const;
 export const SECTIONS = ["people", "items", "rules", "plots", "misc"] as const;
 export const SWITCHES = [...SCENE_KEYS.map(k => `scene.${k}`), ...CONTACT_KEYS.map(k => `contacts.${k}`),
-  ...SECTIONS.map(k => `notes.${k}`), "locations", "weather", "messages"] as const;
+  ...SECTIONS.map(k => `notes.${k}`), "locations", "weather", "messages","calls","email","bank.balance","bank.transactions"] as const;
 export type SceneKey = typeof SCENE_KEYS[number];
 export type ContactKey = typeof CONTACT_KEYS[number];
 export type Section = typeof SECTIONS[number];
@@ -15,7 +15,13 @@ export interface Change { value: Value; evidence?: string; inferred?: boolean }
 export interface ContactPatch { name: string; fields: Partial<Record<ContactKey, Change>> }
 export interface PlacePatch { name: string; description?: string; relation?: string; evidence?: string }
 export interface NotePatch { name: string; detail?: string; context?: string; resolved?: boolean; evidence?: string }
+export interface CallData {name:string;direction:"in"|"out"|"missed";time?:string;evidence?:string}
+export interface BankData {name:string;balance:string;time?:string;evidence?:string}
+export interface TransactionData {description:string;amount:string;time?:string}
+export interface EmailData {from:string;to?:string;subject:string;body:string;time?:string}
+export type ActivityEntry<T> = T & {id:string;at:Origin;by:"ai"|"user"};
 export interface Patch {
+  calls?:CallData[];bank?:BankData[];transactions?:TransactionData[];
   scene: Partial<Record<SceneKey, Change>>; weather?: Change;
   contacts: ContactPatch[]; locations: PlacePatch[]; notes: Partial<Record<Section, NotePatch[]>>;
 }
@@ -26,12 +32,15 @@ export interface Place { name: string; description: string; relation: string; at
 export interface Note { name: string; detail: string; context: string; resolved: boolean; sendToAI: boolean;
   at: Origin; by: "ai" | "user"; addedByUser: boolean; updated: boolean }
 export interface State {
+  calls:ActivityEntry<CallData>[];bank:ActivityEntry<BankData>[];transactions:ActivityEntry<TransactionData>[];emails:(ActivityEntry<EmailData>&{direction:"incoming"|"outgoing"})[];
   scene: Partial<Record<SceneKey, Cell>>; weather?: Cell; contacts: Contact[]; locations: Place[];
   notes: Record<Section, Note[]>; messages: SavedMessage[]; notices: string[];
 }
 export const CORE_APPS = ["Scene","Weather","Locations","Notes","Contacts","Messages"] as const;
-export type CoreApp=typeof CORE_APPS[number];
-export const APP_FIELDS:Record<CoreApp,string[]>={Scene:SCENE_KEYS.map(k=>`scene.${k}`),Weather:["weather"],Locations:["locations"],Notes:SECTIONS.map(k=>`notes.${k}`),Contacts:CONTACT_KEYS.map(k=>`contacts.${k}`),Messages:["messages"]};
+export const OPTIONAL_APPS=["Calls","Email","Bank"] as const;
+export const ALL_APPS=[...CORE_APPS,...OPTIONAL_APPS] as const;
+export type CoreApp=typeof ALL_APPS[number];
+export const APP_FIELDS:Record<CoreApp,string[]>={Scene:SCENE_KEYS.map(k=>`scene.${k}`),Weather:["weather"],Locations:["locations"],Notes:SECTIONS.map(k=>`notes.${k}`),Contacts:CONTACT_KEYS.map(k=>`contacts.${k}`),Messages:["messages"],Calls:["calls"],Email:["email"],Bank:["bank.balance","bank.transactions"]};
 export interface Settings {
   apps:Record<CoreApp,boolean>;
   enabled: Record<string, boolean>; aiPlayerTexts: boolean; inferMissing: boolean;
@@ -41,12 +50,14 @@ export interface Settings {
 }
 export interface HelperEntry { id: string; at: Origin; sources: { id: string; signature: string }[]; values: Record<string, unknown>; prose: string }
 export interface ManualEdit {
+  playerWritingAllowed?:boolean;
   id: string; after: string | null; index: number;
-  target: "scene" | "weather" | "contact" | "location" | "note";
+  target: "scene" | "weather" | "contact" | "location" | "note" | "call" | "email" | "bank" | "transaction";
   name?: string; rename?: string; field?: string; section?: Section; value?: unknown; remove?: boolean;
 }
-export interface Accepted { at: Origin; patch: Patch; texts: TextData[]; role: "user" | "assistant"; name?: string; prose: string }
+export interface Accepted { bankProof?:BankData[];at: Origin; patch: Patch; emails?:EmailData[]; texts: TextData[]; role: "user" | "assistant"; name?: string; prose: string }
 export interface Document {
+  personalReads?:{seen:Record<string,string>;available?:boolean};
   schema: 2; chatId: string; revision: number; settings: Settings; edits: ManualEdit[];
   accepted: Accepted[]; state: State; playerNames: string[]; legacy?: unknown;
   rejected: string[];
@@ -59,7 +70,7 @@ export interface Document {
 }
 export const normalize = (name: string) => name.normalize("NFKC").trim().toLocaleLowerCase("en-US").split(" ").filter(Boolean).join(" ");
 export function defaults(): Settings {
-  return { apps:Object.fromEntries(CORE_APPS.map(a=>[a,true])) as Record<CoreApp,boolean>, enabled: Object.fromEntries(SWITCHES.map(k => [k, k !== "contacts.thoughts"])), aiPlayerTexts: false,
+  return { apps:Object.fromEntries(ALL_APPS.map(a=>[a,(CORE_APPS as readonly string[]).includes(a)])) as Record<CoreApp,boolean>, enabled: Object.fromEntries(SWITCHES.map(k => [k, k !== "contacts.thoughts"])), aiPlayerTexts: false,
     inferMissing: false, keepTexts: 3, keepTrackers: 0, notesPerSection: 10, logLines: 20, source: "main", connection_id: null, helperMessages: 3 };
 }
 export function readSettings(input: unknown): Settings {
@@ -69,7 +80,7 @@ export function readSettings(input: unknown): Settings {
     if (!(key in out)) throw new Error("Unknown setting");
     if(key==="apps") {
       if(!isRecord(input.apps))throw new Error("Invalid apps");
-      for(const [app,on]of Object.entries(input.apps)){if(!CORE_APPS.includes(app as CoreApp)||typeof on!=="boolean")throw new Error("Invalid app");out.apps[app as CoreApp]=on;}
+      for(const [app,on]of Object.entries(input.apps)){if(!ALL_APPS.includes(app as CoreApp)||typeof on!=="boolean")throw new Error("Invalid app");out.apps[app as CoreApp]=on;}
     } else if (key === "enabled") {
       if (!isRecord(input.enabled)) throw new Error("Invalid switches");
       for (const [name, value] of Object.entries(input.enabled)) {
@@ -96,10 +107,10 @@ export function readSettings(input: unknown): Settings {
   return out;
 }
 export function effectiveDocument(doc:Document):Document {
-  const enabled={...doc.settings.enabled};for(const app of CORE_APPS)if(!doc.settings.apps[app])for(const key of APP_FIELDS[app])enabled[key]=false;
+  const enabled={...doc.settings.enabled};for(const app of ALL_APPS)if(!doc.settings.apps[app])for(const key of APP_FIELDS[app])enabled[key]=false;
   return {...doc,settings:{...doc.settings,enabled}};
 }
 export const emptyPatch = (): Patch => ({ scene: {}, contacts: [], locations: [], notes: {} });
-export const emptyState = (): State => ({ scene: {}, contacts: [], locations: [], notes: { people: [], items: [], rules: [], plots: [], misc: [] }, messages: [], notices: [] });
+export const emptyState = (): State => ({ calls:[],bank:[],transactions:[],emails:[],scene: {}, contacts: [], locations: [], notes: { people: [], items: [], rules: [], plots: [], misc: [] }, messages: [], notices: [] });
 export const emptyDocument = (chatId: string): Document => ({ schema: 2, chatId, revision: 0,
   settings: defaults(), edits: [], accepted: [], state: emptyState(), playerNames: [], rejected: [], notices: [], inferences: [], helperEntries: [], helperAttempts: [] });

@@ -46,6 +46,7 @@ async function loadPhoneDocument(chatId: string, userId: string) {
     if(spindle.permissions.has("generation")&&doc.helperOwner===userId)try{usable=(await spindle.connections.list(userId)).some(c=>c.id===doc.settings.connection_id);}catch{/* Fail closed without generating. */}
     if(!usable)doc.settings={...doc.settings,source:"main"}; // Pull previews stay read-only.
   }
+  try{doc.personalReads=await messageReads.read(userId,chatId);}catch{doc.personalReads={seen:{},available:false};warn("Lumi Phone Tracker: unread status unavailable; email continuity omitted.");}
   return doc;
 }
 registerPhoneMacros(spindle,loadPhoneDocument);
@@ -150,7 +151,7 @@ spindle.onFrontendMessage((payload, userId) => {
     void (async () => {
       requireReadPermissions();
       const snapshot = await store.sync(userId, payload.chatId as string);
-      const reads = await messageReads.mark(userId, snapshot.chatId, payload.key as string, payload.observed as { id: string; receipt: string }[], snapshot.state.messages);
+      const reads = await messageReads.mark(userId, snapshot.chatId, payload.key as string, payload.observed as { id: string; receipt: string }[], snapshot.state.messages,snapshot.state);
       spindle.sendToFrontend({ type: "phone_reads_result", requestId: payload.requestId, chatId: snapshot.chatId, reads }, userId);
     })().catch(() => spindle.sendToFrontend({ type: "phone_reads_error", requestId: payload.requestId, chatId: payload.chatId }, userId));
     return;
@@ -181,7 +182,7 @@ spindle.onFrontendMessage((payload, userId) => {
     spindle.sendToFrontend({ type: "phone_snapshot", requestId, chatId, chatName, snapshot, reads, helperBusy:helper.busy(chatId) }, userId);
   })().catch(error => {
     const reason = error instanceof Error ? error.message : "";
-    const known = ["The tracker changed.", "The story changed.", "This section is full.", "Contacts is full", "Locations is full", "A contact with that name", "A place with that name", "A note with that name"];
+    const known = ["Outgoing player entries need", "This app is full.", "An account with that name", "The tracker changed.", "The story changed.", "This section is full.", "Contacts is full", "Locations is full", "A contact with that name", "A place with that name", "A note with that name"];
     const message = known.some(s => reason.startsWith(s)) ? reason : "Could not save or open this chat. Check extension permissions and try again.";
     spindle.sendToFrontend({ type: "phone_error", requestId, message }, userId);
     warn("Lumi Phone Tracker: chat sync failed; saved data retained.");

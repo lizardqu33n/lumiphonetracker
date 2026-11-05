@@ -1,5 +1,7 @@
 import type { Cell, Contact, Document as PhoneDocument, ManualEdit, Note, Section } from "./model";
 import { effectiveDocument, CONTACT_KEYS, SCENE_KEYS, SECTIONS, normalize } from "./model";
+import { APP_IMAGES } from "./app-icons";
+import { activityReceipt,activityUnread } from "./activity";
 import { APPS, defaultPreferences, type App, type Preferences } from "./preferences";
 import { prepareCustomCSS } from "./custom-css";
 import { LAUNCHER_ICON } from "./launcher-icon";
@@ -16,6 +18,7 @@ export interface ViewActions {
 }
 export const DESCRIPTIONS: Record<App, string> = {
   Scene: "Where the story is happening right now.", Weather: "Only the weather the story has established.",
+  Calls:"Calls established in the story.", Email:"Emails actually sent in the story.", Bank:"Only balances and transactions the story states.",
   Locations: "Places that matter in this story.", Notes: "People, items, rules, and plans worth remembering.",
   Contacts: "What the story has established about each character.", Messages: "Texts actually sent in the story.",
 };
@@ -33,6 +36,7 @@ const CONTROL_PATHS: Record<string, string[]> = {
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag); node.className = cls; if (text !== undefined) node.textContent = text; return node;
 }
+export function appImage(name:string):HTMLImageElement {const img=el("img","lpt-app-image");img.src=APP_IMAGES[name]??"";img.alt="";img.setAttribute("aria-hidden","true");img.draggable=false;return img;}
 export function icon(name: string): SVGSVGElement {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("class", "lpt-icon"); svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("aria-hidden", "true");
@@ -54,7 +58,7 @@ const valueText = (cell?: Cell): string => {
   return typeof v === "string" ? v : Array.isArray(v) ? v.join("\n") : "name" in v ? v.name : v.worn.join("\n");
 };
 const marked = (cell?: Cell) => cell?.by === "user" ? "edited by you" : cell?.inferred ? "inferred" : "";
-interface FormField { key: string; label: string; value: string; multiline?: boolean; required?: boolean; max?: number; check?: boolean }
+interface FormField { key: string; label: string; value: string; multiline?: boolean; required?: boolean; max?: number; check?: boolean; options?:[string,string][] }
 
 /** Ordinary DOM renderer mounted inside the phone's isolated shadow tree. */
 export class PhoneView {
@@ -101,6 +105,7 @@ export class PhoneView {
   receive(doc: PhoneDocument | null, reads?: ReadState): void {
     const changedChat = doc?.chatId !== this.doc?.chatId;
 
+    const oldActivities=new Set([...(this.doc?.state.calls??[]),...(this.doc?.state.emails??[])].map(e=>activityReceipt(e)));
     const previous = new Set(this.doc?.state.messages.filter(m => m.direction === "incoming").map(m => JSON.stringify([m.id, receipt(m)])) ?? []);
     const arrived = !changedChat && this.doc && doc?.settings.apps.Messages&&doc.settings.enabled.messages ? doc.state.messages.filter(m => m.direction === "incoming" && !previous.has(JSON.stringify([m.id, receipt(m)]))) : [];
     this.doc = doc;
@@ -114,7 +119,8 @@ export class PhoneView {
     if (!doc?.settings.apps.Messages||!doc.settings.enabled.messages) this.clearTextNotice();
     else if (arrived.length) this.showTextNotice(arrived.length === 1 ? `New text from ${arrived[0].from}` : `${arrived.length} new texts`);
     if (!this.editing || changedChat) this.render(); else this.refreshBadges();
-    this.markVisibleConversation();
+    if(!changedChat&&doc){const arrived=[...doc.state.calls.filter(c=>c.direction==="missed"&&doc.settings.apps.Calls&&doc.settings.enabled.calls),...doc.state.emails.filter(e=>e.direction==="incoming"&&doc.settings.apps.Email&&doc.settings.enabled.email)].filter(e=>!oldActivities.has(activityReceipt(e))&&activityUnread(e,this.reads.seen));if(arrived.length)this.showTextNotice(arrived.length===1?("subject" in arrived[0]?`New email from ${arrived[0].from}`:`Missed call from ${arrived[0].name}`):`${arrived.length} new calls or emails`);}
+    this.markVisibleConversation();this.markVisibleActivity();
   }
   receiveReads(reads: ReadState): void { if (reads.revision >= this.reads.revision) { this.reads = reads; this.refreshBadges(); } }
   receivePreferences(prefs: Preferences): void { if (prefs.revision >= this.prefs.revision) {this.prefs=prefs;if(prefs.dismissed.includes(this.app))this.root.querySelector(this.app==="Home"?".lpt-home-hint":".lpt-description")?.remove();} }
@@ -135,7 +141,7 @@ export class PhoneView {
   private setOpen(open: boolean): void {
     this.openState = open; this.root.dataset.open = String(open); this.frame.hidden = !open; this.launcher.hidden = open;
     if (open) this.frame.insertBefore(this.textNotice, this.content); else this.root.insertBefore(this.textNotice, this.frame);
-    this.measure(); this.markVisibleConversation();
+    this.measure(); this.markVisibleConversation();this.markVisibleActivity();
   }
   private measure(): void {
     const node = this.openState || !this.textNotice.hidden ? this.probe : this.launcher;
@@ -147,7 +153,7 @@ export class PhoneView {
     const closedHeight = this.textNotice.hidden ? height : Math.max(48, Math.ceil(this.root.getBoundingClientRect().height));
     this.actions.size(Math.max(48, width), Math.max(48, this.openState ? height : closedHeight), this.openState);
   }
-  private navigate(app: App | "Home"): void { this.app = app!=="Home"&&!this.doc?.settings.apps[app]?"Home":app; this.editing = false; this.render(); this.content.scrollTop = 0; }
+  private navigate(app: App | "Home"): void { this.app = app!=="Home"&&!this.doc?.settings.apps[app]?"Home":app; this.editing = false; this.render(); this.content.scrollTop = 0; this.markVisibleActivity(); }
   private render(): void {
     const focused = this.mount instanceof ShadowRoot ? this.mount.activeElement : document.activeElement;
     const replyFocus = focused instanceof HTMLTextAreaElement && focused.classList.contains("lpt-reply-input") ? {
@@ -160,9 +166,9 @@ export class PhoneView {
       const home = el("div", "lpt-home");
       for (const app of APPS.filter(a=>this.doc?.settings.apps[a])) {
         const b = button("", "lpt-app-button", () => this.navigate(app)); b.dataset.app = app;
-        const image = el("span", "lpt-app-icon"); image.append(icon(app));
+        const image = el("span", "lpt-app-icon"); image.append(appImage(app));
         b.append(image, el("span", "lpt-app-label", app));
-        if (app === "Messages") image.append(this.unreadBadge("*")); home.append(b);
+        if (app === "Messages") image.append(this.unreadBadge("*"));if(app==="Calls")image.append(this.unreadBadge("@calls"));if(app==="Email")image.append(this.unreadBadge("@email")); home.append(b);
       }
       this.content.append(home);
       if(this.doc&&!home.children.length)this.empty("No apps added. Add apps from the sidebar's Phone tab.");
@@ -180,6 +186,7 @@ export class PhoneView {
       else if (this.app === "Locations") this.locations();
       else if (this.app === "Notes") this.notes();
       else if (this.app === "Messages") this.messages();
+      else if(["Calls","Email","Bank"].includes(this.app))this.activities(this.app as "Calls"|"Email"|"Bank");
 
     }
     if (this.doc) for (const text of this.doc.state.notices) {
@@ -208,7 +215,7 @@ export class PhoneView {
   private async change(change: Parameters<ViewActions["update"]>[0], revision = this.doc?.revision ?? -1): Promise<void> {
     if (!this.doc || this.busy) return;
     this.busy = true; this.setStatus("Saving…");
-    const controls = this.root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLButtonElement | HTMLSelectElement>(".lpt-setting input, .lpt-helper-source, .lpt-helper-connection, .lpt-form input, .lpt-form textarea, .lpt-form button, .lpt-add, .lpt-field, .lpt-delete");
+    const controls = this.root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLButtonElement | HTMLSelectElement>(".lpt-setting input, .lpt-helper-source, .lpt-helper-connection, .lpt-form input, .lpt-form textarea, .lpt-form select, .lpt-form button, .lpt-add, .lpt-field, .lpt-delete");
     controls.forEach(control => { control.disabled = true; });
     try {
       const doc = await this.actions.update(change, revision); this.editing = false; this.doc = doc;
@@ -219,22 +226,25 @@ export class PhoneView {
     finally { this.busy = false; controls.forEach(control => { control.disabled = false; }); }
   }
   private form(parent: HTMLElement, fields: FormField[], save: (values: Record<string, string | boolean>) => Parameters<ViewActions["update"]>[0]): void {
-    if (this.editing) return;
+    if (this.editing||!parent.isConnected) return;
+    const originEpoch=this.chatEpoch,originChat=this.doc?.chatId;
     this.editing = true; const revision = this.doc?.revision ?? -1;
-    const form = el("form", "lpt-form"); const controls = new Map<string, HTMLInputElement | HTMLTextAreaElement>();
+    const form = el("form", "lpt-form"); const controls = new Map<string, HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>();
     for (const f of fields) {
       const label = el("label", "lpt-label", f.label);
-      const input = f.multiline ? el("textarea", "lpt-textarea") : el("input", f.check ? "lpt-toggle" : "lpt-input");
+      const input = f.options?el("select","lpt-input"):f.multiline ? el("textarea", "lpt-textarea") : el("input", f.check ? "lpt-toggle" : "lpt-input");
+      if(input instanceof HTMLSelectElement)for(const [value,title]of f.options??[]){const o=el("option","lpt-option",title);o.value=value;input.append(o);}
       if (input instanceof HTMLInputElement) input.type = f.check ? "checkbox" : "text";
       if (f.check && input instanceof HTMLInputElement) input.checked = f.value === "true";
       else input.value = f.value;
-      input.required = f.required === true; input.maxLength = f.max ?? 500;
+      input.required = f.required === true;if(!(input instanceof HTMLSelectElement))input.maxLength=f.max??500;
       input.name = f.key; controls.set(f.key, input); label.append(input); form.append(label);
     }
     const actions = el("div", "lpt-actions"); const submit = el("button", "lpt-save", "Save"); submit.type = "submit";
     actions.append(submit, button("Cancel", "lpt-cancel", () => { this.editing = false; this.render(); })); form.append(actions);
     form.addEventListener("submit", e => {
       e.preventDefault();
+      if(originEpoch!==this.chatEpoch||originChat!==this.doc?.chatId)return;
       const values: Record<string, string | boolean> = {};
       for (const [key, input] of controls) values[key] = input instanceof HTMLInputElement && input.type === "checkbox" ? input.checked : input.value.trim();
       void this.change(save(values), revision);
@@ -285,9 +295,11 @@ export class PhoneView {
     this.content.append(section);
   }
   private deleteAction(parent: HTMLElement, edit: Partial<ManualEdit>): void {
+    const origin=this.chatEpoch;
     const b = button("Delete", "lpt-delete", () => {
+      if(origin!==this.chatEpoch||!parent.isConnected)return;
       const row = el("div", "lpt-actions"); row.append(el("span", "lpt-help", "Delete this entry?"),
-        button("Delete", "lpt-delete", () => { void this.change({ edit: { ...edit, remove: true } }); }),
+        button("Delete", "lpt-delete", () => { if(origin===this.chatEpoch)void this.change({ edit: { ...edit, remove: true } }); }),
         button("Cancel", "lpt-cancel", () => row.remove())); b.replaceWith(row);
     }); parent.append(b);
   }
@@ -459,8 +471,9 @@ export class PhoneView {
   private refreshBadges(): void {
     const counts = new Map(conversations(this.doc?.state.messages ?? [], this.reads).map(t => [t.key, t.unread]));
     for (const badge of Array.from(this.root.querySelectorAll<HTMLElement>(".lpt-unread-badge"))) {
-      const count = !this.enabled("messages") ? 0 : badge.dataset.unreadFor === "*" ? [...counts.values()].reduce((a,b) => a+b,0) : counts.get(badge.dataset.unreadFor ?? "") ?? 0;
-      badge.hidden = !count; badge.textContent = String(count); badge.setAttribute("aria-label", `${count} unread texts`);
+      const special=badge.dataset.unreadFor;const activityCount=special==="@calls"?this.doc?.state.calls.filter(c=>c.direction==="missed"&&activityUnread(c,this.reads.seen)).length:special==="@email"?this.doc?.state.emails.filter(e=>e.direction==="incoming"&&activityUnread(e,this.reads.seen)).length:undefined;
+      const count = activityCount!==undefined?((special==="@calls"?this.enabled("calls"):this.enabled("email"))?activityCount:0):!this.enabled("messages") ? 0 : badge.dataset.unreadFor === "*" ? [...counts.values()].reduce((a,b) => a+b,0) : counts.get(badge.dataset.unreadFor ?? "") ?? 0;
+      badge.hidden = !count; badge.textContent = String(count); badge.setAttribute("aria-label", `${count} unread ${special==="@calls"?"missed calls":special==="@email"?"emails":"texts"}`);
     }
   }
   private markVisibleConversation(): void {
@@ -475,6 +488,38 @@ export class PhoneView {
       if (epoch === this.chatEpoch && this.doc?.chatId === chatId) this.receiveReads(value);
     }).catch(() => { if (epoch === this.chatEpoch && this.doc?.chatId === chatId) this.setError("Read status could not be saved. Reopen this conversation to try again."); })
       .finally(() => this.pendingReads.delete(pendingKey));
+  }
+  private activities(app:"Calls"|"Email"|"Bank"):void{
+    const section=el("section",`lpt-${app.toLowerCase()} lpt-activity`);this.content.append(section);
+    const kind=app==="Calls"?"call":app==="Email"?"email":"bank";
+    const add=(type:"call"|"email"|"bank"|"transaction",entry?:Record<string,unknown>)=>this.activityForm(section,type,entry);
+    if(app==="Calls"){
+      if(!this.enabled("calls")){this.empty("Calls is off. Change it in the sidebar's Phone tab.",section);return;}
+      section.append(button("+ Add call","lpt-add",()=>add("call")));
+      if(!this.doc!.state.calls.length)this.empty("No calls recorded. This fills only when the story establishes a call.",section);
+      for(const c of [...this.doc!.state.calls].reverse()){const card=el("article","lpt-card lpt-call");const name=this.doc!.state.contacts.find(x=>normalize(x.name)===normalize(c.name))?.name??c.name;card.append(el("h2","lpt-card-title",name),el("p","lpt-call-direction",c.direction==="in"?"Incoming":c.direction==="out"?"Outgoing":"Missed"));if(c.time)card.append(el("p","lpt-muted",c.time));this.activityControls(card,"call",c as unknown as Record<string,unknown>,add);section.append(card);}
+    }else if(app==="Email"){
+      if(!this.enabled("email")){this.empty("Email is off. Change it in the sidebar's Phone tab.",section);return;}
+      section.append(button("+ Add email record","lpt-add",()=>add("email")));
+      if(!this.doc!.state.emails.length)this.empty("No emails recorded. Actual story emails will appear here.",section);
+      for(const e of [...this.doc!.state.emails].reverse()){const card=el("details","lpt-card lpt-email");card.dataset.email=e.id;const summary=el("summary","lpt-email-summary");summary.append(el("strong","lpt-email-from",e.from),el("span","lpt-email-subject",e.subject));if(e.time)summary.append(el("small","lpt-muted",e.time));if(e.direction==="incoming"&&activityUnread(e,this.reads.seen))summary.append(el("span","lpt-email-unread","Unread"));else if(e.direction==="outgoing")summary.append(el("small","lpt-muted","Outgoing"));const body=el("div","lpt-card-body");if(e.to)body.append(el("p","lpt-muted",`To: ${e.to}`));body.append(el("p","lpt-email-body",e.body));this.activityControls(body,"email",e as unknown as Record<string,unknown>,add);card.append(summary,body);card.addEventListener("toggle",()=>{if(card.open){card.querySelector(".lpt-email-unread")?.remove();this.markVisibleActivity();}});section.append(card);}
+    }else{
+      if(this.enabled("bank.balance")){section.append(button("+ Add account","lpt-add",()=>add("bank")));if(!this.doc!.state.bank.length)this.empty("No balances stated. The tracker never calculates a balance.",section);for(const b of this.doc!.state.bank){const card=el("article","lpt-card lpt-bank-account");const stale=this.doc!.state.transactions.some(t=>t.at.index>b.at.index);card.append(el("h2","lpt-card-title",b.name),el("p","lpt-bank-balance",`${stale?"Last stated":"Balance"}: ${b.balance}`));if(b.time)card.append(el("p","lpt-bank-time",`As of ${b.time}`));this.activityControls(card,"bank",b as unknown as Record<string,unknown>,add);section.append(card);}}
+      if(this.enabled("bank.transactions")){section.append(el("h2","lpt-section-title","Recent transactions"),button("+ Add transaction","lpt-add",()=>add("transaction")));if(!this.doc!.state.transactions.length)this.empty("No transactions stated. Adding one never changes a balance.",section);for(const t of [...this.doc!.state.transactions].reverse()){const card=el("article","lpt-card lpt-bank-transaction");card.append(el("strong","lpt-card-title",t.description),el("p","lpt-transaction-amount",t.amount));if(t.time)card.append(el("p","lpt-muted",t.time));this.activityControls(card,"transaction",t as unknown as Record<string,unknown>,add);section.append(card);}}
+      if(!this.enabled("bank.balance")&&!this.enabled("bank.transactions"))this.empty("Bank fields are off. Change them in the sidebar's Phone tab.",section);
+    }
+  }
+  private activityControls(parent:HTMLElement,target:"call"|"email"|"bank"|"transaction",entry:Record<string,unknown>,add:(type:typeof target,entry:Record<string,unknown>)=>void):void{const controls=el("div","lpt-actions");controls.append(button("Edit","lpt-button",()=>add(target,entry)));this.deleteAction(controls,{target,name:String(entry.id)});parent.append(controls);if(entry.by==="user"&&isRecord(entry.at)&&entry.at.variant==="manual")parent.append(el("small","lpt-marker","edited by you"));}
+  private activityForm(parent:HTMLElement,target:"call"|"email"|"bank"|"transaction",entry?:Record<string,unknown>):void{
+    const fields=target==="call"?[["name","Name or number"],["direction","Direction"],["time","Time (optional)"]]:target==="email"?[["from","Sender"],["to","To (optional)"],["subject","Subject"],["body","Body"],["time","Time (optional)"]]:target==="bank"?[["name","Account"],["balance","Stated balance"],["time","As of (optional)"]]:[["description","Description"],["amount","Stated amount"],["time","Time (optional)"]];
+    this.form(parent,fields.map(([key,label])=>({key,label,value:String(entry?.[key]??(key==="direction"?"in":"")),...(key==="direction"?{options:[["in","Incoming"],["out","Outgoing"],["missed","Missed"]] as [string,string][]}:{}),required:!label.includes("optional"),multiline:key==="body",max:key==="body"?1500:key==="description"?240:key==="subject"?200:100})),values=>({edit:{target,...(entry?{name:String(entry.id)}:{}),value:Object.fromEntries(Object.entries(values).filter(([,v])=>v!==""))}}));
+  }
+  private markVisibleActivity():void{
+    if(!this.doc||!this.openState||document.visibilityState==="hidden"||!this.frame.getClientRects().length)return;
+    const kind=this.app==="Calls"&&this.enabled("calls")?"@calls":this.app==="Email"&&this.enabled("email")?"@email":null;if(!kind)return;
+    const entries=kind==="@calls"?this.doc.state.calls.filter(c=>c.direction==="missed"):this.doc.state.emails.filter(e=>e.direction==="incoming"&&Array.from(this.root.querySelectorAll<HTMLDetailsElement>(".lpt-email[open]")).some(d=>d.dataset.email===e.id));
+    const observed=entries.filter(e=>activityUnread(e,this.reads.seen)).map(e=>({id:e.id,receipt:activityReceipt(e)}));if(!observed.length)return;const chatId=this.doc.chatId,epoch=this.chatEpoch,key=JSON.stringify([kind,chatId,observed]);if(this.pendingReads.has(key))return;this.pendingReads.add(key);
+    void this.actions.markRead(chatId,kind,observed).then(reads=>{if(epoch===this.chatEpoch&&this.doc?.chatId===chatId)this.receiveReads(reads);}).catch(()=>{if(epoch===this.chatEpoch)this.setError("Read status could not be saved. Reopen the app to try again.");}).finally(()=>this.pendingReads.delete(key));
   }
   private clearTextNotice(): void { clearTimeout(this.noticeTimer); this.textNotice.textContent = ""; this.textNotice.hidden = true; this.root.dataset.notice = "false"; }
   private showTextNotice(text: string): void {

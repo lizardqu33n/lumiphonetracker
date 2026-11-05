@@ -107,7 +107,7 @@ try {
   check(await sidebarPage.locator(".lpt-island .lpt-app-button").count()===6&&(await side.locator(".lpt-side-chat").innerText()).includes("Other story"),"Switching chats restores only the other chat's apps and name");
   await sidebarPage.evaluate(()=>(window as any).harness.switchChat("a"));await sidebarPage.waitForTimeout(100);
   await side.locator(".lpt-side-advanced").evaluate((d:HTMLDetailsElement)=>{d.open=true;d.dispatchEvent(new Event("toggle"));});
-  await sidebarPage.evaluate(()=>(window as any).harness.updateDelay(150));await side.getByRole("switch",{name:"Let the AI write texts for my character",exact:true}).check();await sidebarPage.evaluate(()=>(window as any).harness.switchChat("b"));await sidebarPage.waitForTimeout(300);
+  await sidebarPage.evaluate(()=>(window as any).harness.updateDelay(150));await side.getByRole("switch",{name:"Let the AI write texts, calls and emails for my character",exact:true}).check();await sidebarPage.evaluate(()=>(window as any).harness.switchChat("b"));await sidebarPage.waitForTimeout(300);
   check(await sidebarPage.evaluate(()=>(window as any).harness.getDocument("a").settings.aiPlayerTexts===true&&(window as any).harness.getDocument("b").settings.aiPlayerTexts===false),"Late sidebar save lands only in its original chat");
   await sidebarPage.evaluate(()=>(window as any).harness.switchChat("a"));await sidebarPage.waitForTimeout(100);await settings(sidebarPage);
   await sidebarPage.evaluate(()=>{(window as any).oldSideSwitch=document.querySelector('[data-setting="scene.date"] input');(window as any).harness.switchChat("b");});await sidebarPage.waitForTimeout(100);
@@ -122,6 +122,43 @@ try {
   check(await side.getByRole("button",{name:"Reset appearance",exact:true}).isVisible()&&await side.getByRole("button",{name:"Open phone",exact:true}).isVisible(),"Top recovery actions remain visible after scrolling the narrow sidebar");
   await side.evaluate(e=>{e.scrollTop=0;});
   await sidebarPage.screenshot({path:".test-artifacts/sidebar-narrow.png"});await sidebarPage.close();
+  async function opaqueActivity(page:Page,name:string){check(await page.locator(".lpt-activity").evaluate(root=>{const canvas=document.createElement("canvas");canvas.width=canvas.height=1;const c=canvas.getContext("2d")!;return [root,...Array.from(root.querySelectorAll(".lpt-card,.lpt-card-body"))].every(n=>{c.clearRect(0,0,1,1);c.fillStyle=getComputedStyle(n).backgroundColor;c.fillRect(0,0,1,1);return c.getImageData(0,0,1,1).data[3]===255;});}),`${name} screen and cards stay fully opaque`);}
+  const activityPage=await browser.newPage({viewport:{width:1100,height:850}});await activityPage.goto(`http://127.0.0.1:${server.port}`);await ready(activityPage);await open(activityPage);
+  check(await activityPage.locator(".lpt-store-row").count()===9&&await activityPage.locator(".lpt-island .lpt-app-button").count()===6,"Nine built-ins are listed while only six core apps start on the phone");
+  for(const app of ["Calls","Email","Bank"]){await activityPage.locator(".lpt-sidebar").getByRole("button",{name:`Add ${app}`,exact:true}).click();await activityPage.waitForTimeout(100);}
+  check(await activityPage.locator(".lpt-island .lpt-app-button").count()===9,"Adding the three optional apps places their labelled PNG icons on Home");
+  check(await activityPage.locator(".lpt-island .lpt-app-image").evaluateAll(images=>images.every(n=>{const i=n as HTMLImageElement;return i.src.startsWith("data:image/png;base64,")&&i.naturalWidth===128&&i.naturalHeight===128;})),"All nine user-provided app PNGs are embedded at native 128px resolution");
+  await activityPage.locator(".harness-widget").screenshot({path:".test-artifacts/home-nine-apps.png"});
+  await activityPage.locator('.lpt-island [data-app="Calls"]').click();check((await activityPage.locator(".lpt-calls").innerText()).includes("No calls recorded"),"Calls starts empty without demo entries");await home(activityPage);
+  await activityPage.locator('.lpt-island [data-app="Email"]').click();check((await activityPage.locator(".lpt-email.lpt-activity").innerText()).includes("No emails recorded"),"Email starts empty without demo entries");await home(activityPage);
+  await activityPage.evaluate(()=>(window as any).harness.activityStory('Main account has $500. A call is missed and an email arrives.<phone-state>\ncall: Ada | missed | Evening\nbank: Main | $500 | Evening\n</phone-state><phone-email from="Ada" subject="Meet" time="Evening">&lt;img src=x&gt; Plain text https://example.test</phone-email>'));
+  await activityPage.waitForTimeout(130);
+  check(await activityPage.locator('.lpt-island [data-app="Calls"] .lpt-unread-badge').innerText()==="1"&&await activityPage.locator('.lpt-island [data-app="Email"] .lpt-unread-badge').innerText()==="1","Missed call and incoming email get separate Home badges");
+  check((await activityPage.locator(".lpt-text-notice").innerText()).includes("new calls or emails"),"New calls/email reuse the existing personal arrival notice");
+  await activityPage.locator('.lpt-island [data-app="Calls"]').click();await activityPage.waitForTimeout(100);
+  check((await activityPage.locator(".lpt-call").innerText()).includes("Missed")&&await activityPage.locator('.lpt-calls a[href^="tel:"]').count()===0,"Call log shows its direction with no dialing action");
+  await opaqueActivity(activityPage,"Calls");
+  await home(activityPage);check(await activityPage.locator('.lpt-island [data-app="Calls"] .lpt-unread-badge').isHidden(),"Opening Calls clears missed-call unread state for this user");
+  await activityPage.locator('.lpt-island [data-app="Email"]').click();check(await activityPage.locator(".lpt-email-unread").count()===1,"An unopened email has its own unread label");
+  await activityPage.locator(".lpt-email-summary").click();await activityPage.waitForTimeout(100);
+  check((await activityPage.locator(".lpt-email-body").innerText()).includes("<img src=x>")&&await activityPage.locator(".lpt-email a, .lpt-email img").count()===0,"Email body is plain text with no HTML, images or clickable URL");
+  check(await activityPage.locator(".lpt-email-unread").count()===0&&await activityPage.locator(".lpt-email .lpt-reply").count()===0,"Opening one email clears its unread label without adding compose or reply controls");
+  await opaqueActivity(activityPage,"Email");
+  await home(activityPage);check(await activityPage.locator('.lpt-island [data-app="Email"] .lpt-unread-badge').isHidden(),"Email Home badge clears after reading it");
+  await activityPage.evaluate(()=>(window as any).harness.activityStory('Rent costs -$10.<phone-state>tx: Rent | -$10 | Night</phone-state>'));await activityPage.waitForTimeout(100);
+  await activityPage.locator('.lpt-island [data-app="Bank"]').click();check((await activityPage.locator(".lpt-bank-balance").innerText())==="Last stated: $500"&&(await activityPage.locator(".lpt-transaction-amount").innerText())==="-$10","Transaction-only update leaves the old balance unchanged and labels it last stated");
+  check(await activityPage.locator(".lpt-bank").evaluate(e=>getComputedStyle(e).backgroundColor!=="rgba(0, 0, 0, 0)"),"Bank app background stays opaque");
+  await opaqueActivity(activityPage,"Bank");
+  await activityPage.locator(".harness-widget").screenshot({path:".test-artifacts/bank-app.png"});
+  await home(activityPage);await activityPage.locator('.lpt-island [data-app="Calls"]').click();await activityPage.locator(".lpt-call").getByRole("button",{name:"Edit",exact:true}).click();await activityPage.locator('.lpt-form [name="name"]').fill("Bea");await save(activityPage);check((await activityPage.locator(".lpt-call").innerText()).includes("Bea"),"User can correct a call log entry");
+  await activityPage.locator(".lpt-sidebar").getByRole("button",{name:"Remove Calls",exact:true}).click();await activityPage.waitForTimeout(100);check(await activityPage.locator('.lpt-island [data-app="Calls"]').count()===0&&await activityPage.evaluate(()=>(window as any).harness.getDocument().state.calls[0].name)==="Bea","Removing Calls hides it while retaining the user's correction");
+  await activityPage.locator(".lpt-sidebar").getByRole("button",{name:"Add Calls",exact:true}).click();await activityPage.waitForTimeout(100);await activityPage.locator('.lpt-island [data-app="Calls"]').click();check((await activityPage.locator(".lpt-call").innerText()).includes("Bea"),"Re-adding Calls restores its retained entry");
+  await activityPage.locator(".lpt-call").getByRole("button",{name:"Edit",exact:true}).click();await activityPage.locator('.lpt-form [name="name"]').fill("Stale form");
+  await activityPage.evaluate(()=>{(window as any).oldActivityForm=document.querySelector(".lpt-island")!.shadowRoot!.querySelector(".lpt-form");});
+  await activityPage.evaluate(()=>(window as any).harness.switchChat("b"));await activityPage.waitForTimeout(100);check(await activityPage.locator('.lpt-island [data-app="Calls"]').count()===0&&await activityPage.evaluate(()=>(window as any).harness.getDocument("b").state.emails.length)===0,"A different chat has no optional apps or entries from this chat");
+  await activityPage.evaluate(()=>(window as any).oldActivityForm.dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));await activityPage.waitForTimeout(100);
+  check(await activityPage.evaluate(()=>(window as any).harness.getDocument("b").state.calls.length)===0,"A detached activity editor cannot save into a newly selected chat");
+  await activityPage.close();
   const placementPage = await browser.newPage({ viewport: { width: 1100, height: 850 } });
   await placementPage.goto(`http://127.0.0.1:${server.port}/?auto-root`); await ready(placementPage);
   const initialHeight = await placementPage.locator(".lpt-viewport").evaluate(e => e.getBoundingClientRect().height);
@@ -142,10 +179,7 @@ try {
   const errors: string[] = []; page.on("pageerror", e => errors.push(e.message));
   await page.goto(`http://127.0.0.1:${server.port}`); await ready(page); await open(page);
   check(await ui(page).locator(".lpt-app-button").count() === 6, "Six added core apps and no Settings icon");
-  check(await ui(page).locator(".lpt-app-icon").evaluateAll(icons => icons.every(icon => {
-    const shape = icon.querySelector(".lpt-icon-path");
-    return shape && getComputedStyle(shape).stroke === getComputedStyle(icon).color;
-  })), "All seven inline Lucide icons inherit currentColor");
+  check(await ui(page).locator(".lpt-app-icon .lpt-app-image").evaluateAll(images=>images.length===6&&images.every(img=>(img as HTMLImageElement).src.startsWith("data:image/png;base64,")&&getComputedStyle(img).imageRendering==="auto")),"All six default Home apps use embedded smooth PNG artwork");
   assert.deepEqual(await ui(page).locator(".lpt-app-label").allTextContents(), ["Scene", "Weather", "Locations", "Notes", "Contacts", "Messages"]); checks++;
   await page.locator(".harness-widget").screenshot({ path: ".test-artifacts/home-desktop.png" });
   await ui(page).locator('[data-app="Scene"]').click();

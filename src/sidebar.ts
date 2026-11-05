@@ -1,6 +1,6 @@
 import type { SpindleFrontendContext } from "lumiverse-spindle-types";
-import { CORE_APPS, APP_FIELDS, CONTACT_KEYS, SCENE_KEYS, SECTIONS, type Document, type Settings } from "./model";
-import { DESCRIPTIONS, icon } from "./phone-view";
+import { ALL_APPS, APP_FIELDS, CONTACT_KEYS, SCENE_KEYS, SECTIONS, type Document, type Settings } from "./model";
+import { DESCRIPTIONS, appImage } from "./phone-view";
 import type { Preferences } from "./preferences";
 import type { ConnectionsInfo } from "./helper";
 import { prepareCustomCSS } from "./custom-css";
@@ -147,11 +147,11 @@ export class Sidebar {
         this.root.append(node("p", "lpt-side-chat", this.doc ? `Settings for this chat: ${this.name || "Unnamed chat"}` : "Open a chat to change tracker settings"));
         const apps = this.section("apps", "App Store", "This chat");
         apps.append(node("p", "lpt-side-help", "Choose which apps are on the phone. Removing an app only hides it. Your data comes back when you add it again."));
-        for (const app of CORE_APPS) {
+        for (const app of ALL_APPS) {
             const row = node("div", "lpt-store-row");
             row.dataset.storeApp = app;
             const image = node("span", "lpt-store-icon");
-            image.append(icon(app));
+            image.append(appImage(app));
             const label = node("div", "lpt-side-label");
             label.append(node("strong", "lpt-store-name", app), node("small", "lpt-side-help", DESCRIPTIONS[app]));
             const added = this.doc?.settings.apps[app] === true;
@@ -167,13 +167,13 @@ export class Sidebar {
         }
         const track = this.section("tracking", "What to track", "This chat");
         if (this.doc) {
-            for (const app of CORE_APPS) {
+            for (const app of ALL_APPS) {
                 const group = node("fieldset", "lpt-side-group");
                 group.append(node("legend", "lpt-side-legend", app));
                 for (const key of APP_FIELDS[app]) {
                     const field = key.split(".").at(-1)!;
-                    const titles: Record<string, string> = { location: "Location", time: "Time", date: "Date", present: "Who is present", roles: "Roles", physical: "Physical status", mood: "Mood", position: "Position", attire: "Attire", thoughts: "Inner thoughts", people: "People", items: "Key items", rules: "Rules", plots: "Plots", misc: "Misc", locations: "Locations", weather: "Weather", messages: "Messages" };
-                    const hints: Record<string, string> = { location: "Exact place and wider area.", time: "Established story time.", date: "Established story date.", present: "Everyone present, by name.", roles: "Known roles and affiliations.", physical: "Observable physical condition.", mood: "Established mood, NPCs only.", position: "Known facing and relative position.", attire: "Worn and recently removed items.", thoughts: "Short private thoughts, NPCs only.", people: "People with a reason to return.", items: "Only items with a specific story function.", rules: "Stated principles or restrictions.", plots: "Promises, meetings and pending events.", misc: "Your own notes; you choose what the AI sees.", locations: "Meaningful places and known details.", weather: "Only weather established in the story.", messages: "Texts actually sent in the story." };
+                    const titles: Record<string, string> = { location: "Location", time: "Time", date: "Date", present: "Who is present", roles: "Roles", physical: "Physical status", mood: "Mood", position: "Position", attire: "Attire", thoughts: "Inner thoughts", people: "People", items: "Key items", rules: "Rules", plots: "Plots", misc: "Misc", locations: "Locations", weather: "Weather", messages: "Messages",calls:"Calls",email:"Email",balance:"Balance",transactions:"Transactions" };
+                    const hints: Record<string, string> = { location: "Exact place and wider area.", time: "Established story time.", date: "Established story date.", present: "Everyone present, by name.", roles: "Known roles and affiliations.", physical: "Observable physical condition.", mood: "Established mood, NPCs only.", position: "Known facing and relative position.", attire: "Worn and recently removed items.", thoughts: "Short private thoughts, NPCs only.", people: "People with a reason to return.", items: "Only items with a specific story function.", rules: "Stated principles or restrictions.", plots: "Promises, meetings and pending events.", misc: "Your own notes; you choose what the AI sees.", locations: "Meaningful places and known details.", weather: "Only weather established in the story.", messages: "Texts actually sent in the story.",calls:"Calls established in the story.",email:"Emails actually sent in the story.",balance:"Only the last stated balance; never calculated.",transactions:"Only stated transactions; never adjusts a balance." };
                     this.toggle(group, key, titles[field], hints[field], this.doc.settings.enabled[key], on => ({ enabled: { [key]: on } }));
                 }
                 track.append(group);
@@ -245,7 +245,7 @@ export class Sidebar {
             this.number(advanced, "logLines", "Log lines sent to the AI", "The phone still shows all notes.", 1);
             this.number(advanced, "keepTrackers", "Keep tracker blocks in the last N messages", "0 uses continuity summaries only.", 0);
             this.number(advanced, "keepTexts", "Recent messages to keep texts from", "Older text tags stay out of prompt history.", 1);
-            this.toggle(advanced, "aiPlayerTexts", "Let the AI write texts for my character", "Off by default. Your own sent texts still count.", this.doc.settings.aiPlayerTexts, on => ({ aiPlayerTexts: on }));
+            this.toggle(advanced, "aiPlayerTexts", "Let the AI write texts, calls and emails for my character", "Off by default. Your own established messages and calls still count.", this.doc.settings.aiPlayerTexts, on => ({ aiPlayerTexts: on }));
             this.toggle(advanced, "inferMissing", "Let the AI fill in missing details", "Off by default. New inferred contact values are marked.", this.doc.settings.inferMissing, on => ({ inferMissing: on }));
         }
         this.status.setAttribute("role", "status");

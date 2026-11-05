@@ -1,3 +1,4 @@
+import { validateEmail,validateActivity } from "./activity";
 import { isHelperNotice } from "./helper-status";
 import { isRecord } from "./shared";
 import { chatPath } from "./store";
@@ -48,6 +49,7 @@ export function readDocument(raw: string, chatId: string): Document {
       !Array.isArray(entry.patch.contacts) || !isRecord(entry.patch.notes) || !Array.isArray(entry.texts) ||
       typeof entry.prose !== "string" || !["user", "assistant"].includes(String(entry.role))) throw new Error("Invalid saved source");
     const rawPatch = { ...entry.patch.scene, ...(entry.patch.weather ? { weather: entry.patch.weather } : {}),
+      calls:entry.patch.calls,bank:entry.patch.bank,transactions:entry.patch.transactions,
       contacts: entry.patch.contacts.map(c => {
         if (!isRecord(c) || !isRecord(c.fields)) throw new Error("Invalid saved contact");
         return { name: c.name, ...c.fields };
@@ -55,7 +57,11 @@ export function readDocument(raw: string, chatId: string): Document {
     const patch = validateExpanded(rawPatch);
     for (const text of entry.texts) if (!isRecord(text) || !short(text.from, 100) || typeof text.text !== "string" || text.text.length > 3000 ||
       (text.to !== undefined && !short(text.to, 100)) || (text.time !== undefined && !short(text.time, 100))) throw new Error("Invalid saved text");
-    doc.accepted.push({ at: entry.at as unknown as Document["accepted"][number]["at"], patch,
+    if(entry.emails!==undefined&&!Array.isArray(entry.emails))throw Error("Invalid saved emails");
+    const emails=Array.isArray(entry.emails)?entry.emails.map(validateEmail):[];
+    if(entry.bankProof!==undefined&&!Array.isArray(entry.bankProof))throw Error("Invalid bank proof");
+    const bankProof=(entry.bankProof as unknown[]??[]).map(v=>validateActivity("bank",v)) as import("./model").BankData[];
+    doc.accepted.push({ bankProof,emails,at: entry.at as unknown as Document["accepted"][number]["at"], patch,
       texts: entry.texts as Document["accepted"][number]["texts"], role: entry.role as "assistant" | "user",
       ...(typeof entry.name === "string" ? { name: entry.name } : {}), prose: entry.prose });
   }
@@ -72,10 +78,10 @@ export function readDocument(raw: string, chatId: string): Document {
 export function validateEdit(value: unknown): ManualEdit {
   if (!isRecord(value) || typeof value.id !== "string" || !value.id ||
     !(value.after === null || typeof value.after === "string") || !Number.isInteger(value.index) || (value.index as number) < -1 ||
-    !["scene", "weather", "contact", "location", "note"].includes(String(value.target)) ||
-    (value.remove !== undefined && typeof value.remove !== "boolean")) throw new Error("Invalid edit");
+    !["scene", "weather", "contact", "location", "note","call","email","bank","transaction"].includes(String(value.target)) ||
+    (value.remove !== undefined && typeof value.remove !== "boolean")||(value.playerWritingAllowed!==undefined&&typeof value.playerWritingAllowed!=="boolean")) throw new Error("Invalid edit");
   const edit = value as unknown as ManualEdit;
-  applyManual(emptyState(), edit, new Set(), new Set());
+  applyManual(emptyState(), edit, new Set(), new Set(),true);
   return structuredClone(edit);
 }
 export class PhoneStore {
@@ -136,7 +142,7 @@ export class PhoneStore {
       const raw = await this.io.read(chatId); const saved = readDocument(raw, chatId);
       if (saved.revision !== expectedRevision) throw new Error("The tracker changed. Reopen it and try again.");
       let { doc, rows } = await this.build(chatId, userId);
-      if (JSON.stringify(doc.accepted) !== JSON.stringify(saved.accepted) && raw) throw new Error("The story changed. Reopen the tracker and try again.");
+      if (JSON.stringify(doc.accepted,canonicalKeys) !== JSON.stringify(saved.accepted,canonicalKeys) && raw) throw new Error("The story changed. Reopen the tracker and try again.");
       if (update.settings !== undefined) {
         if (!isRecord(update.settings)) throw new Error("Invalid settings");
         if(update.settings.apps!==undefined&&!isRecord(update.settings.apps))throw new Error("Invalid apps");
@@ -155,7 +161,7 @@ export class PhoneStore {
         const input = isRecord(update.edit) ? update.edit : {};
         // Anchor/revision/identity come from the saved history, never from UI claims.
         const last = [...rows].sort((a, b) => a.index_in_chat - b.index_in_chat).at(-1);
-        const edit = validateEdit({ ...input, id: crypto.randomUUID(), after: last?.id ?? null, index: last?.index_in_chat ?? -1 });
+        const edit = validateEdit({ ...input,playerWritingAllowed:doc.settings.aiPlayerTexts, id: crypto.randomUUID(), after: last?.id ?? null, index: last?.index_in_chat ?? -1 });
         if (edit.target === "note" && edit.section && !edit.remove) {
           const notes = doc.state.notes[edit.section];
           const existing = notes.some(n => normalize(n.name) === normalize(edit.name ?? ""));
@@ -174,7 +180,7 @@ export class PhoneStore {
       if (!userId || !(await this.io.authorize(chatId,userId))) throw new Error("Chat unavailable");
       const { doc, rows } = await this.build(chatId,userId);
       if (doc.settings.source !== "helper" || doc.helperOwner !== userId || doc.helperAttempts.includes(attempt)) return null;
-      if(!Object.entries(effectiveDocument(doc).settings.enabled).some(([key,on])=>on&&key!=="messages"&&key!=="notes.misc"))return null;
+      if(!Object.entries(effectiveDocument(doc).settings.enabled).some(([key,on])=>on&&key!=="messages"&&key!=="email"&&key!=="notes.misc"))return null;
       if (expected && !rows.some(r => r.id === expected.id && r.role === "assistant" && r.content === expected.content)) return null;
       const recent = [...rows].sort((a,b)=>a.index_in_chat-b.index_in_chat).filter(r=>r.role !== "system").slice(-doc.settings.helperMessages);
       if (!recent.length) return null;
@@ -216,3 +222,5 @@ export class PhoneStore {
   }
 }
 export interface HelperTicket { doc: Document; recent: StoryRow[]; history: string }
+
+function canonicalKeys(_key:string,value:unknown):unknown{return isRecord(value)?Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b))):value;}

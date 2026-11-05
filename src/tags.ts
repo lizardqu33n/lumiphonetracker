@@ -10,7 +10,7 @@ export interface TagSpan {
   complete: boolean;
   canonical: boolean;
 }
-const NAMES = [TRACKER_TAG, TEXT_TAG];
+const NAMES = [TRACKER_TAG, TEXT_TAG,"phone-email"];
 const space = (c: string) => c === " " || c === "\n" || c === "\r" || c === "\t";
 
 /** A small scanner for our two reserved tags, never an HTML parser or regex script. */

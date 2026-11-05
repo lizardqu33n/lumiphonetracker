@@ -47,9 +47,9 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     ctx.sendToBackend({ type: "phone_sync", requestId: pendingSync, chatId:activeChat });
   };
   // These attach before any asynchronous UI initialization or DOM work.
-  for (const tagName of [TRACKER_TAG, TEXT_TAG]) disposers.push(ctx.messages.registerTagInterceptor({ tagName, removeFromMessage: true }, payload => {
+  for (const tagName of [TRACKER_TAG, TEXT_TAG,"phone-email"]) disposers.push(ctx.messages.registerTagInterceptor({ tagName, removeFromMessage: true }, payload => {
     if (disposed || payload.isStreaming !== false || !payload.chatId || !payload.messageId || payload.chatId !== activeChat) return;
-    if (payload.isUser === false || (tagName === TEXT_TAG && payload.isUser === true)) sendSync();
+    if (payload.isUser === false || ([TEXT_TAG,"phone-email"].includes(tagName) && payload.isUser === true)) sendSync();
   }));
 
   const prefsChange = (change?: { css?: string; dismiss?: import("./preferences").App|"Home" }): Promise<Preferences> => {

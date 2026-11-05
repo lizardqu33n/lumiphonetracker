@@ -1,3 +1,4 @@
+import { applyActivities,applyActivityEdit } from "./activity";
 import { parseExpandedReply, change, validateExpanded, validateNote, short, type ParseIssue } from "./schema";
 import { parseReply as parseLegacy } from "./parser";
 import { CONTACT_KEYS, SCENE_KEYS, SECTIONS, emptyPatch, emptyState, normalize,
@@ -94,7 +95,7 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
     editsByIndex.set(index, [...editsByIndex.get(index) ?? [], edit]);
   }
   const manualAt = (index: number) => {
-    for (const edit of editsByIndex.get(index) ?? []) applyManual(state, edit, players, tombstones);
+    for (const edit of editsByIndex.get(index) ?? []) applyManual(state, edit, players, tombstones,document.settings.aiPlayerTexts);
   };
   manualAt(-1);
   for (const row of sorted) {
@@ -120,7 +121,7 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
         if (legacyEntry?.patch.notes) oldNotes = legacyEntry.patch.notes;
         if (legacyEntry?.patch.details) oldDetails = legacyEntry.patch.details;
       }
-      const patch = row.role === "user" ? emptyPatch() : parsed.patch ?? (oldFormat ? legacyPatch(row.content) : null) ?? prior?.patch ?? emptyPatch();
+      const patch = row.role === "user" ? {...emptyPatch(),calls:parsed.patch?.calls,bank:parsed.patch?.bank,transactions:parsed.patch?.transactions} : parsed.patch ?? (oldFormat ? legacyPatch(row.content) : null) ?? prior?.patch ?? emptyPatch();
       // For a malformed edit to the same saved source, retain only its rejected
       // top-level fields. Valid lines still replace their old contributions.
       if (parsed.patch && prior && row.role === "assistant") for (const key of parsed.invalidFields) {
@@ -128,18 +129,27 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
           const [section,...parts]=key.split(":"); const name=parts.join(":");
           if(section==="contacts") { const old=prior.patch.contacts.find(c=>normalize(c.name)===name);if(old&&!patch.contacts.some(c=>normalize(c.name)===name))patch.contacts.push(old); }
           else if(section==="locations") { const old=prior.patch.locations.find(c=>normalize(c.name)===name);if(old&&!patch.locations.some(c=>normalize(c.name)===name))patch.locations.push(old); }
+          else if(["calls","bank","transactions"].includes(section)){const k=section as "calls";const match=normalize(name.split(" | ")[0]);const current=(patch[k]??=[]) as unknown as Record<string,unknown>[];for(const old of (prior.patch[k]??[]) as unknown as Record<string,unknown>[])if(normalize(String(old.name??old.description))===match&&!current.some(v=>JSON.stringify(v)===JSON.stringify(old)))current.push(old);}
           else if(SECTIONS.includes(section as Section)) { const k=section as Section;const old=prior.patch.notes[k]?.find(n=>normalize(n.name)===name);if(old&&!(patch.notes[k]??=[]).some(n=>normalize(n.name)===name))patch.notes[k]!.push(old); }
         }
         else if (SCENE_KEYS.includes(key as never)) patch.scene[key as typeof SCENE_KEYS[number]] = prior.patch.scene[key as typeof SCENE_KEYS[number]];
+        else if (["calls","bank","transactions"].includes(key)) {const k=key as "calls";patch[k]=prior.patch[k];}
         else if (key === "weather") patch.weather = prior.patch.weather;
         else if (key === "contacts") patch.contacts = prior.patch.contacts;
         else if (key === "locations") patch.locations = prior.patch.locations;
         else if (SECTIONS.includes(key as never)) patch.notes[key as Section] = prior.patch.notes[key as Section];
       }
       const texts = parsed.badTexts ? prior?.texts ?? parsed.texts : parsed.texts;
-      const accepted: Accepted = { at, patch, texts, role: row.role, ...(row.name ? { name: row.name } : {}), prose: parsed.prose };
+      const emails=parsed.badEmails&&prior?[...parsed.emails,...(prior.emails??[]).filter(old=>!parsed.emails.some(e=>e.from===old.from&&e.subject===old.subject&&e.time===old.time))]:parsed.emails;
+      const accepted: Accepted = { at, patch, texts,emails, role: row.role, ...(row.name ? { name: row.name } : {}), prose: parsed.prose };
       next.accepted.push(accepted);
       if (row.role === "assistant") applyAI(next, patch, at, parsed.prose, players, tombstones, knownNotes);
+      const lastUser=[...sorted].reverse().find(r=>r.index_in_chat<row.index_in_chat&&r.role==="user");
+      const needsBankFallback=parsed.patch===null||parsed.invalidFields.some(k=>k==="bank"||k.startsWith("bank:"));
+      const proven=needsBankFallback?prior?.bankProof??[]:[];
+      const proofRow:StoryRow={...row,content:proven.map(b=>[b.name,b.balance,b.evidence??""].join(" ")).join("\n")};
+      applyActivities(next,patch,emails,at,[...(lastUser?[lastUser]:[]),row,...(proven.length?[proofRow]:[])],players,row.role==="user",tombstones);
+      accepted.bankProof=(patch.bank??[]).filter(b=>state.bank.some(saved=>saved.at.id===at.id&&saved.at.variant===at.variant&&normalize(saved.name)===normalize(b.name)&&saved.balance===b.balance));
       for (const [ordinal, text] of texts.entries()) {
         let from = text.from; let direction: "incoming" | "outgoing" = "incoming";
         if (row.role === "user") {
@@ -158,7 +168,8 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
     }
     for (const entry of document.helperEntries ?? []) if (entry.at.id === row.id &&
       entry.at.variant === at.variant && entry.sources.every(s => sorted.some(r => r.id === s.id && helperSourceSignature(r) === s.signature))) {
-      applyAI(next, validateExpanded(entry.values), entry.at, entry.prose, players, tombstones, knownNotes);
+      const helperPatch=validateExpanded(entry.values);applyAI(next, helperPatch, entry.at, entry.prose, players, tombstones, knownNotes);
+      applyActivities(next,helperPatch,[],entry.at,sorted.filter(r=>entry.sources.some(s=>s.id===r.id)),players,false,tombstones);
     }
     manualAt(row.index_in_chat);
   }
@@ -253,7 +264,8 @@ function applyAI(doc: Document, patch: Patch, at: Origin, prose: string, players
   }
 }
 
-export function applyManual(state: State, edit: ManualEdit, players: Set<string>, tombstones: Set<string>): void {
+export function applyManual(state: State, edit: ManualEdit, players: Set<string>, tombstones: Set<string>,allowPlayer=false): void {
+  if(applyActivityEdit(state,edit,tombstones,players,allowPlayer||edit.playerWritingAllowed===true))return;
   const at = { id: `edit:${edit.id}`, index: edit.index, variant: "user" };
   if (edit.target === "scene" || edit.target === "weather") {
     const field = edit.target === "weather" ? "weather" : edit.field;

@@ -8,7 +8,7 @@ That single Reset and its confirmation stay outside the phone's Shadow DOM. Cust
 
 All default rules are in [src/styles.css](src/styles.css). All declared --lpt- variables live on the same .lpt-root element. Some small decorative details are fixed CSS values; use the stable class selectors below to change those. There are no inline style attributes, external fonts, icon downloads or CDN requests. The frame, launcher and app content remain separate.
 
-Version 0.8.1 embeds the new tight-cropped 88 x 128 transparent PNG unchanged. The default is **A: a transparent 50 x 50 launcher**, with artwork about 34 x 50, centered and touching top and bottom. It keeps its proportions, with no cropping, stretching or inner padding. Side space is required by the taller artwork's shape. Smooth scaling is used. Only the image has a soft drop shadow; the box has no background, border or box shadow, even on hover. PNG colors stay as drawn; the built-in Home icons still use currentColor.
+Version 0.8.1 embeds the new tight-cropped 88 x 128 transparent PNG unchanged. The default is **A: a transparent 50 x 50 launcher**, with artwork about 34 x 50, centered and touching top and bottom. It keeps its proportions, with no cropping, stretching or inner padding. Side space is required by the taller artwork's shape. Smooth scaling is used. Only the image has a soft drop shadow; the box has no background, border or box shadow, even on hover. PNG colors stay as drawn; the app PNGs retain their original colors.
 
 The visible box in earlier versions came from `.lpt-launcher` in our stylesheet. Lumiverse's documented [chromeless float widget](https://docs.lumiverse.chat/frontend-api/ui-placement/#spindlefloatwidgetoptions) is already enabled and removes host background/border/shadow. No host-private selector or new API is used. Native desktop window behavior still needs a real-host check.
 
@@ -20,6 +20,47 @@ The visible box in earlier versions came from `.lpt-launcher` in our stylesheet.
 ```
 
 `.lpt-launcher-image` is the stable artwork class. The native button keeps the **Open phone** label, keyboard activation and a visible focus ring inside its bounds, so placement clipping cannot cut the ring off. The direct `.lpt-unread-badge` stays above the image and inside the target. Existing dragging and sidebar Reset protection are unchanged. The existing protected placement still clips to its own bounds; a large custom shadow can be cut off at those edges. Increasing shadow blur does not enlarge the tap area. Open phone screens, frame and cards remain opaque.
+
+## Optional apps and PNG artwork (0.10.0)
+
+The nine supplied 128 x 128 app PNGs are embedded in src/app-icons.ts. Home and
+App Store use the same images, contained with normal smooth scaling and no
+external loading. Home artwork defaults to 44px through --lpt-app-image-size;
+sidebar artwork uses its own 22px rule in sidebar.css. PNG colors do not inherit
+currentColor; the general accent variable still recolors labels, badges and
+other controls. The separate launcher art/fit is unchanged.
+
+Calls, Email and Bank reuse the existing opaque screen/card variables. They have
+no separate color theme. Record editors reuse the existing form/edit/delete
+classes. Calls has no dialing action; Email has no compose, send or reply action.
+All email body/subject content is literal text, including URL-looking text.
+
+| Class | What it is |
+| --- | --- |
+| `.lpt-app-image` | Embedded app PNG on Home or in App Store. |
+| `.lpt-activity` | Shared opaque optional-app screen container. |
+| `.lpt-calls` | Calls screen. |
+| `.lpt-call` | One call record card. |
+| `.lpt-muted` | Optional known time/recipient metadata text in the new apps. |
+| `.lpt-call-direction` | Incoming, Outgoing or Missed label. |
+| `.lpt-email.lpt-activity` | Email inbox screen. |
+| `.lpt-email.lpt-card` | Expandable stored email card. |
+| `.lpt-email-summary` | Sender/subject/time row that opens the email. |
+| `.lpt-email-from` | Literal sender name or address. |
+| `.lpt-email-subject` | Literal subject. |
+| `.lpt-email-body` | Plain body text with preserved line breaks and no links/HTML. |
+| `.lpt-email-unread` | Personal unread label on one email. |
+| `.lpt-bank` | Bank screen. |
+| `.lpt-bank-account` | Account and its last stated balance. |
+| `.lpt-bank-balance` | Balance or Last stated amount, without calculation. |
+| `.lpt-bank-time` | Known as-of time. |
+| `.lpt-bank-transaction` | One recent transaction card. |
+| `.lpt-transaction-amount` | Literal transaction amount. |
+
+The existing `.lpt-unread-badge` also shows personal missed-call and email counts.
+No new navigation tabs or Settings screen are added. New App Store entries start
+removed; removed data stays saved. Shared story data/settings and personal
+receipts/appearance/dismissals follow [PART-4.md](docs/PART-4.md).
 
 ## Sidebar settings (0.9.0)
 
@@ -138,6 +179,7 @@ Set these inside `.lpt-root { ... }`. Sizes need units such as px; counts, weigh
 | `--lpt-launcher-shadow-color` | `rgba(0, 0, 0, 0.55)` | Soft shadow color behind the PNG only. |
 | `--lpt-launcher-shadow-blur` | `2px` | Image shadow softness; large values may be clipped at placement edges. |
 | `--lpt-launcher-shadow-y` | `1px` | Image shadow vertical offset. |
+| `--lpt-app-image-size` | `44px` | Contained Home app PNG size; sidebar has an independent 22px host style. |
 | `--lpt-icon-size` | `26px` | Icon artwork size. |
 | `--lpt-app-tile-size` | `64px` | Home icon tile width and height; separate from SVG artwork size. |
 | `--lpt-icon-stroke-size` | `2px` | Icon line thickness. |
@@ -285,7 +327,7 @@ Change the main accent and the Messages Home tint:
 }
 ```
 
-App tints are independent. Change their --lpt-tint- variables to recolor other Home icons; --lpt-accent alone controls general accents, buttons and badges. All seven Lucide designs remain bundled inline and use currentColor. [Icon attribution](THIRD-PARTY-NOTICES.md).
+App tints are independent. Change their --lpt-tint- variables to recolor other Home icons; --lpt-accent alone controls general accents, buttons and badges. Legacy Lucide geometry remains attributed; current Home/App Store art uses the supplied PNGs. [Icon attribution](THIRD-PARTY-NOTICES.md).
 
 Make the phone bigger:
 

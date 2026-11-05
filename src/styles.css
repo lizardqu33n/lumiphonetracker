@@ -73,6 +73,7 @@
   --lpt-launcher-shadow-blur: 2px;
   --lpt-launcher-shadow-y: 1px;
   --lpt-icon-size: 26px;
+  --lpt-app-image-size: 44px;
   --lpt-app-tile-size: 64px;
   --lpt-icon-stroke-size: 2px;
   --lpt-control-size: 38px;
@@ -1138,3 +1139,14 @@
 .lpt-transport { display: flex; flex-direction: column; height: 48px; width: 48px; overflow: hidden; }
 .lpt-viewport { flex: 1; min-height: 0; width: 100%; overflow: clip; contain: layout paint size; position: relative; }
 .lpt-island { display: block; width: 100%; height: 100%; }
+
+/* Embedded user art, with normal smooth scaling. Activity screens stay opaque. */
+.lpt-app-image {display:block;width:var(--lpt-app-image-size);height:var(--lpt-app-image-size);object-fit:contain;image-rendering:auto;pointer-events:none;}
+.lpt-activity {background-color:var(--lpt-screen-bg);}
+.lpt-activity {display:grid;gap:var(--lpt-space);}
+.lpt-email-summary {display:grid;gap:var(--lpt-space);padding:var(--lpt-space);cursor:pointer;}
+.lpt-email-body {white-space:pre-wrap;overflow-wrap:anywhere;}
+.lpt-email-unread {color:var(--lpt-accent);font-size:var(--lpt-small-font-size);}
+.lpt-bank-balance,.lpt-transaction-amount {font-weight:var(--lpt-strong-weight);}
+
+.lpt-call,.lpt-bank-account,.lpt-bank-transaction {padding:var(--lpt-space);}

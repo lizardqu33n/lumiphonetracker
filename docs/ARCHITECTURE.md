@@ -1,4 +1,6 @@
-# Current release: Sidebar settings / 0.9.0
+# Current release: Calls, Email and Bank / 0.10.0
+
+[PART-4.md](PART-4.md) adds shared call/email/bank journals, personal receipts and embedded PNG app art. It follows the user's final shared-story scope clarification; there is no per-user story fork or new owner-only data rule.
 
 All settings are rendered outside the phone Shadow DOM in the existing drawer tab. App membership is a separate chat setting; a derived mask suppresses removed apps in macros, Helper input and recent text retention without altering their stored data. [PART-3.md](PART-3.md) records scope and migration.
 

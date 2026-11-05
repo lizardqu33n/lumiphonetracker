@@ -27,3 +27,5 @@
 @media(max-width:420px){.lpt-sidebar{padding:8px}.lpt-store-row{gap:5px}.lpt-store-button{padding:6px}.lpt-side-setting{gap:6px}}
 
 .lpt-recovery-status:empty,.lpt-side-status:empty {display:none;}
+
+.lpt-store-icon .lpt-app-image {width:22px;height:22px;object-fit:contain;image-rendering:auto;}

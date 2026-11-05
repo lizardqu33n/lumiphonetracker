@@ -1,3 +1,4 @@
+import { validateActivity, validateEmail } from "./activity";
 import { parseShorthand, usablePatch } from "./shorthand";
 import { isRecord } from "./shared";
 import { CONTACT_KEYS, SCENE_KEYS, SECTIONS, emptyPatch, type Change, type Patch, type NotePatch, type Value } from "./model";
@@ -50,8 +51,9 @@ export function validateNote(raw: unknown, user = false): NotePatch {
 /** JSON used by the main block and later Helper AI follows exactly the same schema. */
 export function validateExpanded(input: unknown): Patch {
   if (!isRecord(input)) throw new Error("Invalid tracker");
-  keys(input, [...SCENE_KEYS, "weather", "contacts", "locations", ...SECTIONS.filter(k => k !== "misc")]);
+  keys(input, [...SCENE_KEYS, "weather","calls","bank","transactions", "contacts", "locations", ...SECTIONS.filter(k => k !== "misc")]);
   const patch = emptyPatch();
+  for(const key of ["calls","bank","transactions"] as const)if(input[key]!==undefined&&input[key]!==null){if(!Array.isArray(input[key]))throw Error("Invalid entries");(patch as unknown as Record<string,unknown>)[key]=(input[key] as unknown[]).map(v=>validateActivity(key,v));}
   for (const key of SCENE_KEYS) if (input[key] !== undefined) patch.scene[key] = change(key, input[key]);
   if (input.weather !== undefined) patch.weather = change("weather", input.weather);
   for (const [key, allowed] of [["contacts", ["name", ...CONTACT_KEYS]], ["locations", ["name", "description", "relation", "evidence"]]] as const) {
@@ -96,9 +98,9 @@ export function parseExpanded(body: string): Patch | null {
 /** Independent top-level lines; nested objects/arrays remain atomic. */
 function parseLines(body: string): { patch: Patch | null; invalidFields: string[]; issues: ParseIssue[] } {
   if (body.length > 64000) return { patch: null, invalidFields: [], issues: [{ line: null, field: "block", reason: "block too large" }] };
-  if (/^\s*(?:loc|time|date|weather|present|c|p|people|items|rules|plots|done):/m.test(body)) return parseShorthand(decodeEntities(body), validateExpanded);
+  if (/^\s*(?:loc|time|date|weather|present|c|p|people|items|rules|plots|done|call|bank|tx):/m.test(body)) return parseShorthand(decodeEntities(body), validateExpanded);
   const groups = new Map<string, { value: string; line: number }[]>();
-  const allowed = [...SCENE_KEYS, "weather", "contacts", "locations", ...SECTIONS.filter(k => k !== "misc")];
+  const allowed = [...SCENE_KEYS, "weather","calls","bank","transactions", "contacts", "locations", ...SECTIONS.filter(k => k !== "misc")];
   const invalidFields = new Set<string>();
   const issues: ParseIssue[] = [];
   const lines = body.split("\n").map((s, i) => ({ text: s.trim(), number: i + 1 })).filter(s => s.text);
@@ -131,7 +133,7 @@ function parseLines(body: string): { patch: Patch | null; invalidFields: string[
   }
   return { patch: valid || !lines.length ? validateExpanded(accepted) : null, invalidFields: [...invalidFields], issues };
 }
-export function parseExpandedReply(content: string): { patch: Patch | null; invalidFields: string[]; issues: ParseIssue[]; texts: TextData[]; badTexts: boolean; prose: string } {
+export function parseExpandedReply(content: string): { patch: Patch | null; invalidFields: string[]; issues: ParseIssue[]; texts: TextData[]; badTexts: boolean; emails:import("./model").EmailData[];badEmails:boolean; prose: string } {
   const tags = scanTags(content); const states = tags.filter(t => t.name === "phone-state");
   let patch: Patch | null = emptyPatch();
   let invalidFields: string[] = [];
@@ -151,5 +153,7 @@ export function parseExpandedReply(content: string): { patch: Patch | null; inva
       (attrs.time !== undefined && !short(attrs.time, 100)) || (attrs.to !== undefined && !named(attrs.to)) || texts.length >= 12) { badTexts = true; continue; }
     texts.push({ from: attrs.from.trim(), text, ...(attrs.time ? { time: attrs.time } : {}), ...(attrs.to ? { to: attrs.to.trim() } : {}) });
   }
-  return { patch, invalidFields, issues, texts, badTexts, prose: transformTags(content, "strip") };
+  const emails:import("./model").EmailData[]=[];let badEmails=false;
+  for(const tag of tags.filter(t=>t.name==="phone-email")){try{const attrs=parseAttributes(tag.header);if(!tag.complete||!attrs||tag.body.includes("<")||emails.length>=12)throw Error("Invalid email");emails.push(validateEmail({...attrs,body:decodeEntities(tag.body)}));}catch{badEmails=true;}}
+  return { patch, invalidFields, issues, texts, badTexts, emails,badEmails,prose: transformTags(content, "strip") };
 }

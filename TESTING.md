@@ -1,6 +1,57 @@
-# Verification report - 0.9.0 (Part 3)
+# Verification report - 0.10.0 (Part 4)
 
-Checked November 4, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **No live Lumiverse session or real model connection was used. A local Lumiverse build and its user-docs were inspected; that is not live-host verification. No paid model request was made.**
+Checked November 5, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **No live Lumiverse session or real model connection was used. A local Lumiverse build and its user-docs were inspected; that is not live-host verification. No paid model request was made.**
+
+## Part 4: optional Calls, Email and Bank (0.10.0)
+
+**164 code tests / 1060 assertions; 171 browser checks pass.** Type checking, reproducible build comparison and manifest/package validation also pass. No real Lumiverse session,
+second-user login, model connection, paid request, telephone/email action or
+bank service was used.
+
+- New and existing chats start all three apps removed. Add/Remove retains shared
+  records, user corrections and switches. Invalid membership still rejects.
+- Shorthand records validate independently; placeholders, oversized descriptions,
+  formulas and malformed values drop safely. Email escapes, 1500-character body,
+  malformed tags and streaming prefixes are covered. Saved source is unchanged.
+- Player-writing OFF rejects AI player emails/outgoing calls, mismatched user
+  authors, negated/ambiguous evidence and manual-editor bypass attempts. Trusted
+  backend permission stamps cannot be forged; established manual records survive
+  turning the setting off.
+- Caps keep older entries, reject new ones, persist the full notice, and do not
+  refill from previously rejected or deleted records. Edits/deletes resist repeated
+  AI entries. Accounts never change from transactions or calculated balances.
+- Newer quoted balance confirmation protects user edits; Helper cannot roll back
+  from old recent-window facts. Repeated incomplete rebuilds preserve only
+  previously proved balances, never validate an unproved one by fallback.
+- The strict actual-backend mock authorizes TWO users for the SAME chat. Either
+  can change shared App Store/settings and see the same story arrays. A read
+  receipt affects only that user; unread-email pull macros differ per user.
+  A separate authorized user/chat stays isolated. Missing identity still causes
+  no unscoped call. Receipt read failure omits only email continuity, never the
+  writing instructions, and logs no private error values.
+- Helper parsing rejects texts/emails, accepts enabled call/bank/transaction
+  records and receives all phone tags stripped. Main AI email instructions remain
+  in Helper mode; Email-only Helper configuration makes no model request. Email continuity contains sender/subject only.
+- Browser checks cover nine App Store PNGs with six default Home apps; adding all
+  three yields nine labelled Home icons; empty screens, call direction, no dialing,
+  missed/email badges clearing, literal body markup/URLs with no HTML/links/images,
+  user correction, retained data after Remove/Add and separate-chat switching and detached-record-form rejection.
+  All three screens/cards are checked for full opacity. Earlier launcher 1x/2x,
+  sidebar narrow/sticky controls, hostile CSS Reset, drafts and core apps still pass.
+
+**Real-install limits:** actual host sharing/authorization and two logged-in users;
+player-name/address alias mapping and full natural-language meaning; native tag
+interception on user messages/cold load/streaming; shared WebSocket event delivery;
+real Helper/provider compliance/cost/cancellation; final outgoing prompt stripping;
+mobile/WebView PNG appearance, drawer/keyboard behavior and concurrent workers.
+The parser conservatively handles simple player-call statements and one literal
+numeric figure; it does not claim broad semantic recognition or number conversion.
+No private host selectors or new owner-only check is added. The user explicitly
+chose shared story/settings and personal reads/appearance/dismissals. No personal
+story fork, settings-presets UI or editable-prompt UI is introduced.
+
+See [PART-4.md](docs/PART-4.md) for API evidence, exact scope and protocol limits.
+Historical checkpoints follow and retain their original counts.
 
 ## Part 3: sidebar settings and App Store (0.9.0)
 

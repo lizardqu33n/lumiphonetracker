@@ -1,7 +1,7 @@
 import { isRecord } from "./shared";
 
-import { CORE_APPS } from "./model";
-export const APPS = CORE_APPS;
+import { ALL_APPS } from "./model";
+export const APPS = ALL_APPS;
 export type App = typeof APPS[number];
 export interface Preferences { revision: number; css: string; dismissed: (App|"Home")[] }
 export const defaultPreferences = (): Preferences => ({ revision: 0, css: "", dismissed: [] });

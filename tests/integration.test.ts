@@ -13,7 +13,7 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
   let deliver: (p: Record<string, unknown>, user: string) => void = () => {};
   let registrationOptions: unknown;
   const calls: string[] = []; const warnings: string[] = [];
-  let failReads = false;
+  let failReads = false;let failReceipts=false;
   const scoped = (user: unknown, method: string) => {
     if (typeof user !== "string" || !user.trim()) throw new Error("userId is required for operator-scoped extensions");
     calls.push(method);
@@ -36,12 +36,12 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     on: (event: string,fn:(payload:unknown,userId?:string)=>void) => { events.push(event);handlers.set(event,fn); return () => {}; },
     connections:{list:async(user:string)=>{scoped(user,"connections.list");return [{id:user==="v"?"v-small":"small",name:"Existing profile",model:"Test model"}];}},
     generate:{raw:async(input:Record<string,unknown>)=>{scoped(input.userId,"generate.raw");generations.push(input);return {content:"{}",finish_reason:"stop"};}},
-    chats: { get: async (id: string, user: string) => {scoped(user,"chats.get");return (user === "u" && id !== "c") || (user === "v" && id === "c") ? { id } : null;}, getActive: async (user:string) => {scoped(user,"chats.getActive");return { id: "a" };} },
-    chat: { getMessages: async (chat: string) => chat === "empty" ? [] : [{ id: "m1", chat_id: chat, index_in_chat: 0, role: "assistant", content: `<phone-state>location="${chat}"</phone-state><phone-text from="Ada">Actual saved test text</phone-text>`, swipe_id: 0 }] },
+    chats: { get: async (id: string, user: string) => {scoped(user,"chats.get");return (user === "u" && id !== "c") || (user === "v" && id === "c") ||(id==="shared"&&["u","v"].includes(user)) ? { id } : null;}, getActive: async (user:string) => {scoped(user,"chats.getActive");return { id: "a" };} },
+    chat: { getMessages: async (chat: string) => chat === "empty" ? [] : [{ id: "m1", chat_id: chat, index_in_chat: 0, role: "assistant", content:chat==="shared"?'Main account has $500.<phone-state>\ncall: Ada | missed\nbank: Main | $500\n</phone-state><phone-email from="Ada" subject="Shared plan">Meet at dusk.</phone-email>': `<phone-state>location="${chat}"</phone-state><phone-text from="Ada">Actual saved test text</phone-text>`, swipe_id: 0 }] },
     userStorage: {
       exists: async (path: string, user: string) => {scoped(user,"userStorage.exists");return persisted.has(`${user}/${path}`);},
       read: async (path: string, user: string) => {scoped(user,"userStorage.read");return JSON.stringify(persisted.get(`${user}/${path}`));},
-      getJson: async (path: string, options: { userId: string; fallback: unknown }) => {scoped(options?.userId,"userStorage.getJson");return structuredClone(persisted.get(`${options.userId}/${path}`) ?? options.fallback);},
+      getJson: async (path: string, options: { userId: string; fallback: unknown }) => {scoped(options?.userId,"userStorage.getJson");if(failReceipts&&path.startsWith("message-reads/"))throw Error("PRIVATE receipt failure");return structuredClone(persisted.get(`${options.userId}/${path}`) ?? options.fallback);},
       setJson: async (path: string, value: unknown, options: { userId: string }) => { scoped(options?.userId,"userStorage.setJson");persisted.set(`${options.userId}/${path}`, value); },
     },
     sendToFrontend: (p: Record<string, unknown>, user: string) => { scoped(user,"sendToFrontend");deliver(p,user); },
@@ -202,6 +202,14 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     expect([...persisted.keys()].some(k=>k.startsWith("v/message-reads/"))).toBe(true);
     const beforeForbidden=generations.length;
     expect((await request({type:"phone_helper_now",chatId:"c"},"u")).category).toBe("permission missing");expect(generations.length).toBe(beforeForbidden);
+    const sharedU=await request({type:"phone_sync",chatId:"shared"},"u");
+    const sharedAdded=await request({type:"phone_update",chatId:"shared",revision:(sharedU.snapshot as {revision:number}).revision,settings:{apps:{Calls:true,Email:true,Bank:true}}},"v");
+    const sharedV=await request({type:"phone_sync",chatId:"shared"},"u");expect((sharedV.snapshot as any).state).toEqual((sharedAdded.snapshot as any).state);expect((sharedV.snapshot as any).settings.apps.Bank).toBe(true);
+    const call=(sharedV.snapshot as any).state.calls[0],mail=(sharedV.snapshot as any).state.emails[0];
+    for(const [key,entry]of [["@calls",call],["@email",mail]])expect((await request({type:"phone_mark_read",chatId:"shared",key,observed:[{id:entry.id,receipt:JSON.stringify(entry)}]},"u")).type).toBe("phone_reads_result");
+    const uAfter=await request({type:"phone_sync",chatId:"shared"},"u"),vAfter=await request({type:"phone_sync",chatId:"shared"},"v");expect((uAfter.reads as any).seen[mail.id]).toBeDefined();expect((vAfter.reads as any).seen[mail.id]).toBeUndefined();
+    expect(await macros.get("phone_email")!({chatId:"shared",userId:"u"})).toBe("");expect(await macros.get("phone_email")!({chatId:"shared",userId:"v"})).toContain("Shared plan");
+    failReceipts=true;expect(await macros.get("phone_email")!({chatId:"shared",userId:"v"})).toBe("");expect(await macros.get("phone_format")!({chatId:"shared",userId:"v"})).toContain("call:");expect(warnings.join()).not.toContain("PRIVATE receipt failure");failReceipts=false;
     expect(generations[0].type).toBe("raw");expect(generations[0].connection_id).toBe("small");expect(generations[0].userId).toBe("u");expect((generations[0].messages as unknown[]).length).toBe(2);
   } finally { (globalThis as unknown as { spindle?: unknown }).spindle = prior; }
 });

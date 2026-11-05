@@ -1,3 +1,11 @@
+# Current Part 4 override
+
+Calls, Email and Bank are now built-in optional apps, initially not added.
+All story data/settings are shared on the authorized chat. Personal read state,
+notices, CSS and dismissed hints remain per user. The nine supplied PNG icons
+replace the displayed app art. See [PART-4.md](PART-4.md); older checkpoints below
+are historical where they differ.
+
 # Current Part 3 override
 
 Settings and the built-in App Store are in the existing Phone sidebar. Home

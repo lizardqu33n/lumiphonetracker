@@ -141,3 +141,66 @@ Omit unknown optional attributes. Content appears only in Messages. User scoping
 recent-text retention, hiding, prompt stripping and player-text defaults are
 unchanged. Part 2 failure categories and Refresh tracker are documented in
 [PART-2.md](PART-2.md).
+
+
+## Part 4: optional Calls, Email and Bank
+
+These instructions appear only when the app is added and its switch is on.
+Calls and Bank are in the same phone-state block as the earlier shorthand.
+Write only NEW log entries. Bank uses the account name to update its last stated
+balance, never by calculating from transactions. Omit an unstated time entirely.
+
+```text
+<phone-state>
+call: Ada | missed | Evening
+bank: Main | $500 | Evening
+tx: Rent | -$10 | Night
+</phone-state>
+```
+
+The exact tokens in the direction slot are in, out, missed. Name/number,
+account, balance, amount and time are at most 100 characters each. Transaction
+descriptions are at most 240 characters and 14 words. Values cannot contain
+" | ", line breaks, NUL or "<"; reword. Placeholder values are rejected, with
+Unknown caller as an explicit allowed caller name. Amounts must contain one
+numeric figure; formulas or written-out number conversions are not performed.
+Valid independent lines survive malformed neighbors. Old JSON remains readable;
+the compatible internal JSON fields are calls, bank and transactions arrays.
+
+```text
+<phone-email from="Ada" to="Player" subject="Meeting" time="Evening">Meet at dusk.</phone-email>
+```
+
+from and subject are required; to and time are optional. Body must be nonempty
+and at most 1500 characters; sender/recipient/time at most 100, subject 200.
+Escape &, <, > and attribute quotes. Body and decoded subject render as plain
+text only. Never use raw HTML inside the tag. Incomplete/malformed tags are
+hidden and safely ignored. Saved source tags remain for rebuilding. Email tags
+are stripped from outgoing history, including recent ones; continuity never
+returns body text. Existing text-tag retention is unchanged. Helper input strips
+ALL three tag kinds and Helper output containing texts/emails is rejected.
+
+Player-writing OFF rejects AI emails from a player and outgoing player calls.
+A named user's own sent email tag is outgoing only when from matches its saved
+author. A named user's own call record is accepted. A later AI outgoing call may
+use the existing exact-quote suffix only when it matches the whole latest player
+message and the parser can confirm a simple affirmative I call/called/dial/phone/
+ring Name statement. Negations, intentions, mismatched targets and complex
+unverified phrasing are rejected. Never invent a player action or reply. Turning
+ON the existing setting permits actual AI-authored player communications.
+
+Only the last 3 calls, sender/subject of the last 3 personal unread emails, and
+up to 3 balances plus the last 2 transactions are returned in continuity.
+phone_calls, phone_email and phone_bank use the same documented pull macro API
+and trusted context as the older phone macros. Keep the preset entry unchanged:
+
+```text
+{{phone_format}}
+```
+
+Bank updates need the literal account name and figure in newer recent story
+prose (or the user's own structured record). A user-edited balance additionally
+needs the exact newer quote using the existing ~ "quote" suffix. Figures that
+exist only in stripped tags or need interpretation are ignored safely. The
+format has no transaction account field, so transactions stay in a shared list;
+the extension never guesses an account. See PART-4.md for limits and provenance.

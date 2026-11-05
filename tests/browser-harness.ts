@@ -41,7 +41,7 @@ const sendToBackend = (payload: unknown) => {
       if(payload.type==="phone_helper_now"){const result=await helper.refresh(`owner-${chat}`,chat);reply({type:"phone_helper_now_result",requestId:id,chatId:chat,result});return;}
       if (payload.type === "phone_mark_read") {
         const snapshot = await store.sync(`owner-${chat}`,chat);
-        const reads = await readStore.mark("user", chat, String(payload.key), payload.observed as { id: string; receipt: string }[], snapshot.state.messages);
+        const reads = await readStore.mark("user", chat, String(payload.key), payload.observed as { id: string; receipt: string }[], snapshot.state.messages,snapshot.state);
         reply({ type: "phone_reads_result", requestId: id, chatId: chat, reads }); return;
       }
       let snapshot = payload.type === "phone_update" ? await store.update(`owner-${chat}`, chat, Number(payload.revision), { edit: payload.edit, settings: payload.settings, dismissNotice: payload.dismissNotice }) : await store.sync(`owner-${chat}`, chat);
@@ -144,6 +144,7 @@ const api = {
   failAppearanceSave(value: boolean) { failAppearanceSave = value; },
   failWidget(value: boolean) { failWidget = value; },
   setCSS(css: string) { prefs = { ...defaultPreferences(), css }; },
+  activityStory(content:string,role:"assistant"|"user"="assistant",name?:string){const chat=activeChat!,rows=histories.get(chat)??[];rows.push({id:`${chat}-${rows.length}`,chat_id:chat,index_in_chat:rows.length,role,swipe_id:0,content,...(name?{name}:{})});histories.set(chat,rows);events.get("MESSAGE_SENT")?.forEach(fn=>fn({chatId:chat}));},
   getDocument: (chat = "a") => JSON.parse(docs.get(chat) ?? "null"),
   emitTag(tag: string, streaming: boolean, user: boolean) { for (const item of tagHandlers) if ((item.options as { tagName: string }).tagName === tag) item.callback({ chatId: activeChat, messageId: `${activeChat}-0`, isUser: user, isStreaming: streaming }); },
   tagHandlers: () => tagHandlers.map(h => h.options), tagCalls: () => tagCalls,

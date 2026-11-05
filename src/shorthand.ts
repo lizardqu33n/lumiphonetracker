@@ -2,7 +2,9 @@ import { emptyPatch, normalize, type Patch, type Change, type Value } from "./mo
 import type { ParseIssue } from "./schema";
 
 export const WORD_LIMITS = { mood:12, position:12, physical:12, description:19, detail:14, attire:6 } as const;
-export const placeholder = (s:string) => /^(?:absent|n\/?a|none|unknown|unspecified|not known|not applicable|not stated|not specified|unavailable|offscreen|off-screen|not present|null|undefined|tbd|[?—-])\.?$/i.test(s.trim());
+import { placeholder } from "./record-values";
+export { placeholder } from "./record-values";
+import { parseActivityLine } from "./activity";
 const words = (s:string) => s.trim().split(/\s+/u).filter(Boolean).length;
 function text(s:string, limit=500):string {
   if (!s.trim() || s.length>limit || /[\r\n\u0000<]/u.test(s) || s.includes(" | ") || placeholder(s)) throw new Error("invalid");
@@ -23,9 +25,9 @@ function marked(raw:string):{ value:string;evidence?:string;inferred?:boolean } 
   return {value,...(evidence?{evidence}:{}),...(inferred?{inferred:true}:{})};
 }
 const wrap=(value:unknown,m:{evidence?:string;inferred?:boolean})=>m.evidence||m.inferred?{value,...(m.evidence?{evidence:m.evidence}:{}),...(m.inferred?{inferred:true}:{})}:value;
-const aliases:Record<string,string>={loc:"location",c:"contacts",p:"locations",done:"plots"};
+const aliases:Record<string,string>={call:"calls",bank:"bank",tx:"transactions",loc:"location",c:"contacts",p:"locations",done:"plots"};
 const fields:Record<string,string>={roles:"roles",phys:"physical",mood:"mood",pos:"position",thoughts:"thoughts"};
-const allowed=["loc","time","date","weather","present","c","p","people","items","rules","plots","done"];
+const allowed=["loc","time","date","weather","present","c","p","people","items","rules","plots","done","call","bank","tx"];
 
 export function parseShorthand(body:string,validate:(value:unknown)=>Patch):{patch:Patch|null;invalidFields:string[];issues:ParseIssue[]} {
   if(body.length>64000)return {patch:null,invalidFields:[],issues:[{line:null,field:"block",reason:"block too large"}]};
@@ -37,7 +39,7 @@ export function parseShorthand(body:string,validate:(value:unknown)=>Patch):{pat
     if(colon<1||!allowed.includes(key)) {issues.push({line:row.line,field:"(unknown)",reason:"unknown or forbidden field"});continue;}
     const raw=row.raw.slice(colon+1).trim();
     const name=raw.split(" | ")[0].split(" ~ ")[0].trim();
-    const id=["c","p","people","items","rules","plots","done"].includes(key)?`${field}:${normalize(name)}`:field;
+    const id=["c","p","people","items","rules","plots","done","call","bank","tx"].includes(key)?`${field}:${normalize(name)}`:field;
     groups.set(id,[...groups.get(id)??[],{raw,key,line:row.line}]);
   }
   let valid=0;
@@ -47,7 +49,8 @@ export function parseShorthand(body:string,validate:(value:unknown)=>Patch):{pat
     try {
       if(raw.endsWith(" |"))throw new Error("empty trailing field");
       let data:Record<string,unknown>={};
-      if(["time","date","weather","present","loc"].includes(key)) {
+      if(["call","bank","tx"].includes(key))data=parseActivityLine(key,raw);
+      else if(["time","date","weather","present","loc"].includes(key)) {
         const m=marked(raw);if(m.inferred)throw new Error("inference");
         const parts=m.value.split(" | ");
         if(key==="loc") {if(parts.length>2)throw new Error("parts");data.location=wrap({name:text(parts[0],100),wider:parts[1]===undefined?[]:list(parts[1])},m);}
@@ -78,6 +81,7 @@ export function parseShorthand(body:string,validate:(value:unknown)=>Patch):{pat
         else data[key]=[{name,...(parts[1]!==undefined?{detail:bounded(parts[1],14)}:{}),...(parts[2]!==undefined?{context:text(parts[2],240)}:{}),...(m.evidence?{evidence:m.evidence}:{})}];
       }
       const p=validate(data);Object.assign(patch.scene,p.scene);if(p.weather)patch.weather=p.weather;
+      for(const k of ["calls","bank","transactions"] as const)if(p[k])((patch[k]??=[]) as unknown[]).push(...p[k]!);
       patch.contacts.push(...p.contacts);patch.locations.push(...p.locations);
       for(const [section,notes] of Object.entries(p.notes)) (patch.notes[section as keyof Patch["notes"]]??=[]).push(...notes!);
       valid++;
@@ -91,6 +95,7 @@ export function patchValues(patch:Patch):Record<string,unknown> {
   const cell=(c:Change|undefined):unknown=>c?wrap(c.value,c):undefined;
   return {...Object.fromEntries(Object.entries(patch.scene).filter(([,v])=>v).map(([k,v])=>[k,cell(v)])),...(patch.weather?{weather:cell(patch.weather)}:{}),
     ...(patch.contacts.length?{contacts:patch.contacts.map(c=>({name:c.name,...Object.fromEntries(Object.entries(c.fields).filter(([,v])=>v).map(([k,v])=>[k,cell(v)]))}))}:{}),
+    ...Object.fromEntries(["calls","bank","transactions"].filter(k=>patch[k as "calls"]?.length).map(k=>[k,patch[k as "calls"]])),
     ...(patch.locations.length?{locations:patch.locations}:{}),...patch.notes};
 }
 /** Legacy values remain readable; placeholders never replace confirmed AI facts. */
