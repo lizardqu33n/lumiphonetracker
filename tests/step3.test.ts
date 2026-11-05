@@ -67,18 +67,18 @@ describe("expanded schema and state", () => {
     expect(renderMacro("phone_scene", doc)).not.toContain("calm");
   });
   test("AI-populated contact fields accept later story changes without a quote", () => {
-    const rows = [row(0, { contacts: [{ name: "Ada", mood: "calm" }] }), row(1, { contacts: [{ name: "Ada", mood: "angry" }] })];
+    const rows = [row(0, { present: ["Ada"], contacts: [{ name: "Ada", mood: "calm" }] }), row(1, { contacts: [{ name: "Ada", mood: "angry" }] })];
     expect(run(rows).state.contacts.find(c => c.name === "Ada")?.fields.mood?.value).toBe("angry");
     rows[1] = row(1, { contacts: [{ name: "Ada", mood: { value: "angry", evidence: "Ada becomes angry." } }] }, "Ada becomes angry.");
     expect(run(rows).state.contacts.find(c => c.name === "Ada")?.fields.mood?.value).toBe("angry");
   });
   test("complete attire replacement can move an item from Worn to Removed", () => {
-    const result = run([row(0, { contacts: [{ name: "Ada", attire: { worn: ["blue wool coat"], removed: [] } }] }),
+    const result = run([row(0, { present: ["Ada"], contacts: [{ name: "Ada", attire: { worn: ["blue wool coat"], removed: [] } }] }),
       row(1, { contacts: [{ name: "Ada", attire: { value: { worn: [], removed: ["blue wool coat"] }, evidence: "Ada removes the blue wool coat." } }] }, "Ada removes the blue wool coat.")]);
     expect(result.state.contacts.find(c => c.name === "Ada")?.fields.attire?.value).toEqual({ worn: [], removed: ["blue wool coat"] });
   });
   test("inference off, explicit marker on, never re-infer a populated field", () => {
-    const rows = [row(0, { contacts: [{ name: "Ada", physical: { value: "scarred left hand", inferred: true } }] })];
+    const rows = [row(0, { present: ["Ada"], contacts: [{ name: "Ada", physical: { value: "scarred left hand", inferred: true } }] })];
     expect(run(rows).state.contacts.find(c => c.name === "Ada")?.fields.physical).toBeUndefined();
     const doc = emptyDocument("a"); doc.settings.inferMissing = true;
     const inferred = run(rows, doc).state.contacts.find(c => c.name === "Ada")?.fields.physical;
@@ -93,13 +93,13 @@ describe("expanded schema and state", () => {
   });
   test("case-insensitive place merging, current and three other relevant places", () => {
     const doc = run([row(0, { location: "Cafe", locations: ["Cafe", "Road", "Inn", "Park", "Tower"].map(name => ({ name, description: name })) }, "Cafe Road Inn Park Tower"),
-      row(1, { locations: [{ name: " cafe ", description: "updated" }] })]);
-    expect(doc.state.locations.length).toBe(5); expect(doc.state.locations[0].description).toBe("updated");
+      row(1, { locations: [{ name: " road ", description: "updated" }] })]);
+    expect(doc.state.locations.length).toBe(4); expect(doc.state.locations[0].description).toBe("updated");
     expect(renderMacro("phone_locations", doc).split("\n").length).toBe(4);
   });
   test("30 contact/place caps reject additions and never prune entries", () => {
     const names = Array.from({ length: 32 }, (_, i) => `Person${i}`);
-    const doc = run([row(0, { contacts: names.map(name => ({ name, roles: ["friend"] })), locations: names.map(name => ({ name })) }, names.join(" "))]);
+    const doc = run([row(0, { present: names, contacts: names.map(name => ({ name, roles: ["friend"] })), locations: names.map(name => ({ name })) }, names.join(" "))]);
     expect(doc.state.contacts.length).toBe(30); expect(doc.state.locations.length).toBe(30);
     expect(doc.state.notices.some(n => n.startsWith("Contacts is full"))).toBe(true);
     expect(doc.state.notices.some(n => n.startsWith("Locations is full"))).toBe(true);
@@ -134,7 +134,7 @@ describe("user corrections and story log", () => {
   });
   test("user-edited contact still needs quoted evidence after normal AI fields become quote-free", () => {
     const doc = emptyDocument("a"); doc.edits.push(edit("contact", { name: "Ada", value: { physical: "bandaged hand" } }));
-    const rows = [row(0, { contacts: [{ name: "Ada", physical: "unhurt" }] }), row(1, { contacts: [{ name: "Ada", physical: "healed hand" }] })];
+    const rows = [row(0, { present: ["Ada"], contacts: [{ name: "Ada", physical: "unhurt" }] }), row(1, { contacts: [{ name: "Ada", physical: "healed hand" }] })];
     expect(run(rows, doc).state.contacts.find(c => c.name === "Ada")?.fields.physical?.value).toBe("bandaged hand");
     rows[1] = row(1, { contacts: [{ name: "Ada", physical: { value: "healed hand", evidence: "Ada shows her healed hand." } }] }, "Ada shows her healed hand.");
     expect(run(rows, doc).state.contacts.find(c => c.name === "Ada")?.fields.physical?.value).toBe("healed hand");
@@ -214,7 +214,7 @@ describe("macros and persistent isolation", () => {
     for (const key of SWITCHES) doc.settings.enabled[key] = false;
     for (const name of MACRO_NAMES) expect(renderMacro(name, doc)).toBe("");
     doc.settings.enabled["scene.time"] = true;
-    const format = renderMacro("phone_format", doc); expect(format).toContain('time="value"');
+    const format = renderMacro("phone_format", doc); expect(format).toContain('time: known time');
     expect(format).not.toContain("Cafe"); expect(format).not.toContain('"mood":'); expect(format).not.toContain("phone-text");
   });
   test("Helper mode emits no main tracker writing instructions and never generates", () => {
@@ -250,8 +250,8 @@ describe("macros and persistent isolation", () => {
     for(const key of SWITCHES)doc.settings.enabled[key]=false;
     doc.settings.enabled.weather=true;
     const text=renderMacro("phone_format",doc);
-    expect(text).toContain('Fields: weather="value"');
-    expect(text).not.toContain('location={');expect(text).not.toContain('contacts=[');expect(text).not.toContain('Actual story texts only');
+    expect(text).toContain('weather: known weather');
+    expect(text).not.toContain('location={');expect(text).not.toContain('contacts=[');expect(text).not.toContain('Actual sent texts only');
     doc.settings.source="helper";
     expect(renderMacro("phone_format",doc)).toContain("Do not write a phone-state block");
     expect(renderMacro("phone_format",doc)).not.toContain("End each reply with");
@@ -275,7 +275,7 @@ describe("macros and persistent isolation", () => {
     await handler(ctx);expect(warnings.at(-1)).toBe("Lumi Phone Tracker: phone_format empty: all items off.");
     doc.settings.source="helper";await handler(ctx);expect(warnings.at(-1)).toBe("Lumi Phone Tracker: phone_format empty: Helper AI mode.");
     doc.settings.enabled.messages=true;
-    const helper=await handler(ctx);expect(helper.text).toContain("Actual story texts only");expect(helper.text).not.toContain("End each reply with");
+    const helper=await handler(ctx);expect(helper.text).toContain("Actual sent texts only");expect(helper.text).not.toContain("End each reply with");
     const count=loads;expect(await handler({...ctx,template:"{{unrelated}}"})).toBeUndefined();
     expect(await handler({...ctx,env:{...ctx.env,dynamicMacros:{phone_format:"Preset override"}}})).toBeUndefined();expect(loads).toBe(count);
   });
@@ -346,7 +346,7 @@ describe("macros and persistent isolation", () => {
     expect((await new PhoneStore(f.io).preview("a", "owner-a")).state.notices).toEqual([]);
   });
   test("turning inference off preserves previously admitted inferred values", async () => {
-    const f = fixture(); f.histories.set("a", [row(0, { contacts: [{ name: "Ada", physical: { value: "scarred hand", inferred: true } }] })]);
+    const f = fixture(); f.histories.set("a", [row(0, { present: ["Ada"], contacts: [{ name: "Ada", physical: { value: "scarred hand", inferred: true } }] })]);
     let doc = await f.store.sync("owner-a", "a");
     doc = await f.store.update("owner-a", "a", doc.revision, { settings: { inferMissing: true } });
     expect(doc.state.contacts.find(c => c.name === "Ada")?.fields.physical?.inferred).toBe(true);

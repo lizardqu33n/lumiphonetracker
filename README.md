@@ -2,7 +2,9 @@
 
 A small phone for keeping track of story facts. Each chat has its own Scene, Weather, Locations, Notes, Contacts and Messages. Settings controls what is shown and what the AI is asked to track.
 
-**Version 0.6.4: all six build steps are delivered.** Source, manifest, built frontend/backend, tests and guides are included. The new Helper AI has been tested with mocks, not a real paid connection.
+**Version 0.7.0: all six build steps are delivered.** Source, manifest, built frontend/backend, tests and guides are included. The new Helper AI has been tested with mocks, not a real paid connection.
+
+Part 1 adds compact shorthand with old saved JSON support. Part 2 (Helper failures and Refresh tracker) is pending. See [block format](docs/BLOCK-FORMAT.md), [token report](docs/TOKEN-REPORT.md) and [user-docs review](docs/USER-DOCS-REVIEW.md).
 
 ## Start here
 
@@ -18,7 +20,7 @@ The macro supplies enabled continuity and the right writing instructions for the
 
 Main AI is the default and uses the normal story reply. It appends a compact hidden block for changed facts. The extension hides tags from displayed story text, keeps the original saved message intact, and rebuilds chat-specific information. Macros provide short continuity; old tags are trimmed from outgoing history according to Advanced settings.
 
-Optional Helper AI uses one of your saved connections. It reads only the last 1-10 cleaned story messages (default 3) plus compact tracker data, and returns validated JSON changes. It never creates texts or rewrites the story. Requests may cost money depending on the chosen model. No extra model request is made in Main AI mode. No API keys are entered or stored by this extension.
+Optional Helper AI uses one of your saved connections. It reads only the last 1-10 cleaned story messages (default 3) plus compact tracker data, and returns validated shorthand changes. It never creates texts or rewrites the story. Requests may cost money depending on the chosen model. No extra model request is made in Main AI mode. No API keys are entered or stored by this extension.
 
 Texts actually sent in the story appear in Messages, grouped by sender. Read badges are per user/chat. Add to draft appends an escaped reply to your normal input without sending or replacing existing prose; it is filed only after the saved user message is sent. AI player texts are OFF by default.
 

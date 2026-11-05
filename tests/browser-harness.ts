@@ -91,16 +91,18 @@ const ctx = {
   events: { on: (event: string, fn: (p: unknown) => void) => { const set = events.get(event) ?? new Set(); set.add(fn); events.set(event, set); return () => set.delete(fn); } },
 };
 const block = (data: Record<string, unknown>) => `<phone-state>\n${Object.entries(data).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join("\n")}\n</phone-state>`;
-const fixtureRow = (chat: string): StoryRow => ({ id: `${chat}-0`, chat_id: chat, index_in_chat: 0, swipe_id: 0, role: "assistant",
-  content: "Ada and Player wait at the Lantern Cafe in Northport. Bea stays at the Station. The Bridge is closed. Ada promises a meeting at dusk." + block({
+const fixtureRow = (chat: string): StoryRow => ({ id: `${chat}-0`, chat_id: chat, index_in_chat: 1, swipe_id: 0, role: "assistant",
+  content: "Ada and Player wait at the Lantern Cafe in Northport. Bea stays at the Station. The Bridge is closed. Ada promises a meeting at dusk. Ivo is only mentioned, offscreen." + block({
     location: { name: chat === "a" ? "Lantern Cafe" : "Other chat", wider: ["Northport", "Lakes Province"] }, time: "Late afternoon", date: "Monday",
     present: ["Ada", "Player"], weather: "Soft rain outside",
     contacts: [{ name: "Ada", roles: ["Guide", "Friend"], physical: "A bandaged right hand", mood: "Calm", position: "Facing the door, beside the table", attire: { worn: ["Blue wool coat", "Brown leather boots"], removed: [] } },
-      { name: "Bea", roles: ["Station keeper"], physical: "Unhurt" }],
+      { name: "Bea", roles: ["Station keeper"], physical: "Unhurt" }, { name: "Ivo", mood: "Calm" }],
     locations: [{ name: "Lantern Cafe", description: "A warm room beside the station.", relation: "Across from the Station" }, { name: "Station", description: "Bea is waiting here." }],
     people: [{ name: "Bea", detail: "Station keeper", context: "Returns for the departure" }], items: [{ name: "Map", detail: "Held by Ada", context: "Shows the safe path" }],
     rules: [{ name: "Bridge", detail: "Do not cross", context: "The keeper's order" }], plots: [{ name: "Meeting", detail: "Ada and Player", context: "At dusk" }],
   }) });
+const fixturePast = (chat:string):StoryRow=>({id:`${chat}-past`,chat_id:chat,index_in_chat:0,swipe_id:0,role:"assistant",
+  content:"Bea and Player meet at the Station. Lantern Cafe is their next meeting place.<phone-state>\nloc: Station\npresent: Bea; Player\nc: Bea | roles=Station keeper | phys=Unhurt\np: Lantern Cafe | Meeting place | East of Station\n</phone-state>"});
 function start() { cleanup = setup(ctx as never); }
 const api = {
   async seed(kind: "empty" | "story" = "story") {
@@ -109,7 +111,7 @@ const api = {
     composerState = { mounted:true, chatId:"a", text:"" }; focusCount = 0; sendCalls = 0; ctx.host.capabilities["composer-v1"] = 1;
     failAppearanceSave = false; failWidget = false;
     if (new URL(location.href).searchParams.has("stale-appearance")) prefs = { ...defaultPreferences(), css: ".lpt-root { display: none !important; }" };
-    if (kind === "story") { histories.set("a", [fixtureRow("a")]); histories.set("b", [fixtureRow("b")]); }
+    if (kind === "story") { histories.set("a", [fixturePast("a"),fixtureRow("a")]); histories.set("b", [fixturePast("b"),fixtureRow("b")]); }
     start();
   },
   reload() { cleanup?.(); start(); },

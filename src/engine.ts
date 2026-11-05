@@ -6,6 +6,7 @@ import { CONTACT_KEYS, SCENE_KEYS, SECTIONS, emptyPatch, emptyState, normalize,
 import type { HistoryMessage } from "./history";
 import { readSnapshot } from "./history";
 import { isRecord } from "./shared";
+import { usable, placeholder } from "./shorthand";
 import { transformTags } from "./tags";
 
 export type StoryRow = HistoryMessage & { name?: string };
@@ -34,7 +35,7 @@ function evidenceNamesValue(update: Change, old: Cell): boolean {
 }
 function setCell(old: Cell | undefined, update: Change | undefined, at: Origin, prose: string,
   infer: boolean): Cell | undefined {
-  if (!update) return old;
+  if (!update || !usable(update.value)) return old;
   if (old && same(old.value, update.value)) return old;
   if (update.inferred && (!infer || old)) return old;
   if (old && old.by === "user" &&
@@ -123,7 +124,13 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
       // For a malformed edit to the same saved source, retain only its rejected
       // top-level fields. Valid lines still replace their old contributions.
       if (parsed.patch && prior && row.role === "assistant") for (const key of parsed.invalidFields) {
-        if (SCENE_KEYS.includes(key as never)) patch.scene[key as typeof SCENE_KEYS[number]] = prior.patch.scene[key as typeof SCENE_KEYS[number]];
+        if (key.includes(":")) {
+          const [section,...parts]=key.split(":"); const name=parts.join(":");
+          if(section==="contacts") { const old=prior.patch.contacts.find(c=>normalize(c.name)===name);if(old&&!patch.contacts.some(c=>normalize(c.name)===name))patch.contacts.push(old); }
+          else if(section==="locations") { const old=prior.patch.locations.find(c=>normalize(c.name)===name);if(old&&!patch.locations.some(c=>normalize(c.name)===name))patch.locations.push(old); }
+          else if(SECTIONS.includes(section as Section)) { const k=section as Section;const old=prior.patch.notes[k]?.find(n=>normalize(n.name)===name);if(old&&!(patch.notes[k]??=[]).some(n=>normalize(n.name)===name))patch.notes[k]!.push(old); }
+        }
+        else if (SCENE_KEYS.includes(key as never)) patch.scene[key as typeof SCENE_KEYS[number]] = prior.patch.scene[key as typeof SCENE_KEYS[number]];
         else if (key === "weather") patch.weather = prior.patch.weather;
         else if (key === "contacts") patch.contacts = prior.patch.contacts;
         else if (key === "locations") patch.locations = prior.patch.locations;
@@ -178,7 +185,8 @@ function applyAI(doc: Document, patch: Patch, at: Origin, prose: string, players
     let contact = state.contacts.find(c => normalize(c.name) === key);
     if (!contact) {
       if (state.contacts.length >= 30) { notice(state, "Contacts is full (30/30). Delete a contact to make room."); doc.rejected.push(rejectedKey); continue; }
-      if (!prose.toLocaleLowerCase().includes(update.name.toLocaleLowerCase()) && !players.has(key)) continue;
+      if (!namesPresent(state).some(name=>normalize(name)===key) || placeholder(update.name)) continue;
+      if (!Object.values(update.fields).some(c=>c&&usable(c.value))) continue;
       contact = { name: update.name, player: players.has(key), fields: {} }; state.contacts.push(contact);
     }
     contact.player = players.has(key);
@@ -202,11 +210,15 @@ function applyAI(doc: Document, patch: Patch, at: Origin, prose: string, players
   for (const contact of state.contacts) if (namesPresent(state).map(normalize).includes(normalize(contact.name))) {
     const place = nameOfPlace(state); if (place) contact.lastSeen = place;
   }
-  for (const update of patch.locations) {
+  for (const rawUpdate of patch.locations) {
+    const update={...rawUpdate,description:rawUpdate.description?.trim()?rawUpdate.description:undefined,relation:rawUpdate.relation?.trim()?rawUpdate.relation:undefined};
     const rejectedKey = JSON.stringify([at.id, at.variant, "locations", update]);
     if (doc.rejected.includes(rejectedKey)) continue;
     const key = normalize(update.name); if (tombstones.has(`location/${key}`)) continue;
     const old = state.locations.find(p => normalize(p.name) === key);
+    if (placeholder(update.name) || (update.description!==undefined && (!update.description.trim()||placeholder(update.description))) ||
+      (update.relation!==undefined && (!update.relation.trim()||placeholder(update.relation)))) continue;
+    if (!old && key===normalize(nameOfPlace(state))) continue;
     if (!old && state.locations.length >= 30) { notice(state, "Locations is full (30/30). Delete a place to make room."); doc.rejected.push(rejectedKey); continue; }
     if (!old && !prose.toLocaleLowerCase().includes(update.name.toLocaleLowerCase())) continue;
     if (old?.by === "user" && (at.index <= old.at.index || !evidenceValid(update.evidence, prose) ||
@@ -215,10 +227,12 @@ function applyAI(doc: Document, patch: Patch, at: Origin, prose: string, players
       relation: update.relation ?? old?.relation ?? "", at, by: "ai" as const, updated: !!old };
     if (old) Object.assign(old, value); else state.locations.push(value);
   }
-  for (const section of SECTIONS.filter(s => s !== "misc")) for (const update of patch.notes[section] ?? []) {
+  for (const section of SECTIONS.filter(s => s !== "misc")) for (const rawUpdate of patch.notes[section] ?? []) {
+    const update={...rawUpdate,detail:rawUpdate.detail?.trim()?rawUpdate.detail:undefined,context:rawUpdate.context?.trim()?rawUpdate.context:undefined};
     const rejectedKey = JSON.stringify([at.id, at.variant, section, update]);
     if (doc.rejected.includes(rejectedKey)) continue;
     const key = normalize(update.name); if (tombstones.has(`note/${section}/${key}`)) continue;
+    if (placeholder(update.name) || [update.detail,update.context].some(v=>v!==undefined&&(!v.trim()||placeholder(v)))) continue;
     const notes = state.notes[section]; const old = notes.find(n => normalize(n.name) === key);
     if (!old && !update.resolved && notes.filter(n => !n.resolved).length >= doc.settings.notesPerSection && !knownNotes.has(`${section}/${key}`)) {
       notice(state, `${section[0].toUpperCase() + section.slice(1)} is full (${notes.filter(n => !n.resolved).length}/${doc.settings.notesPerSection}). Delete a note to make room.`);

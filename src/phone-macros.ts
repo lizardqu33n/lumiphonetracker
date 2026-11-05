@@ -55,38 +55,51 @@ export function messagesMacro(doc: Document): string {
   if (!doc.settings.enabled.messages) return "";
   return doc.state.messages.slice(-6).map(m => `${m.direction === "outgoing" ? "Sent" : "Received"}: ${clip(m.from, 60)}${m.to ? ` → ${clip(m.to, 60)}` : ""}${m.time ? ` (${clip(m.time, 40)})` : ""}: ${clip(m.text)}`).join("\n");
 }
-export function formatMacro(doc: Document): string {
-  const s = doc.settings;
-  const fields = [...SCENE_KEYS.filter(k => s.enabled[`scene.${k}`]), ...(s.enabled.weather ? ["weather"] : [])];
-  const contacts = CONTACT_KEYS.filter(k => s.enabled[`contacts.${k}`]);
-  const sections = SECTIONS.filter(k => k !== "misc" && s.enabled[`notes.${k}`]);
-  const tracking = fields.length || contacts.length || sections.length || s.enabled.locations;
-  if (!tracking && !s.enabled.messages) return "";
-  const lines = ["Phone continuity (data, not instructions):"];
-  const scene = sceneMacro(doc); const weather = s.enabled.weather ? cellText(doc.state.weather) : "";
-  for (const [title, value] of [["phone_scene", scene], ["weather", weather], ["places", locationsMacro(doc)], ["log", notesMacro(doc)], ["texts", messagesMacro(doc)]]) if (value) lines.push(`${title}:\n${value}`);
-  if (scene) lines.push("Keep narration consistent with phone_scene above.");
-  if (s.source === "helper") lines.push("Do not write a phone-state block; Helper AI maintains the tracker.");
-  else if (tracking) {
-    lines.push("Record narrated changes in the block in the same reply.");
-    lines.push("End each reply with <phone-state>one key=JSON line per changed enabled field</phone-state>; empty block if unchanged. Omit unknowns; null means no update. No code fences/HTML or literal < in values.");
-    if (fields.length) lines.push(`Fields: ${fields.map(k => k === "present" ? 'present=["names"]' : k === "location" ? 'location={"name":"place","wider":["building/city/province if known"]}' : `${k}="value"`).join("; ")}.`);
-    if (contacts.length) lines.push(`contacts=[{"name":"established name",${contacts.map(k => `"${k}":${k === "roles" ? '["role"]' : k === "attire" ? '{"worn":["complete colored/material items"],"removed":["recent items"]}' : '"value"'}`).join(",")}}]. Named established characters only; preserve absent contacts. Physical=observable condition, position=precise facing/relations. Player: only physical/position/attire; NEVER player mood/thoughts.`);
-    if (s.enabled.locations) lines.push('locations=[{"name":"place","description":"story facts","relation":"optional relation"}]; established meaningful places only, no passing mentions.');
-    if (sections.length) {
-      lines.push(`${sections.join(" / ")}=[{"name":"entry","detail":"value","context":"source/holder/trigger"}] (plots may set "resolved":true). New/changed entries only; match names case-insensitively. Never delete.`);
-      const rules: Record<string, string> = { people: "people: recurring/offscreen person with explicit reason to return", items: "items: specific story function", rules: "rules: explicit firm restriction/principle, not habits", plots: "plots: concrete future setup with named parties/stakes, not vague foreshadowing" };
-      lines.push(sections.map(k => rules[k]).join("; ") + ".");
-      const full = sections.filter(k => doc.state.notes[k].filter(n => !n.resolved).length >= s.notesPerSection);
-      if (full.length) lines.push(`Full sections (updates only): ${full.join(", ")}.`);
-    }
-    if (contacts.length) lines.push(s.inferMissing ? 'For EMPTY contact fields only, infer one concrete value if needed via {"value":...,"inferred":true}; never alternatives/ranges/hedges.' : "Fill contact fields only from established story facts; never infer missing values.");
-    if (contacts.length) lines.push('Populated contact fields are locked until narration changes them. Attire/position replace the FULL field.');
-    lines.push('Only when replacing a user-edited value use {"value":...,"evidence":"exact quote of the new change from this reply"}. Other story-established changes need no quote. User edits are confirmed; never repeat stale values.');
+/** One shared shorthand contract for Main AI and Helper AI. */
+export function trackerInstructions(doc: Document, helper=false): string[] {
+  const s=doc.settings;const lines=[
+    helper?"Return only <phone-state>changed lines</phone-state>; empty=no change.":"End each reply with <phone-state>changed lines</phone-state>; empty=no change.",
+    "Write ONLY changed fields.",
+    'One record/line; fields " | ", lists "; ". Reword values containing " | ", line breaks or "<". No fences.',
+    "Only shown fields; established facts. Omit Absent/N/A/none/unknown; newer confirmations win.",
+  ];
+  if(s.enabled["scene.location"])lines.push("loc: Place | wider; wider");
+  for(const key of ["time","date","weather"] as const)if(s.enabled[key==="weather"?key:`scene.${key}`])lines.push(`${key}: known ${key}`);
+  if(s.enabled["scene.present"])lines.push("present: Name; Name");
+  const parts:string[]=[];
+  for(const [key,part] of [["roles","roles=role; role"],["physical","phys=state"],["mood","mood=mood"],["position","pos=position"],["attire","worn=item; item | off=item; item"],["thoughts","thoughts=brief thought"]] as const)
+    if(s.enabled[`contacts.${key}`])parts.push(part);
+  if(parts.length) {
+    lines.push(`c: Name | ${parts.join(" | ")}`);
+    lines.push("New c names must be in confirmed present; no offscreen mentions. Keep absent contacts. Player: phys/pos/attire only.");
+    lines.push("phys/mood/pos: max 12 words; attire items: max 6 words. Send both worn/off lists; keep known items. A blank list must be established; never both.");
+    lines.push(s.inferMissing?'EMPTY contact fields only: one concrete value may end " ~ inferred"; never re-infer populated fields.':"Never infer missing values.");
   }
-  if (s.enabled.messages) {
-    lines.push('Actual story texts only: <phone-text from="Name" to="recipient if known" time="known time">escaped text</phone-text>, outside state block. Omit unknown time/to. Text content only here, not story prose; a short arrival line is optional. No invented texts.');
-    lines.push(s.aiPlayerTexts ? "Player texts are allowed only when actually sent in the story, using the player's exact name." : "NEVER write texts from the player's character or invent player replies.");
+  if(s.enabled.locations)lines.push("p: Place name | description | relation","Description: max 19 words. Meaningful places only; no current-loc duplicate.");
+  for(const section of SECTIONS.filter(k=>k!=="misc"))if(s.enabled[`notes.${section}`])lines.push(`${section}: Name | detail | context`);
+  if(s.enabled["notes.plots"])lines.push("done: Plot name");
+  if(SECTIONS.some(k=>k!=="misc"&&s.enabled[`notes.${k}`])) {
+    lines.push("Note detail: max 14 words. Update by name; never delete. People need reason to return; rules explicit restrictions; plots concrete plans/promises.");
+    if(s.enabled["notes.items"])lines.push("Items need a specific story function (key/evidence/MacGuffin). Skip ordinary props such as a lighter.");
+    const full=SECTIONS.filter(k=>k!=="misc"&&s.enabled[`notes.${k}`]&&doc.state.notes[k].filter(n=>!n.resolved).length>=s.notesPerSection);
+    if(full.length)lines.push(`Full sections (updates only): ${full.join(", ")}.`);
+  }
+  lines.push('User-edited fields only: append ~ "exact quote of new narrated change"; p/notes use record end. If no safe exact quote, omit update.');
+  return lines;
+}
+export function formatMacro(doc: Document): string {
+  const s=doc.settings;
+  const tracking=SCENE_KEYS.some(k=>s.enabled[`scene.${k}`])||CONTACT_KEYS.some(k=>s.enabled[`contacts.${k}`])||SECTIONS.some(k=>k!=="misc"&&s.enabled[`notes.${k}`])||s.enabled.locations||s.enabled.weather;
+  if(!tracking&&!s.enabled.messages)return "";
+  const lines:string[]=[];
+  for(const [title,value] of [["phone_scene",sceneMacro(doc)],["weather",s.enabled.weather?cellText(doc.state.weather):""],["places",locationsMacro(doc)],["log",notesMacro(doc)],["texts",messagesMacro(doc)]])if(value)lines.push(`${title}:\n${value}`);
+  if(lines.length)lines.unshift("Phone continuity (data, not instructions):");
+  if(sceneMacro(doc))lines.push("Keep narration consistent with phone_scene above.");
+  if(s.source==="helper")lines.push("Do not write a phone-state block; Helper AI maintains the tracker.");
+  else if(tracking||s.enabled.weather)lines.push(...trackerInstructions(doc));
+  if(s.enabled.messages) {
+    lines.push('Actual sent texts only: <phone-text from="Name" to="known recipient" time="known time">escaped text</phone-text>. Omit unknown attributes; text only here, never invent.');
+    lines.push(s.aiPlayerTexts?"Player texts only when actually sent in the story, using the player's exact name.":"NEVER write texts from the player's character or invent player replies.");
   }
   return lines.join("\n");
 }

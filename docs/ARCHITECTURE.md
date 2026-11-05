@@ -1,4 +1,6 @@
-# Current release: Step 6 / 0.6.4
+# Current release: Part 1 / 0.7.0
+
+Main AI and Helper AI share shorthand parsing into the existing validated journal schema. Old key=JSON messages remain readable. See [BLOCK-FORMAT.md](BLOCK-FORMAT.md), [TOKEN-REPORT.md](TOKEN-REPORT.md) and [USER-DOCS-REVIEW.md](USER-DOCS-REVIEW.md). No new host calls or identity routes are added. Part 2 remains pending.
 
 Native preset assembly can bypass macro interceptors. Its phone macros now resolve in the pull handler using the host's per-invocation env.extra.userId and env.chat.id, checking agreement with any top-level IDs. These exact compatibility fields are verified in official host source; the minimal pull DTO does not guarantee them. The macro interceptor still handles eligible non-preset paths. No active-chat lookup or cross-user cache is used. See [TESTING.md](../TESTING.md) for the corrected regression and compatibility limit.
 

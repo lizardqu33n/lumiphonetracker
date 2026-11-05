@@ -10,7 +10,7 @@ function fixture() {
   const saved=new Map<string,string>();const rows=new Map<string,StoryRow[]>([["a",[row(0)]],["b",[{...row(0,"Other story."),chat_id:"b"}]]]);
   const io:PhoneIO={authorize:async(c,u)=>u===`owner-${c}`,read:async c=>saved.get(c)??"",write:async(c,s)=>{saved.set(c,s);},history:async c=>structuredClone(rows.get(c)??[]),player:async()=>"Player"};
   const store=new PhoneStore(io);const calls:Parameters<HelperIO["generate"]>[0][]=[];const logs:string[]=[];const changes:string[]=[];
-  let profiles=[{id:"small",name:"Small saved connection",model:"chosen-small-model"}];let allowed=true;let output='{"weather":"Rain"}';let responder:HelperIO["generate"]|null=null;
+  let profiles=[{id:"small",name:"Small saved connection",model:"chosen-small-model"}];let allowed=true;let output='weather: Rain';let responder:HelperIO["generate"]|null=null;
   const helperIO:HelperIO={allowed:()=>allowed,connections:async()=>structuredClone(profiles),generate:async input=>{calls.push(input);return responder?responder(input):{content:output,finish_reason:"stop"};},changed:(_,c)=>{changes.push(c);},warn:s=>logs.push(s)};
   const helper=new HelperAI(store,helperIO);
   return {store,io,helper,helperIO,saved,rows,calls,logs,changes,profiles:(v:typeof profiles)=>{profiles=v;},allow:(v:boolean)=>{allowed=v;},output:(v:string)=>{output=v;},respond:(v:HelperIO["generate"])=>{responder=v;},
@@ -37,7 +37,7 @@ describe("Step 6 Helper AI",()=>{
     await f.enable();await f.helper.updateNow("owner-a","a");expect(f.calls.length).toBe(1);
     const input=f.calls[0];expect(input.connection_id).toBe("small");expect(input.userId).toBe("owner-a");expect(input.messages?.length).toBe(2);
     const data=JSON.parse(String(input.messages![1].content));expect(data.recent_messages.map((r:{text:string})=>r.text)).toEqual(["Story 2.","Story 3.","Story 4."]);
-    expect(data.current_tracker).toContain("Night");expect(JSON.stringify(input.messages)).not.toContain("Hidden text");expect(JSON.stringify(input.messages)).not.toContain("<phone-state>");expect(JSON.stringify(input.messages)).not.toContain("<phone-text");
+    expect(data.current_tracker).toContain("Night");expect(JSON.stringify(input.messages)).not.toContain("Hidden text");expect(JSON.stringify(data)).not.toContain("<phone-state>");expect(JSON.stringify(data)).not.toContain("<phone-text");
     const settings=JSON.parse(f.saved.get("a")!).settings;expect(settings.connection_id).toBe("small");expect(JSON.stringify(settings)).not.toContain("chosen-small-model");expect(JSON.stringify(settings)).not.toContain("api_key");
   });
   test("missing connection falls back to Main AI with the exact notice and no paid request",async()=>{
@@ -57,7 +57,7 @@ describe("Step 6 Helper AI",()=>{
     await f.helper.updateNow("owner-a","a");const doc=await new PhoneStore(f.io).preview("a", "owner-a");
     expect(doc.state.scene.location?.value).toEqual({name:"Station",wider:[]});expect(doc.state.contacts.find(c=>c.name==="Ada")?.fields.attire?.value).toEqual({worn:["red coat"],removed:[]});
     expect(doc.state.contacts.find(c=>c.name==="Player")?.fields.mood).toBeUndefined();expect(doc.state.contacts.find(c=>c.name==="Player")?.fields.thoughts).toBeUndefined();
-    expect(doc.state.locations[0].name).toBe("Station");expect(doc.state.notes.rules[0].detail).toBe("Keep locked");expect(doc.state.messages).toEqual([]);expect(doc.state.weather).toBeUndefined();
+    expect(doc.state.locations).toEqual([]);expect(doc.state.notes.rules[0].detail).toBe("Keep locked");expect(doc.state.messages).toEqual([]);expect(doc.state.weather).toBeUndefined();
     expect(formatMacro(doc)).toContain("Do not write a phone-state block");expect(formatMacro(doc)).not.toContain("End each reply with");
   });
   test("late response remains in its requesting chat and cannot overwrite a later user edit",async()=>{

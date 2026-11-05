@@ -1,3 +1,4 @@
+import { parseShorthand, usablePatch } from "./shorthand";
 import { isRecord } from "./shared";
 import { CONTACT_KEYS, SCENE_KEYS, SECTIONS, emptyPatch, type Change, type Patch, type NotePatch, type Value } from "./model";
 import { decodeEntities, parseAttributes, scanTags, transformTags } from "./tags";
@@ -95,6 +96,7 @@ export function parseExpanded(body: string): Patch | null {
 /** Independent top-level lines; nested objects/arrays remain atomic. */
 function parseLines(body: string): { patch: Patch | null; invalidFields: string[]; issues: ParseIssue[] } {
   if (body.length > 64000) return { patch: null, invalidFields: [], issues: [{ line: null, field: "block", reason: "block too large" }] };
+  if (/^\s*(?:loc|time|date|weather|present|c|p|people|items|rules|plots|done):/m.test(body)) return parseShorthand(decodeEntities(body), validateExpanded);
   const groups = new Map<string, { value: string; line: number }[]>();
   const allowed = [...SCENE_KEYS, "weather", "contacts", "locations", ...SECTIONS.filter(k => k !== "misc")];
   const invalidFields = new Set<string>();
@@ -123,7 +125,7 @@ function parseLines(body: string): { patch: Patch | null; invalidFields: string[
       invalidFields.add(key); issues.push({ line: values[0].line, field: safeField(key), reason: "invalid JSON" }); continue;
     }
     try {
-      validateExpanded({ [key]: value });
+      if (!usablePatch(validateExpanded({ [key]: value }))) throw new Error("Placeholder update");
       accepted[key] = value; valid++;
     } catch { invalidFields.add(key); issues.push({ line: values[0].line, field: safeField(key), reason: "invalid value or structure" }); }
   }

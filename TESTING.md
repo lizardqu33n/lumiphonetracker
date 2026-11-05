@@ -1,6 +1,22 @@
-# Verification report - 0.6.4
+# Verification report - 0.7.0 (Part 1)
 
-Checked November 4, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **This test environment did not have a real Lumiverse install or a real model connection. No paid model request was made.**
+Checked November 4, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **No live Lumiverse session or real model connection was used. A local Lumiverse build and its user-docs were inspected; that is not live-host verification. No paid model request was made.**
+
+## Part 1: shorthand and compliance (0.7.0)
+
+Main AI and Helper AI are asked for the same compact shorthand. It maps into the existing validated journal schema, preserving saved JSON blocks and earlier Helper journals. No new Spindle call, permission, identity source, UI setting or control is introduced. The strict operator-scoped backend mock and existing user/chat isolation tests still pass. Actual native server context remains subject to the earlier compatibility limit.
+
+New tests cover every shorthand record; old JSON/data equivalence and long legacy values; independent valid-line acceptance; per-identity duplicate rejection; placeholders and empty attire; 12/19/14/6-word boundaries; malformed separators, quotes and inference; one-pass entity decoding; incomplete/multiple/oversized blocks; hiding; confirmed-presence admission; current-place deduplication; evidence and user edits; opt-in inference; same-source partial edits and alternate swipes; literal macro safety; Helper shorthand parsing and forbidden narration/texts. The default Helper fixture now returns shorthand, exercising request, validation, journal persistence and rebuild without a provider. Older JSON response fixtures remain as compatibility tests.
+
+Length limits apply to NEW shorthand values. Legacy JSON keeps its character-based limits so old long facts remain readable. New compliance admission rules still apply on replay. Invalid shorthand records are atomic; valid records for other names still update. Legacy arrays remain atomic. Syntax diagnostics retain safe field names/line numbers/fixed reasons; no new phone notices are added.
+
+Contacts: new AI records require confirmed Present membership. With Present off and no matching previously confirmed presence, they are not admitted. Mere prose mentions/offscreen names do not qualify. Existing absent contacts retain known values. This is a deterministic canonical-list check, not semantic proof of physical presence. The existing player card/manual contacts remain supported. Known old invalid placeholder updates are ignored rather than overwriting facts. A new Locations entry matching the current Scene location is skipped; existing named place records may update.
+
+Key-item function, meaningful places, actual story establishment and changed-only model compliance remain prompt/model obligations; a line parser cannot prove those semantics. No balances or story figures are computed or adjusted. The user-docs review found no new API or macro-registration change; conflicts and build-version limits are recorded in [USER-DOCS-REVIEW.md](docs/USER-DOCS-REVIEW.md).
+
+The same-data [TOKEN-REPORT.md](docs/TOKEN-REPORT.md) measures complete before/after strings, including whitespace: empty-chat phone_format 2,147 to 1,680 characters; populated 2,788 to 2,364; sample block 815 to 552. Tokens are only rough character-count/4 estimates, not model-tokenizer counts. Full outputs/sample blocks are bundled separately, never inserted into a chat.
+
+**Part 2 has not started.** Existing Helper failure notices/categories, Update now button, scheduling, connection picker, user ID flow and read receipts are unchanged. Only its requested output format/parser changed for Part 1. The generic Tracker update failed notice remains pending Part 2.
 
 ## Stylesheet update
 
@@ -66,7 +82,7 @@ Sources: [macros](https://docs.lumiverse.chat/backend-api/macros/), [interceptor
 
 ## Passed in code
 
-- 113 behavioral tests, 652 assertions, zero failures, across six test files.
+- 127 behavioral tests, 750 assertions, zero failures, across seven test files.
 - Typecheck; backend/frontend builds; manifest, entry/export and bundle/source checks; packaged source/built-file matching.
 - Earlier parsing, independent valid-line acceptance, safe warning logs, partial-tag hiding, raw saved-tag retention, chronological replay, user edits, caps, notes, migration, macros, auth checks, chat isolation, swipes/regeneration/deletion and recent-tag/media transformations.
 - Messages grouping, incoming-only unread receipts, recipient-aware outgoing records, read persistence, escaped draft tags, cancellation, exact-chat composer checks and no extension Send call.
@@ -83,6 +99,7 @@ Sources: [macros](https://docs.lumiverse.chat/backend-api/macros/), [interceptor
 
 96 checks exercise actual frontend, store, read service and Helper AI controller. Host placement, events, connections, provider response and composer are substitutes.
 
+- Browser fixtures now establish Bea in an earlier shorthand scene before testing her absent card; an offscreen-only Ivo contact is not admitted. Older JSON rows remain in the same history, and no fixture data enters production bundles.
 - All seven icons/navigation, explanation dismissal, Scene/Weather edits, Contacts/player restrictions, Locations, Notes, grouped switches, safe text rendering and CSS customization.
 - Retained zero-height placement regression (old code observed at exactly 0 height), delayed mounting, late appearance responses, same-session Reset, failed storage/placement recovery and the single protected sidebar Reset/confirmation.
 - Opaque backgrounds across Home and every app, frame/content/cards/sections under translucent theme fills, plus solid dark fallback without a theme fill.
@@ -92,14 +109,16 @@ Sources: [macros](https://docs.lumiverse.chat/backend-api/macros/), [interceptor
 
 ## Not verified without a real Lumiverse install and connection
 
+- Real model compliance with shorthand, changed-only updates, evidence suffixes, short item names, word limits, scene presence and no ordinary-prop logging. No real second-user session or connection was used. Native streaming, saved-history rebuild, server macro context and final provider-prompt stripping still need live checks. Character/4 estimates are not actual provider billing/token measurements.
+
 - Native preset Dry Run and normal generation after installing 0.6.4 on the reported server; whether its Lumiverse build serializes the pull environment as the inspected source does. The user confirmed 0.6.3 and its permission, not successful 0.6.4 behavior. Server/version/runtime-specific dispatch, live simultaneous users and final provider prompt contents still need verification.
 
 - Repeating the reported failing Dry Run and normal generation on the user's install after updating. Grant/revoke/update handling for macro_interceptor; whether that host supplies userId and env.chat.id on the macro interceptor during the real preset Dry Run and all generation paths; no live payload was captured. Correct native placement of the resolved text, cache invalidation, nested/scoped macro composition and concurrent users need real-server verification. Host timeout/process isolation, optional-interceptor fallback and final provider prompt payload need real-host verification. The local strict mock proves the reported missing-ID call is fixed, not that native installation was tested.
 
 - GitHub install/update/security scanning, native permissions and revocation/regrant, restart/disable/re-enable, real host placement/styles/transforms, desktop pop-outs and actual mobile/iOS WebViews.
 - Native generation event ordering, saved-message timing, authenticated event user IDs, group/concurrent/background swipes, stopped partial replies and startup during an already-running stream. The scheduler uses documented events; it cannot observe a start event the host never delivered. Final content must match the selected saved assistant row or automatic extraction is skipped safely.
-- Real saved connection listing/removal, chosen provider/model routing, cancellation/timeouts, model pricing/usage, real JSON compliance, once-per-reply behavior through the actual host and source-chat persistence after a live chat switch.
-- No provider-specific schema mode is forced. JSON-only prompting plus strict validation is implemented; a real model may still return invalid data, which must be ignored. Model compliance with changed-only facts, exact chronology, story versus memory/lie, complete attire, no invented details/texts/player thoughts and newer-quote protection still needs live testing.
+- Real saved connection listing/removal, chosen provider/model routing, cancellation/timeouts, model pricing/usage, real shorthand compliance, once-per-reply behavior through the actual host and source-chat persistence after a live chat switch.
+- No provider-specific schema mode is forced. Shorthand-only prompting plus strict validation is implemented (older JSON responses remain a compatibility path); a real model may still return invalid data, which must be ignored. Model compliance with changed-only facts, exact chronology, story versus memory/lie, complete attire, no invented details/texts/player thoughts and newer-quote protection still needs live testing.
 - Council settings were read in documentation only. The docs expose read-only Council configuration; they do not document an extension call to run its built-in Sidecar LLM. This extension uses its separate saved-connection picker.
 - Actual composer append/focus/draft persistence, attachments, selections, user Send/edit/cancel behavior, saved user author metadata, user-tag interception/hiding and native streaming paint/cold-load behavior.
 - Real macro resolution and trusted contexts, operator/multiplayer scope, long histories/pull timeouts, simultaneous processes/tabs, and interactions with other extensions. In-process queues do not prove distributed locking across multiple workers.
@@ -108,4 +127,4 @@ Sources: [macros](https://docs.lumiverse.chat/backend-api/macros/), [interceptor
 
 The earlier real-install v0.4.1 failure was user-reported. Its layout cause was reproduced locally and retained as a regression, but this environment has not validated 0.6.4 in that install. Publishing source to GitHub does not verify native installation or make a model request.
 
-Earlier reports: [Step 5](docs/STEP-5-TESTING.md), [Step 4](docs/STEP-4-TESTING.md), [Step 3](docs/STEP-3-TESTING.md). Previous archives are preserved. All six build steps are delivered; work is paused for review.
+Earlier reports: [Step 5](docs/STEP-5-TESTING.md), [Step 4](docs/STEP-4-TESTING.md), [Step 3](docs/STEP-3-TESTING.md). Previous archives are preserved. All original build steps are delivered. The new Part 1 is complete; Part 2 is pending explicit go-ahead.

@@ -91,7 +91,7 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     expect([...persisted.entries()]).toEqual(beforeEmpty);
     const empty=emptyDocument("empty");for(const key of SWITCHES)empty.settings.enabled[key]=false;empty.settings.enabled.weather=true;
     persisted.set("empty/lpt_phone_v2",JSON.stringify(empty));
-    const weatherOnly=await renderTemplate("empty");expect(weatherOnly).toContain('Fields: weather="value"');expect(weatherOnly).not.toContain('location={');
+    const weatherOnly=await renderTemplate("empty");expect(weatherOnly).toContain('weather: known weather');expect(weatherOnly).not.toContain('location={');
     persisted.delete("empty/lpt_phone_v2");
     const [a,c]=await Promise.all([renderTemplate("a"),renderTemplate("c","v")]);
     expect(a).toContain('location: a');expect(a).not.toContain('location: c');expect(c).toContain('location: c');expect(c).not.toContain('location: a');
