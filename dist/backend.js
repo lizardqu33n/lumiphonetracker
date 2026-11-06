@@ -1,4 +1,28 @@
 // @bun
+// src/helper-status.ts
+class HelperFailure extends Error {
+  category;
+  constructor(category) {
+    super(category);
+    this.category = category;
+    this.name = "HelperFailure";
+  }
+}
+var failureLabel = (category) => category[0].toUpperCase() + category.slice(1);
+var helperNoticeText = (category) => (category === "no connection" ? "Connection not found. " : "") + `Tracker update failed: ${failureLabel(category)}`;
+var isHelperNotice = (text) => text === "Connection not found" || text.startsWith("Connection not found. ") || text.startsWith("Tracker update failed");
+function failureCategory(error, fallback = "provider error") {
+  if (error instanceof HelperFailure)
+    return error.category;
+  const e = error;
+  const message = [e?.message, e?.code].filter((v) => typeof v === "string").join(" ");
+  if (/permission|userId is required|chat unavailable|allow chat access|unauthori[sz]ed|forbidden/i.test(message))
+    return "permission missing";
+  if (e?.name === "TimeoutError" || e?.name === "AbortError" || /timed? ?out|timeout/i.test(message))
+    return "timeout";
+  return fallback;
+}
+
 // src/setup-fields.ts
 var SETUP_GROUPS = [
   { app: "Contacts", fields: [
@@ -245,6 +269,11 @@ var SETUP_PERMISSIONS = ["generation", "characters", "personas", "world_books", 
 var emptySetup = () => ({ contacts: [], notes: [], locations: [] });
 
 class SetupError extends Error {
+  category;
+  constructor(message, category) {
+    super(message);
+    this.category = category;
+  }
 }
 async function setupSources(api, chat, user) {
   if (!api.permissions.has("world_books"))
@@ -527,26 +556,32 @@ class SetupWizard {
     if (p.running || p.data)
       throw new SetupError("This setup has already run. Review its preview or start again.");
     p.running = true;
-    const currentDoc = await this.current(p);
-    const source = await setupSources(this.api, chat, user);
+    const currentDoc = await this.current(p), source = await setupSources(this.api, chat, user);
     if (source.text !== p.source)
       throw new SetupError("Sources changed. Review setup again.");
-    const profiles = await this.api.connections.list(user);
-    const chosen = setupConnection(currentDoc, profiles);
+    const chosen = setupConnection(currentDoc, await this.api.connections.list(user));
     if (chosen.id !== p.connection || chosen.model !== p.model)
       throw new SetupError("Connection changed. Review setup again.");
     await this.current(p);
     const controller = new AbortController;
     let timer;
+    const request = { type: "raw", connection_id: p.connection, model: p.model, userId: user, messages: p.messages, parameters: { max_tokens: 2000 }, signal: controller.signal };
+    let stage = "request";
     try {
-      const response = await Promise.race([this.api.generate.raw({ type: "raw", connection_id: p.connection, userId: user, messages: p.messages, parameters: { max_tokens: 2000 }, signal: controller.signal }), new Promise((_, reject) => {
+      const response = await Promise.race([this.api.generate.raw(request), new Promise((_, reject) => {
         timer = setTimeout(() => {
           controller.abort();
-          reject(new SetupError("Setup timed out. Nothing was saved."));
+          reject(new SetupError("Setup failed: Timeout. Nothing was saved.", "timeout"));
         }, 90000);
       })]);
+      if (!isRecord(response) || typeof response.content !== "string")
+        throw new SetupError("Setup failed: Invalid output. Nothing was saved.", "invalid output");
+      if (!response.content.trim())
+        throw new SetupError("Setup failed: Empty reply. Nothing was saved.", "empty reply");
+      stage = "state";
       const doc = await this.current(p);
-      const data = validateSetup(String(isRecord(response) ? response.content ?? "" : ""), p.source, p.fields);
+      stage = "validation";
+      const data = validateSetup(response.content, p.source, p.fields);
       for (const c of data.contacts)
         if (normalize(c.name) === normalize(p.names[1] ?? "")) {
           delete c.roles;
@@ -556,9 +591,15 @@ class SetupWizard {
       p.data = setupCandidates(doc, data);
       return { id, data: p.data };
     } catch (error) {
-      if (error instanceof SetupError)
+      if (error instanceof SetupError) {
+        if (!error.category)
+          throw new SetupError(error.message, error.message.startsWith("Setup returned invalid") ? "invalid output" : "validation rejected");
         throw error;
-      throw new SetupError("The selected connection failed. Nothing was saved.");
+      }
+      if (stage === "state")
+        throw new SetupError("Setup failed: Chat could not be rechecked. Nothing was saved.", "state unavailable");
+      const category = failureCategory(error, stage === "validation" ? "validation rejected" : "provider error");
+      throw new SetupError(`Setup failed: ${failureLabel(category)}. Nothing was saved.`, category);
     } finally {
       if (timer)
         clearTimeout(timer);
@@ -1951,30 +1992,6 @@ function parseExpandedReply(content) {
   return { patch, invalidFields, issues, texts, badTexts, emails, badEmails, prose: transformTags(content, "strip") };
 }
 
-// src/helper-status.ts
-class HelperFailure extends Error {
-  category;
-  constructor(category) {
-    super(category);
-    this.category = category;
-    this.name = "HelperFailure";
-  }
-}
-var failureLabel = (category) => category[0].toUpperCase() + category.slice(1);
-var helperNoticeText = (category) => (category === "no connection" ? "Connection not found. " : "") + `Tracker update failed: ${failureLabel(category)}`;
-var isHelperNotice = (text) => text === "Connection not found" || text.startsWith("Connection not found. ") || text.startsWith("Tracker update failed");
-function failureCategory(error, fallback = "provider error") {
-  if (error instanceof HelperFailure)
-    return error.category;
-  const e = error;
-  const message = [e?.message, e?.code].filter((v) => typeof v === "string").join(" ");
-  if (/permission|userId is required|chat unavailable|allow chat access|unauthori[sz]ed|forbidden/i.test(message))
-    return "permission missing";
-  if (e?.name === "TimeoutError" || e?.name === "AbortError" || /timed? ?out|timeout/i.test(message))
-    return "timeout";
-  return fallback;
-}
-
 // src/helper.ts
 function helperValues(content, doc, rows = []) {
   doc = effectiveDocument(doc);
@@ -2314,8 +2331,11 @@ class HelperAI {
         return { ok: true };
       this.notify(userId, chatId);
       const profiles = await this.profiles(userId);
-      if (!profiles.some((c) => c.id === ticket.doc.settings.connection_id))
+      const connection = profiles.find((c) => c.id === ticket.doc.settings.connection_id);
+      if (!connection)
         return await this.failure(userId, chatId, "no connection", true);
+      if (!connection.model?.trim())
+        throw new HelperFailure("no connection");
       let wording;
       try {
         wording = await this.io.wording?.(userId);
@@ -2336,7 +2356,7 @@ class HelperAI {
         abortHandler = () => reject(new HelperFailure(timedOut ? "timeout" : "validation rejected"));
         controller.signal.addEventListener("abort", abortHandler, { once: true });
       });
-      const result = await Promise.race([this.io.generate({ messages: input.messages, connection_id: ticket.doc.settings.connection_id, userId, parameters: { max_tokens: 2400 }, signal: controller.signal }), aborted]);
+      const result = await Promise.race([this.io.generate({ model: connection.model, messages: input.messages, connection_id: ticket.doc.settings.connection_id, userId, parameters: { max_tokens: 2400 }, signal: controller.signal }), aborted]);
       if (controller.signal.aborted || this.active.get(chatId)?.size)
         throw new HelperFailure(timedOut ? "timeout" : "validation rejected");
       if (!result || typeof result.content !== "string")
@@ -3968,7 +3988,7 @@ spindle.onFrontendMessage((payload, userId) => {
       }
       spindle.sendToFrontend({ type: "phone_setup_result", requestId: payload.requestId, chatId: chat, result }, userId);
     })().catch((error) => {
-      warn("Lumi Phone Tracker: setup request failed; check saved state.");
+      warn(error instanceof SetupError && error.category ? `Lumi Phone Tracker: setup failed: ${error.category}.` : "Lumi Phone Tracker: setup request failed; check saved state.");
       spindle.sendToFrontend({ type: "phone_setup_error", requestId: payload.requestId, chatId: payload.chatId, message: error instanceof SetupError ? error.message : "Setup could not finish. Check access and the tracker before trying again." }, userId);
     });
     return;

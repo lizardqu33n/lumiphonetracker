@@ -1,6 +1,25 @@
-# Verification report - 0.16.1
+# Verification report - 0.16.2
 
 Checked November 5, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **No live Lumiverse session or real model connection was used. A local Lumiverse build and its user-docs were inspected; that is not live-host verification. No paid model request was made.**
+
+## 0.16.2: raw model and failure reporting
+
+221 code tests / 1877 assertions and 316 browser checks pass. Type checking,
+reproducible builds and package validation pass. No real Lumiverse or paid model
+connection used.
+
+- First tightened the setup mock to reject missing raw models: six existing tests
+  failed with the same generic message. After passing the reviewed model, all pass.
+- Backend RPC and setup/browser mocks require a trusted user ID and nonempty model.
+  Background Custom connection tests also enforce and inspect the selected model.
+- Safe permission/provider/timeout categories, empty/invalid replies, redacted
+  server warnings and no automatic retries are covered. Failed runs add no data.
+- Real-install limits: the user's exact upstream exception remains unknown. Local
+  host 1.2.5 confirms the raw model behavior, but live server/provider success,
+  permission grants, billing, extraction quality and mobile UI are unverified.
+- No phone_format, parser, permission, layout or appearance changes.
+
+See docs/FIX-0.16.2.md for the SDK type/example discrepancy and request path.
 
 ## 0.16.1: sidebar setup fix
 

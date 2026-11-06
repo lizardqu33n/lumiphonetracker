@@ -1,4 +1,4 @@
-# Contacts and setup wizard - 0.16.1
+# Contacts and setup wizard - 0.16.2
 
 ## Contacts
 
@@ -62,6 +62,10 @@ a choice. Removed apps must be added in the sidebar first. Review token cost is 
 it reads the current card, your active persona and their attached plus your globally
 active lorebooks, then calls the documented tokenizer for the selected connection.
 Disabled lorebook entries are excluded. It sends no chat transcript or Scene state.
+
+Version 0.16.2 also fixes a missing model in the raw request; see
+[the model request fix](FIX-0.16.2.md) for the documented API/types discrepancy
+and safe failure categories.
 
 The wizard follows Connections: Main AI uses your documented Lumiverse default
 profile; Custom connection uses the saved connection_id. There is no extra picker

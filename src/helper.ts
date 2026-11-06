@@ -16,7 +16,7 @@ export interface HelperIO {
   wording?(userId:string):Promise<string|undefined>;
   allowed(): boolean;
   connections(userId: string): Promise<{ id: string; name: string; model: string }[]>;
-  generate(input: Omit<GenerationRequestDTO,"type">): Promise<GenerationResponseDTO>;
+  generate(input: Omit<GenerationRequestDTO,"type"> & {model:string}): Promise<GenerationResponseDTO>;
   changed(userId: string, chatId: string): void;
   warn(text: string): void;
 }
@@ -222,7 +222,9 @@ export class HelperAI {
       if(!ticket)return {ok:true};
       this.notify(userId,chatId);
       const profiles=await this.profiles(userId);
-      if(!profiles.some(c=>c.id===ticket!.doc.settings.connection_id))return await this.failure(userId,chatId,"no connection",true);
+      const connection=profiles.find(c=>c.id===ticket!.doc.settings.connection_id);
+      if(!connection)return await this.failure(userId,chatId,"no connection",true);
+      if(!connection.model?.trim())throw new HelperFailure("no connection");
       let wording:string|undefined;try{wording=await this.io.wording?.(userId);}catch{this.io.warn("Lumi Phone Tracker: prompt wording unavailable; using Default.");}
       const input=helperInput(ticket,wording,this.io.warn);
       const current=await this.store.preview(chatId,userId);
@@ -234,7 +236,7 @@ export class HelperAI {
         controller.signal.addEventListener("abort",abortHandler,{once:true});
       });
       // Passing signal is documented. Racing it also bounds providers that ignore cancellation.
-      const result=await Promise.race([this.io.generate({messages:input.messages,connection_id:ticket.doc.settings.connection_id!,userId,parameters:{max_tokens:2400},signal:controller.signal}),aborted]);
+      const result=await Promise.race([this.io.generate({model:connection.model,messages:input.messages,connection_id:ticket.doc.settings.connection_id!,userId,parameters:{max_tokens:2400},signal:controller.signal}),aborted]);
       if(controller.signal.aborted||this.active.get(chatId)?.size)throw new HelperFailure(timedOut?"timeout":"validation rejected");
       if(!result||typeof result.content!=="string")throw new HelperFailure("invalid output");
       const values=helperValues(result.content,ticket.doc,ticket.recent);

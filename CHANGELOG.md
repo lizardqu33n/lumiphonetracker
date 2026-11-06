@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.16.2 - Pass the model to raw generation
+
+- Setup now sends the reviewed model together with the saved connection ID and
+  trusted user ID. Raw generation uses the connection for credentials but does not
+  inherit its model in the local Lumiverse 1.2.5 implementation.
+- Corrected the same missing-model request in background Custom connection tracking.
+- Setup request failures now show and log safe categories. Keep saved data, explicit
+  Run/Save, no automatic retries, and all user/chat and player protections.
+- Mock providers now reject missing models, reproducing the old generic failure.
+  No changes to phone layout, macros, tag syntax, permissions or connection settings.
+
+
 ## 0.16.1 - Sidebar setup and connection fix
 
 - Moved Setup wizard from Home to a collapsed sidebar section, outside phone CSS.

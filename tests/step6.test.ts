@@ -12,7 +12,7 @@ function fixture(timeoutMs=90000) {
   const io:PhoneIO={authorize:async(c,u)=>u===`owner-${c}`,read:async c=>saved.get(c)??"",write:async(c,s)=>{saved.set(c,s);},history:async c=>structuredClone(rows.get(c)??[]),player:async()=>"Player"};
   const store=new PhoneStore(io);const calls:Parameters<HelperIO["generate"]>[0][]=[];const logs:string[]=[];const changes:string[]=[];
   let profiles=[{id:"small",name:"Small saved connection",model:"chosen-small-model"}];let allowed=true;let output='weather: Rain';let responder:HelperIO["generate"]|null=null;
-  const helperIO:HelperIO={allowed:()=>allowed,connections:async()=>structuredClone(profiles),generate:async input=>{calls.push(input);return responder?responder(input):{content:output,finish_reason:"stop"};},changed:(_,c)=>{changes.push(c);},warn:s=>logs.push(s)};
+  const helperIO:HelperIO={allowed:()=>allowed,connections:async()=>structuredClone(profiles),generate:async input=>{if(!input.model?.trim())throw Error("Provider rejected request: model is required");calls.push(input);return responder?responder(input):{content:output,finish_reason:"stop"};},changed:(_,c)=>{changes.push(c);},warn:s=>logs.push(s)};
   const helper=new HelperAI(store,helperIO,timeoutMs);
   return {store,io,helper,helperIO,saved,rows,calls,logs,changes,profiles:(v:typeof profiles)=>{profiles=v;},allow:(v:boolean)=>{allowed=v;},output:(v:string)=>{output=v;},respond:(v:HelperIO["generate"])=>{responder=v;},
     enable:async()=>{const doc=await store.sync("owner-a","a");return store.update("owner-a","a",doc.revision,{settings:{source:"helper",connection_id:"small"}});}};
@@ -36,7 +36,7 @@ describe("Step 6 Helper AI",()=>{
   test("last N messages are cleaned, current tracker is compact, connection ID is the only saved profile data",async()=>{
     const f=fixture();f.rows.set("a",Array.from({length:5},(_,i)=>row(i,`Story ${i}.<phone-state>time="Night"</phone-state><phone-text from="Ada">Hidden text ${i}</phone-text>`)));
     await f.enable();await f.helper.updateNow("owner-a","a");expect(f.calls.length).toBe(1);
-    const input=f.calls[0];expect(input.connection_id).toBe("small");expect(input.userId).toBe("owner-a");expect(input.messages?.length).toBe(2);
+    const input=f.calls[0];expect(input.model).toBe("chosen-small-model");expect(input.connection_id).toBe("small");expect(input.userId).toBe("owner-a");expect(input.messages?.length).toBe(2);
     const data=JSON.parse(String(input.messages![1].content));expect(data.recent_messages.map((r:{text:string})=>r.text)).toEqual(["Story 2.","Story 3.","Story 4."]);
     expect(data.current_tracker).toContain("Night");expect(JSON.stringify(input.messages)).not.toContain("Hidden text");expect(JSON.stringify(data)).not.toContain("<phone-state>");expect(JSON.stringify(data)).not.toContain("<phone-text");
     const settings=JSON.parse(f.saved.get("a")!).settings;expect(settings.connection_id).toBe("small");expect(JSON.stringify(settings)).not.toContain("chosen-small-model");expect(JSON.stringify(settings)).not.toContain("api_key");

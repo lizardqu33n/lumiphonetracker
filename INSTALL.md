@@ -1,11 +1,11 @@
 # Install Lumi Phone Tracker
 
-Version 0.16.1 includes the built files. You do not need to build or upload anything yourself.
+Version 0.16.2 includes the built files. You do not need to build or upload anything yourself.
 
 ## Install or update
 
 1. Open Lumiverse > Extensions > Install.
-2. Paste this repository address: https://github.com/lizardqu33n/lumiphonetracker . For an existing install from this repository, use its update option to get version 0.16.1. Enable the extension.
+2. Paste this repository address: https://github.com/lizardqu33n/lumiphonetracker . For an existing install from this repository, use its update option to get version 0.16.2. Enable the extension.
 3. Allow chat access, message processing, prompt interception and floating panels (chats, chat_mutation, interceptor, ui_panels, macro_interceptor). The existing generation permission enables optional Custom connection: completed-reply tracking and calls through the connection you select. Main AI makes no extra model requests. If generation permission is declined, Main AI still works.
 4. Open a chat. Tap the floating phone, or use Open phone in the Phone sidebar tab.
 5. Add this exact single line to your active preset and save it:
@@ -232,3 +232,14 @@ there is no documented exact price quote. No model request runs before Run setup
 Keep your preset line `{{phone_format}}` once. New confirmed contact metadata is
 sent compactly for NPCs; Main/player cards omit it. The AI cannot write those fields.
 See [Contacts and setup](docs/PART-6.md) for source limits and permission details.
+
+### Setup request fix (0.16.2)
+
+Update the extension to 0.16.2, then review the cost again and run setup. No new
+connection or permission is needed. Setup now sends the selected model as well as
+the connection ID. The same correction applies to background Custom connection
+tracking. A failure leaves saved data intact and never starts a retry loop.
+Setup failures now show a short category, such as Provider error or Permission
+missing. The server console records the category only, without story text or keys.
+If setup still fails, report that category and whether it happened during cost
+review, Run setup or saving. Preview and confirmed saving work as before.
