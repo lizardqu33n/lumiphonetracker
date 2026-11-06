@@ -1,3 +1,117 @@
+// src/style-files.ts
+var STYLE_FILE_LIMIT = 256 * 1024;
+async function readStyleFile(file) {
+  if (!/\.css$/i.test(file.name))
+    throw Error("Choose a .css file.");
+  if (file.size > STYLE_FILE_LIMIT)
+    throw Error("Choose a CSS file no larger than 256 KB.");
+  let text;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
+  } catch {
+    throw Error("Save the CSS file as UTF-8 text.");
+  }
+  if (text.includes("\x00"))
+    throw Error("Choose a plain-text CSS file.");
+  return text;
+}
+
+// src/custom-css.ts
+function prepareCustomCSS(text) {
+  if (text.length > STYLE_FILE_LIMIT)
+    throw new Error("Choose a CSS file no larger than 256 KB.");
+  let stripped = "";
+  let quote = "";
+  let depth = 0;
+  let comment = false;
+  for (let i = 0;i < text.length; i++) {
+    const c = text[i];
+    const n = text[i + 1];
+    if (comment) {
+      if (c === "*" && n === "/") {
+        comment = false;
+        i++;
+      }
+      continue;
+    }
+    if (!quote && c === "/" && n === "*") {
+      comment = true;
+      i++;
+      continue;
+    }
+    stripped += c;
+    if (quote) {
+      if (c === "\\" && n) {
+        stripped += n;
+        i++;
+        continue;
+      }
+      if (c === quote)
+        quote = "";
+      continue;
+    }
+    if (c === '"' || c === "'")
+      quote = c;
+    else if (c === "{")
+      depth++;
+    else if (c === "}" && --depth < 0)
+      throw new Error("Check the CSS braces.");
+  }
+  if (quote || comment || depth)
+    throw new Error("Finish the CSS rule, quote, or comment.");
+  const lower = stripped.replace(/\\(?:\r\n|[\r\n\f])/g, "").replace(/\\([0-9a-fA-F]{1,6})[ \t\r\n\f]?|\\([^\r\n\f])/g, (_all, hex, char) => hex ? String.fromCodePoint(Math.min(1114111, parseInt(hex, 16))) : char ?? "").toLowerCase();
+  if (/(?:url|image-set|image|src)\s*\(/.test(lower) || ["@import", "@font-face", "://", "@property", "@namespace"].some((t) => lower.includes(t))) {
+    throw new Error("Use local styles only; imports, links, and font downloads are not supported.");
+  }
+  const sheet = new CSSStyleSheet;
+  sheet.replaceSync(text);
+  const check = (rules) => {
+    for (const rule of Array.from(rules)) {
+      if (rule.type === CSSRule.STYLE_RULE) {
+        if (rule.selectorText.includes("::slotted"))
+          throw new Error("Style extension content only.");
+        const nested = rule.cssRules;
+        if (nested?.length)
+          check(nested);
+      } else if (rule.type === CSSRule.MEDIA_RULE || rule.type === CSSRule.SUPPORTS_RULE || rule.constructor.name === "CSSContainerRule")
+        check(rule.cssRules);
+      else
+        throw new Error("Use ordinary CSS rules, @media, @supports or @container.");
+    }
+  };
+  check(sheet.cssRules);
+  if (stripped.trim() && !sheet.cssRules.length)
+    throw new Error("No usable CSS rules were found.");
+  return Array.from(sheet.cssRules).map((r) => r.cssText).join(`
+`);
+}
+function prepareSidebarCSS(text) {
+  if (!text.trim())
+    return "";
+  const clean = prepareCustomCSS(text);
+  const sheet = new CSSStyleSheet;
+  sheet.replaceSync(clean);
+  const rewrite = (rules) => Array.from(rules).map((rule) => {
+    if (rule.type === CSSRule.STYLE_RULE) {
+      const style = rule;
+      const selector = style.selectorText.replace(/\.lpt-sidebar(?![-\w])/g, ":scope").replace(/:root\b|:host(?![-\w(])/g, ":scope");
+      const rootAlias = style.selectorText.trim() !== selector.trim() && selector.trim() === ":scope";
+      const declarations = rootAlias ? Array.from({ length: style.style.length }, (_, i) => style.style.item(i)).filter((key) => key.startsWith("--") || /^(color|background(?:-.+)?|font(?:-.+)?|line-height|letter-spacing|text-.+|border(?:-.+)?|box-shadow)$/.test(key)).map((key) => `${key}:${style.style.getPropertyValue(key)}${style.style.getPropertyPriority(key) ? " !important" : ""};`).join("") : style.style.cssText;
+      const nested = style.cssRules;
+      return `${selector} { ${declarations} ${nested?.length ? rewrite(nested) : ""} }`;
+    }
+    const group = rule;
+    return `${rule.cssText.slice(0, rule.cssText.indexOf("{"))}{${rewrite(group.cssRules)}}`;
+  }).join(`
+`);
+  const scoped = `@scope (.lpt-sidebar-settings) { ${rewrite(sheet.cssRules)} }`;
+  const probe = new CSSStyleSheet;
+  probe.replaceSync(scoped);
+  if (probe.cssRules[0]?.constructor.name !== "CSSScopeRule")
+    throw Error("This browser does not support safely scoped sidebar styles. Update your browser; the default sidebar still works.");
+  return scoped;
+}
+
 // src/ui-icons.ts
 var UI_ICONS = {
   "open-phone": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAVx0lEQVR42u2be7RfVXXvP3Ottff+Pc4r5EVCBBJegcgjgOVquT2itYoPRIRrrbUPO7T31ttbenv1tmrrow5bGXIHlJbSIgK2iDVYB2KVVismgmgQAZFAnrwJSc7799x7r7Xm/WP/TgjqGDUhJI5x7x754+ScPX77N+ea8zu/8zvnhv/HLzkEzzAAp3Fa3Sf+BMWJIEpSIqXoT95sYiBYRav79vm9x0eHM4K4TtnZvoMdc4M/64F+OXcIHBABvPNrjMr3lOABowVEVAUE2WuCBryC2OeMVxQ0EtRgQtQYI6GuVi8gcNsLPUT3IkeXrObopUXiFgYtzkQTBTyIBR3YrYhW9iuKIAjqdd8PQYhEjUQJMagRo03XXHla7bQl3U63v41tbeY/4uclBT7Mh81H+WhcY9d8IhH7Jxjp/vmlf5oes3gFeb/AWEEMhBiIMSICiKIqiiqgImIwYkEFVAkadWi4yde+8+969Rc/3W3ausQQrnkoPPzH88/7eYgAAVjHusZx2XFHFj5f1fEehzXHLTuWk449nn4/RxBBVeu1THAJaFSsgIghKqgqCEW3hw8BYw2BIM3hBXx/0/0yGSbqWViWGWdeuipddcINxQ1PAsX+RoK8SA7Qk9xJr0gl+RaO+P7futQsH1sqJ644geZQHUUFEclsGn+w6X6z5antmhqnURSMiKqiUTVqZHztL7Jk0WJ89KDgNOGpPc/w6LOPs+WxbeGKL10tNVv3AmduLjZvnn/+YYuAszir3mv0RtIyPX6mnE601PwVa35BVi0/lum5GYhgjNGgQZsjTbll/W3x2juvZ5RheuREoirgcJSUfOmomzhmxdHMzc1hjSMQOGrpMk45/lSGsjtMJ3Q0DUnNpckJK1jRttjJx3m8f8gdMM64W89637WtX9G++Sx1Mf/zrb/vR8eGbZI6ptrToIiqDuBf6XS7et7L/jMLh8fIkhqllswjYmozFGX5omV0O300IJEIBvXBMzM7wcLRRfKJd35Eptsz8YYvf+7mIdOUaPR1eO4ELBAOmQOWsEQBxLokFH7YOlO8/ZcvZtGCBUy3Z9GopElClmWqWiF/VOXCX3oDF573lueiVirAq5JT8J0OIUZp1uqCqIYQ6RY9IkFWLFsm7znp3Ty09Ud63a2frSU4B6U9LCC4m93zeKICahBtdeZwxqBEXOp4aman7prZgyiEIgBGlKhYkAgxRmJUVHUAToI1FpNYESOgqk4NJy0/AZs4CRpoz03T6bYRlaBEuy95OjxVIARREBGDTRzWWunnOUeMLdLrvnwTH/rCn7GYRUQigkHBCERBUZRYER8EwWIQDJGogUiPPmuXn8Utf3EjZSjVCOISh0udIirVR/1cECElEqtwduiSocU88dSjfP2ef+XkM17D4tpiDEIU1BMl954iREQEI0LdCgaDB9EYRSRGYwSisvuH9/Hw05t4+ann6vSe3RJ95TIjBoMhOlH8YXSAqhpQVCPWGtq+y8f++nK2Pr2D/mmr+c0/vwKXJWgEH6Hr0SMyzII0qipqUCYLSz9g/IDlJwaTOlRD1Js/8Ad86DOXs3rxF/itN/y6nrn6DFFVomoVK6XuFwaYF7HHUlHIezlfuuNWHpud4O1/cRUxKN25HkWnj8l72Lyn54zlesnRnotWeC56SWAo9Ci6PZIixxU5oZ/TbfXo93J+7VNX0U4y/vHum5mYm8ImifqiJP7HgH9oHCDORfZ2OFVIj9aHcc4xNzOLAs4KUYQ8CgHBWlHEEEUkIpJYwViJSPUNRcAaUWMMRScntZYFZgwjVvFRxQgWW/URcphAcL4MBkKcr2GCgEjF9YkYa3AiFBFWjcBoJvSD0LRCt1QiIk4g6KAFHBRHqT6pokjGElF89MRYPcoYe8A98UHHAIuVgK9OYkDtVZQYAwJYAxpE1i42csyoRIBNeyKf3hQ1s4IxIv1SjB3QgXnDYhULFcDMR5vIPO7spRCHzQE72GEGHW1ixWGMVCe4T123VVaQCBIRfFl98a6HPEBECWVVzH66LSKx4khKFe5VwTRmb+NsrTH7UwUOGga8kTcGICo+zMVZJuYmBRGMM6SkpCajVIiKeARRxSWCS4TMVcdqRXBWBq2xPK9Xk+fKjMyfOM+/pfrRH/oIEEBv4qaFq92JV4TA2jedc74/buUqU2tmtDotvBb4WOCMcPEqQ91EdvfQf9kRGUpgV28AjDqPYLKP0iU/8bhBgKhUxGdePyBqJOwfBh48B5SpWZhE+2saPe++8DfLtWteJq32NKX3FTcmkhoYzSw1pzzaUn6wO1BzgjGCM4NoVH2uo9VKJHneryt8lCp8ZV9EGESN6mEpg6looarTgG/nXdqtGTRERCGRhLptYF1FbAESg9QToZGAE0RVBmAmz538T+/sVWOMgqholRI+eCqJTYIkh6kMKioGcQGMMSY4ayliqBofIsRAJ49842nVmkQm+6gVCDpo+/ZaOg/9isrz5Q0dIL4gOCzqVEkcY40xRIwKYrVUOSwOEEQRUdmnLA2K9KDNKdEID08FQgjqjOAqem9+Is/3SX1h4AitIFaIGKm4QGIs07N7+Pw3vqhevVPCrTaGHfujCh00BxSY6NA4zwGfS8sK1aNUmm8qWkkVKHGvZTrQAZ6P7PL8HoOkVsM2IApECaQ25dnJ3dx4++e0bmu2b8KHH4s7nvhZxZCDTIT6KI299UlV99oVfSCWgcQILs32kiJB5DnI0sG/ARrM40H1X6ilunPrZpnZ/rDOTO+kqz3EVKWzYeoioE2Vof3VOQ8aCFqxUZQAqqqxIkA+iimFlUevZJEkfPm//y6zT+2gPzNBZ2oP+dyk5nOTmremtOi2NO+1KHstLfMuwefEWBBjoaXPNW0YHv/Xr+m1/+stvOMV5/P1T32FVStW0u33CARVVSkPYEp00CLAqbMiZBGVelqnMTws01MTMlRv6mc+8DdM92e45I9+g+svuJAsq2Fk0OVI1UBjBGOMGjEYm2CtxRoLGLwEgkAjGv7mt6/iVWvHOfqol+CLkuAjBjMQUKzd7+990IQgCT7BPeuMXbpx0331Tqejxy1fqY1mHeMstVDnyCOXMTk5QSIJecjxWlYoqBZDxfI1VjOgfijItUBRHBXoHbHoaN7x+rcR88DU5BRD9SZm0Akq8QDB+yD2QatYNZSl2SvyIr8tEuPXLrtFTlx5PL2yDwo930UT0DIS8gBCxd6IYAQVJYSIzz1FUeCLEg0DIpQoLktYOrYEEwwxRuq1Oluf3MZvfOh3y0hMjLHnbfKb7jxMIIjuYMfsGl3zTM3VCcbz0KOb6Zc5ZfS41JC6BGssqUtxSTLo8w2JTbBqcNhqLNoQ7KjFOIuxQmKTqrZ4pcgL1AnRKkPNJrUsQ9G6wSAq7rClwHxEtcpWmdlMfVHq+//2A2KxlJQEIpmtU7MZEsEZgxOHtY4okSABYwzGGBquTiNpkCYZYg3OWTwBJZK4hGbSJElSxKlOzE7GnOI7qSRPYPWZwbkf8snQXuKR2fp7jeJOPOb0fHT4CPKiIEpA1fPYY1volC2WLj6GRlpDi0AZAv2ii9dI9AE00O97JsoZ8lBQ4vGUAxW5IkYRxZIQiTEhyVKbfOSRsPmOfYI+Ho4IUDgrSaR/fh56XPTm98rLz3oN7XaPrJHgtcf73vdWtKX82f/+DEuOWEG/3yX4iA8eMREl4ENBo9bkWxtu5a8//8ecvfpXeNclH6FfzhGCp97M2Profdz4D5eR2jQqel1f+k+Mh3G3nvVxf4w/2A4wq5huQL3S8WMhPgai9in6kXavQ1nmNFwDpwkh91ixpFmC2NreuPVloJEOYajR0TaLFiznhFUnkscCY4RGI6Ff5NoPPWPE9ONo/MNtk9ta29hm9tf4gy2Kxh3saAuSOKzU0gaJs1iXkWQ1ktQRgieXAqUSSowTsEqMkeA9vvBVbY9Q+j7DDDM6NEpMIp1Oi3Z7jm7HMzM3VaWESEy76ej+ToQPZgQMdFtkdbJ6dWrSFU5dpibGuc4UeyZ20st7GElptefoaY/MZZikINInBMWIRVUQtRgjJKllaAya9ToZdRqNJiMjBp+PolFoNi2Zy3AYEUT7vb6+UAMOynVKesq9Vu2Z7bKVR6JJyKRm6mComJxG+r6jKZksGlmKc2k1OLCCNSk1l5HalCxJqdebTE/u4cld21m05CiWLjuaECI1W2OoPsLOySf1oS3fsc4kkw/7h1dQLUYcUBTIC0H9UzjliL7tn4Oxo1qWn3Iki049aa2kNjW+8PSLPj56VGO146NRC19IN+9ICAGNAeaFkBAhKjHEAfJXo7KedgmUWBwgBAoUaNCUzNQ6UbiqtHz20eKRLYNoPCQgaIDgrT+jLrWv9stc33XRfy3OOHGtnLT6bJO6DF+UxOCp1P6BfiUqvgyUZUkIseoKBVQqVugLT97LiSHSK3K8FiiBNE0oS0/IA928YM5DL5+LN37+8qTo5x90qtuBLeOMm0EleHEdMM64AG4Xu5wVF4aTtPe6l782O/m4U+XxXZOoheH6EKYOxsrgZJVOt02aZgwvGAZT7QiggkZot+eoLcio1WqoKsZYnK0Co9Npz4uh9NXSp8buyQmuW/dJDbH0xqYHnMoH5ID1rPcAZyZn9nb3d9tmMpTUpCnP7t5N2qjz7M4nue7fbsZlCXFgaGYy3v769zAxtYdr77yS1LkKzKyjWR/lTb90Md/94Z1sfvJBRmqjBAI5BUtHjuLcU16Jp9oe6USLNyXdfFacOvEi7kDnggfigCr3s1OOD6pv62nvzLXHrY3HHrXSpM6RiCNLG3xjy31c+83rSMgoyaVLj2GaXDD+Nu7ffK9edttfMsTogLJFVqWrePPrLuSb3/13rt5wNcOM4PHMMsFrXvJaxs94JUVQTHTV6sU+K3Va7RQWh8QBl3CJWce6EGM823r78ZHREa78o6v8gtGFUviCLY9t4f/81RVM9DZzzRXnY4yhDA5TE9n4nce56GNv4vjlI9xw2a9rjIZuXmCs8s3bd3Def3s1/+n0pfztxy9mZnaOwkeEhA237uKC972WS//Ln/Dqc17PXK9DMxkmNW0NFLVEEgOSHNIUEJF+qYVPrCtLfDLbnmV4aIRnpp/mjoe+xXlnncAlv7MGQg5qlbEGI40of/8PD3DO2GJ9+/9YA2UPosJIk+mZFp+78wEuXn0U7/rgqTDbB5dAavneXf/E5h3bqvF33WJKy8Yfboj/csfNrld07k1t9m2r9sFBar64i5K72S3jjLvdOpGJiPMSgsFgE4tUig51U0OJtCd7EALBlzRCZGoiZ1RGVBC6z04RykCMSrMPE9N9RmSEhgzhJw2dqRxDjiQJxtcYNSOoOso2oIbrb/lk2P7Eg+lYtuir9+X3fWRfNvqiOmAe/NbImm6pkTzPKfNI4oQQHSHCbJwlyZYztDgBn0C0MNbURrOhc9rFNj2N5SPQjxALGK2RZZau9miMCm6hYdSlYFNI6mhU2nGumitaU8nhaSaJqZHHPBln3LVpy73cW76YKSCAnpqdsMpH98oQ47lHDC2Mx65YKZKm5F7QPOfuH9zFUWYJ04/DB9+zkTL2UfHU6gmbN00x5lJ2bSv5xHu/R6kFmILhkQaPbJzl2GQJ9971LH/30TvJ8wBi8KHPXEd46fKzWXDkYvJUKVtCr+hRxgKxxq9nvR9n3L2oGDDOuF3Peu+je6V4ua4+1OTKD15fLjtyiYmiZLZJZ7bNhvs2MB3naD2d872bHsNiyHAYFE8gwfDAEzu5+9onMFjqZKTYgaYXuH3Ddv55w2Y8JU1S+nT41O9dz6vOfSOtVotWq4dYQ2IdFocVe+D170BSQJA8avTNpFGODg0nkleDzU9/9a+4/d6v86o3L+b8i15Gd8ZjjaVWS7nm8u/zzfse5W0XnMgbLjyOTqfEiuJsnRuu/BEPPjLJr75zNWvPWcDcdBdwzM71uemarcy2aow0j8D3hVAKmEjqHAYXBfGK+EPqAK12PVzUGBQPJmKd45777+KRJx7k0rMv4NVvORmmWmAUmim3fPYh1Cf8wtnH8Pp3ngbTrWorMq3zTzc9xDN+krN+cQEX/s7JMJlDvU4+G/jKZ56m5yHNaoQYEAdJ0qAou4RQ1GqSGSMuO6QOmI+DSESMwSQGsUotq2MkoV90iFOTtKc8RoQsT6Cs48TS9x3CxC7aUxFrHZjIbLuHEvF5IOzKac0W1GqWZ55tM5P3KUyJYNEI1lhuufXqePc9t7unph+9AxvXSSzvHoBzOEQRIOHHSbfGSFHm5NpjaDjDjDUZ0RKcg8Ywue/T1hajY0PYRUsYlRlwATSShoyFLGLZskXYxU3GnEDDMNKJTLen6MdArZFiskiC5YGHvh2373zQDKWj397kN//dj41TD00EDPqXSqCMg7lviIxIg3+8Zht3fHU3ZSyxKUTxPP5oyRlLTuW2m59m0/f7lGUHmxSEGHjmqR5Nl3HT329lw9d20g8taqmj6DtOXnk2ztZwWqfoloQYiUY1k3pAjBtn3O1hj9nEpuKQpYCpshdVpSeCjQ485Hkf1ZyNDzxOfEAHo9KcafZw6esu463n/zaX/MEZ3Hp3iwZNqlUeT30w1Fp3+04UIQyqRaDkxj+9g5eeeDbTUxMkNqNZT8FrYlWsovaFlr8DjYDU4Ugk1SgL8OkQhe3y++/+OLNzM/ig1eYzntwX9HyX4445HVfPeP+7L6co+xgEawQVRCOE6NX7klBGUMVLSRFzGrUjmJ2dI00a3PPAet365P1mrjX5aDQ8ZWJ4BJ7bTTxkDrBYVYm0y5a75/4NOjI6JscecwKrVp6OhmrYKfPbnbZaXs6LHmWZ88vnXgxYoxpVBBVjUEVkIAjFMFgTGKxLdLtzqERa3Wlu/uKV5Y+e/W5jyI59ZXvc/ofzhHcd614wD/iZVOF5lA1luK1w5ekznemPffKa30s+9Ml3hKmpGRKbIU5wmcM6gzFSbXYQyNI6Q80xU5lWtbHV2D8qGmP0geg94FHxg8V4T1pvsHB0jPt+tDFuffaHdkVjVT6cDG8EzMEI/f2NAAXYxKYpSqZW29VHJklKHvvmzrv+OTy+4yQpQk/EyvwiT7UZYixS2R0HOz9qnAWFGPS5FddQ3W+cQawQtZLRmtlI3Lx1YxFMkFk/vWPbm9d+gXX3x/Ws14PlADmA++V4jh9yiTs6CCfGIv8caBYHrzrI/KuPz6tM+lMeOf9ahFTrbnuHXjqYAga1GElIHhrKxi6cyCe6T/Lkrp916ntIZPGVzZVLG2XjG6KSRY0q1e6qGsQo2OrY474bP8lgk3yQxWLm3x1VoqhGUY2eapk0CKYWCBu3+i2X8CJdL0QWF0BWsCL9caAMBBlhZO+2xh72sJjF9OnbygtJDASJRDEYHUhjEgiSkMQWrQBLGSM3c8yFnezsc4Cvxv7/6z+4/i/SuI12LQ4XagAAAABJRU5ErkJggg==",
@@ -512,73 +626,11 @@ var activityUnread = (entry, seen) => {
 var APPS = ALL_APPS;
 var defaultPreferences = () => ({ revision: 0, css: "", dismissed: [] });
 function readPreferences(value) {
-  if (!isRecord(value) || typeof value.css !== "string" || value.css.length > 32000 || !Number.isSafeInteger(value.revision) || !Array.isArray(value.dismissed) || value.dismissed.some((a) => ![...APPS, "Home", "Draft hint", "Settings"].includes(a)))
+  if (!isRecord(value) || typeof value.css !== "string" || value.css.length > STYLE_FILE_LIMIT || !Number.isSafeInteger(value.revision) || !Array.isArray(value.dismissed) || value.dismissed.some((a) => ![...APPS, "Home", "Draft hint", "Settings"].includes(a)))
     throw new Error("Invalid appearance preferences");
-  return { revision: value.revision, css: value.css, dismissed: [...new Set(value.dismissed)].filter((a) => a !== "Settings") };
-}
-
-// src/custom-css.ts
-function prepareCustomCSS(text) {
-  if (text.length > 32000)
-    throw new Error("Keep custom CSS under 32,000 characters.");
-  if (text.includes("\\"))
-    throw new Error("CSS escape sequences are not supported.");
-  let stripped = "";
-  let quote = "";
-  let depth = 0;
-  let comment = false;
-  for (let i = 0;i < text.length; i++) {
-    const c = text[i];
-    const n = text[i + 1];
-    if (comment) {
-      if (c === "*" && n === "/") {
-        comment = false;
-        i++;
-      }
-      continue;
-    }
-    if (!quote && c === "/" && n === "*") {
-      comment = true;
-      i++;
-      continue;
-    }
-    stripped += c;
-    if (quote) {
-      if (c === quote)
-        quote = "";
-      continue;
-    }
-    if (c === '"' || c === "'")
-      quote = c;
-    else if (c === "{")
-      depth++;
-    else if (c === "}" && --depth < 0)
-      throw new Error("Check the CSS braces.");
-  }
-  if (quote || comment || depth)
-    throw new Error("Finish the CSS rule, quote, or comment.");
-  const lower = stripped.toLowerCase();
-  if (["url(", "@import", "@font-face", "://", "image-set(", "@property", "@namespace"].some((t) => lower.includes(t))) {
-    throw new Error("Use local styles only; imports, links, and font downloads are not supported.");
-  }
-  const sheet = new CSSStyleSheet;
-  sheet.replaceSync(text);
-  const check = (rules) => {
-    for (const rule of Array.from(rules)) {
-      if (rule.type === CSSRule.STYLE_RULE) {
-        if (rule.selectorText.includes("::slotted"))
-          throw new Error("Style phone elements only.");
-      } else if (rule.type === CSSRule.MEDIA_RULE || rule.type === CSSRule.SUPPORTS_RULE)
-        check(rule.cssRules);
-      else
-        throw new Error("Use ordinary CSS rules, @media, or @supports.");
-    }
-  };
-  check(sheet.cssRules);
-  if (stripped.trim() && !sheet.cssRules.length)
-    throw new Error("No usable CSS rules were found.");
-  return Array.from(sheet.cssRules).map((r) => r.cssText).join(`
-`);
+  if (value.sidebarCss !== undefined && (typeof value.sidebarCss !== "string" || value.sidebarCss.length > STYLE_FILE_LIMIT))
+    throw Error("Invalid sidebar appearance");
+  return { ...typeof value.sidebarCss === "string" ? { sidebarCss: value.sidebarCss } : {}, revision: value.revision, css: value.css, dismissed: [...new Set(value.dismissed)].filter((a) => a !== "Settings") };
 }
 
 // src/launcher-icon.ts
@@ -2047,8 +2099,8 @@ var styles_default = `/* =======================================================
    Phone tracker: cute Y2K theme (default look)
    Phone CSS only. The sidebar is outside the Shadow DOM and uses sidebar.css.
    Recolor the whole phone by editing the PALETTE block below.
-   To switch the cute theme off, paste the "plain dark" block found at the
-   very end of this file into the Advanced custom CSS box.
+   To switch the cute theme off, save the "plain dark" block found at the
+   very end of this file as a .css file and upload it under Appearance.
    ========================================================================== */
 
 .lpt-root {
@@ -3982,9 +4034,9 @@ class PersonalControls {
   render() {
     this.presets.replaceChildren();
     this.wording.replaceChildren();
-    this.presets.append(el2("p", "lpt-side-help", "Up to 20 presets, saved for you. Apply changes only this chat's switches and limits; story data stays, including hidden apps."));
+    this.presets.append(el2("p", "lpt-side-help", "Up to 20 settings profiles, saved for you. Applying a profile changes only this chat's switches and limits. Story data stays, including hidden apps."));
     const row = el2("div", "lpt-personal-row"), select = el2("select", "lpt-personal-select");
-    select.setAttribute("aria-label", "Settings preset");
+    select.setAttribute("aria-label", "Settings profile");
     for (const p of [...builtInPresets(), ...this.p.presets]) {
       const o = el2("option", "", p.name);
       o.value = p.id;
@@ -4009,7 +4061,7 @@ class PersonalControls {
     }, !this.doc);
     if (this.confirm) {
       const box = el2("div", "lpt-preset-confirm");
-      box.append(el2("p", "lpt-side-help", "Apply this preset to the current chat? Story data will stay."));
+      box.append(el2("p", "lpt-side-help", "Apply this settings profile to the current chat? Story data will stay."));
       this.button(box, "Apply to this chat", () => {
         this.confirm = false;
         this.run({ kind: "preset_apply", id: this.preset, confirm: true });
@@ -4020,7 +4072,7 @@ class PersonalControls {
       });
       this.presets.append(box);
     }
-    this.input(this.presets, "Preset name", this.presetName, (v) => this.presetName = v);
+    this.input(this.presets, "Profile name", this.presetName, (v) => this.presetName = v);
     const actions = el2("div", "lpt-personal-row");
     this.presets.append(actions);
     this.button(actions, "Save current as...", () => void this.run({ kind: "preset_save", name: this.presetName }), !this.doc || this.p.presets.length >= 20);
@@ -4033,7 +4085,7 @@ class PersonalControls {
     this.wording.append(el2("p", "lpt-side-help", "Up to 10 custom wordings total. Copy Default to reword it. Keep [[phone_syntax]] for the protected format. App headings hide their wording when an app is removed. Safety checks stay on."));
     const target = el2("select", "lpt-personal-select");
     target.setAttribute("aria-label", "Wording for");
-    for (const [id, name] of [["main", "Main AI"], ["helper", "Helper AI"]]) {
+    for (const [id, name] of [["main", "Main AI"], ["helper", "Custom connection"]]) {
       const o = el2("option", "", name);
       o.value = id;
       target.append(o);
@@ -4095,7 +4147,7 @@ class PersonalControls {
     this.button(buttons, "Delete wording", () => void this.run({ kind: "wording_delete", target: this.target, id: this.choice }), this.copy || this.choice === "default");
     this.button(buttons, "Reset to default", () => void this.run({ kind: "wording_select", target: this.target, id: "default" }));
     this.button(buttons, "Preview", () => void this.run({ kind: "preview", target: this.target, ...this.copy || this.choice !== "default" ? { text: this.text } : {} }), !this.doc);
-    this.wording.append(el2("p", "lpt-side-help", this.target === "helper" ? "Preview shows the exact Helper AI system instructions. Its separate recent-story data is unchanged." : "Preview shows the exact phone_format output for this chat. Save edits to use them."));
+    this.wording.append(el2("p", "lpt-side-help", this.target === "helper" ? "Preview shows the exact custom connection instructions. Its separate recent-story data is unchanged." : "Preview shows the exact phone_format output for this chat. Save edits to use them."));
     this.wording.append(el2("p", "lpt-wording-count", this.count));
     const pre = el2("pre", "lpt-wording-preview", this.preview);
     pre.hidden = !this.preview;
@@ -4123,16 +4175,15 @@ class Sidebar {
   saving = false;
   open = new Set(["apps"]);
   cssOpen = false;
-  timer;
+  fileEpoch = { css: 0, sidebarCss: 0 };
+  alive = true;
   info = { available: false, choices: [], note: "Loading connections..." };
   helperChoice = false;
   status = node("p", "lpt-side-status");
-  cssText = "";
   constructor(parent, actions, prefs) {
     this.actions = actions;
     this.personal = new PersonalControls((change, revision) => this.actions.personal ? this.actions.personal(change, revision) : Promise.reject(Error("Unavailable")));
     this.prefs = prefs;
-    this.cssText = prefs.css;
     parent.append(this.root);
     this.personal.receive(null);
     this.render();
@@ -4156,22 +4207,73 @@ class Sidebar {
   }
   preferences(prefs) {
     this.prefs = prefs;
-    this.cssText = prefs.css;
-    const input = this.root.querySelector(".lpt-sidebar-css");
-    if (input && document.activeElement !== input)
-      input.value = prefs.css;
+    this.fileStatus();
   }
   reset() {
-    clearTimeout(this.timer);
-    this.cssText = "";
-    const input = this.root.querySelector(".lpt-sidebar-css");
-    if (input)
+    this.fileEpoch.css++;
+    this.fileEpoch.sidebarCss++;
+    this.prefs = { ...this.prefs, css: "", sidebarCss: "" };
+    for (const input of Array.from(this.root.querySelectorAll(".lpt-css-file")))
       input.value = "";
+    this.fileStatus();
   }
   destroy() {
-    clearTimeout(this.timer);
+    this.alive = false;
+    this.fileEpoch.css++;
+    this.fileEpoch.sidebarCss++;
     this.root.remove();
     this.epoch++;
+  }
+  fileStatus() {
+    for (const key of ["css", "sidebarCss"]) {
+      const status = this.root.querySelector(`[data-style-status="${key}"]`);
+      if (status)
+        status.textContent = this.prefs[key] ? "Using saved styles." : "Using default styles.";
+    }
+  }
+  styleUpload(parent, key, labelText) {
+    const label = node("label", "lpt-style-upload", labelText), input = node("input", `lpt-css-file ${key === "css" ? "lpt-sidebar-css lpt-phone-css-file" : "lpt-sidebar-css-file"}`);
+    input.type = "file";
+    input.accept = ".css,text/css";
+    input.setAttribute("aria-label", labelText);
+    label.append(input);
+    const status = node("small", "lpt-style-file-status");
+    status.dataset.styleStatus = key;
+    status.textContent = this.prefs[key] ? "Using saved styles." : "Using default styles.";
+    parent.append(label, status);
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file)
+        return;
+      const epoch = ++this.fileEpoch[key];
+      (async () => {
+        const text = await readStyleFile(file);
+        if (!this.alive || epoch !== this.fileEpoch[key])
+          return;
+        if (key === "css")
+          prepareCustomCSS(text);
+        else
+          prepareSidebarCSS(text);
+        this.actions.applyCSS({ [key]: text });
+        this.prefs = { ...this.prefs, [key]: text };
+        this.fileStatus();
+        this.status.textContent = "Applying styles...";
+        try {
+          const prefs = await this.actions.css({ [key]: text });
+          if (!this.alive || epoch !== this.fileEpoch[key])
+            return;
+          this.prefs = prefs;
+          this.fileStatus();
+          this.status.textContent = "Appearance saved.";
+        } catch {
+          if (this.alive && epoch === this.fileEpoch[key])
+            this.status.textContent = "Applied for now. Could not save; try again.";
+        }
+      })().catch((error) => {
+        if (this.alive && epoch === this.fileEpoch[key])
+          this.status.textContent = error instanceof Error ? error.message : "Could not read this CSS file.";
+      });
+    });
   }
   async connections() {
     const epoch = this.epoch;
@@ -4292,8 +4394,6 @@ class Sidebar {
   }
   render() {
     const origin = this.epoch;
-    const active = document.activeElement;
-    const selection = active instanceof HTMLTextAreaElement && active.classList.contains("lpt-sidebar-css") && this.root.contains(active) ? { start: active.selectionStart, end: active.selectionEnd } : null;
     this.root.replaceChildren();
     this.root.append(node("p", "lpt-side-chat", this.doc ? `Settings for this chat: ${this.name || "Unnamed chat"}` : "Open a chat to change tracker settings"));
     const apps = this.section("apps", "App Store", "This chat");
@@ -4338,11 +4438,11 @@ class Sidebar {
         track.append(group);
       }
     }
-    const source = this.section("source", "Helper AI", "This chat");
+    const source = this.section("source", "Connections", "This chat");
     if (this.doc) {
       const label = node("label", "lpt-side-label", "Who updates the tracker");
       const select = node("select", "lpt-helper-source");
-      for (const [value, title] of [["main", "Main AI"], ["helper", "Helper AI"]]) {
+      for (const [value, title] of [["main", "Main AI"], ["helper", "Custom connection"]]) {
         const o = node("option", "", title);
         o.value = value;
         select.append(o);
@@ -4386,42 +4486,17 @@ class Sidebar {
       }
     }
     const appearance = this.section("appearance", "Appearance", "All my chats");
-    const label = node("label", "lpt-side-label");
-    const input = node("textarea", "lpt-sidebar-css");
-    input.value = this.cssText;
-    input.maxLength = 32000;
-    input.spellcheck = false;
-    input.setAttribute("aria-label", "Custom CSS");
-    label.append(input);
     const cssFold = node("details", "lpt-side-css-collapse");
-    cssFold.open = this.cssOpen || selection !== null;
-    cssFold.append(node("summary", "lpt-side-css-summary", "Custom CSS"), label);
+    cssFold.open = this.cssOpen;
+    cssFold.append(node("summary", "lpt-side-css-summary", "Upload CSS files"));
     cssFold.addEventListener("toggle", () => {
       if (cssFold.isConnected)
         this.cssOpen = cssFold.open;
     });
-    appearance.append(cssFold, node("p", "lpt-side-help", "Applies live to the phone only. Reset appearance above restores the default look."));
-    input.addEventListener("input", () => {
-      clearTimeout(this.timer);
-      this.cssText = input.value;
-      try {
-        prepareCustomCSS(input.value);
-        this.actions.applyCSS(input.value);
-        this.status.textContent = "";
-        const text = input.value;
-        this.timer = setTimeout(() => {
-          this.actions.css(text).then((p) => {
-            this.prefs = p;
-            this.status.textContent = "Appearance saved.";
-          }).catch(() => {
-            this.status.textContent = "Appearance could not be saved.";
-          });
-        }, 400);
-      } catch (e) {
-        this.status.textContent = e instanceof Error ? e.message : "Check the CSS.";
-      }
-    });
-    const presets = this.section("presets", "Presets", "All my chats");
+    this.styleUpload(cssFold, "css", "Phone styles (styles.css)");
+    this.styleUpload(cssFold, "sidebarCss", "Sidebar styles (sidebar.css)");
+    appearance.append(cssFold, node("p", "lpt-side-help", "Choose UTF-8 .css files, up to 256 KB each. Applies to all your chats. Sidebar styles affect the settings content only; the toolbar stays protected. Reset appearance above clears both files."));
+    const presets = this.section("presets", "Settings profiles", "All my chats");
     presets.append(this.personal.presets);
     const advanced = this.section("advanced", "Advanced", "This chat");
     if (this.doc) {
@@ -4438,10 +4513,6 @@ class Sidebar {
     this.status.setAttribute("role", "status");
     this.status.setAttribute("aria-live", "polite");
     this.root.append(this.status);
-    if (selection) {
-      input.focus({ preventScroll: true });
-      input.setSelectionRange(selection.start, selection.end);
-    }
   }
 }
 
@@ -4520,14 +4591,13 @@ var sidebar_default = `/* Sidebar only: protected from the phone Shadow DOM/cust
 .lpt-safety-setting {display:grid;grid-template-columns:20px minmax(0,1fr);align-items:start;gap:var(--lpt-side-gap);padding:var(--lpt-side-space) 0;cursor:pointer;}\r
 .lpt-safety-setting input {margin-top:3px;}\r
 .lpt-safety-setting .lpt-side-help {margin:0;}\r
-.lpt-side-number,.lpt-helper-source,.lpt-helper-connection,.lpt-sidebar-css {min-width:0;max-width:100%;padding:var(--lpt-side-gap);border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);background-color:var(--lpt-side-bg);color:var(--lpt-side-text);min-height:var(--lpt-side-target);}\r
+.lpt-side-number,.lpt-helper-source,.lpt-helper-connection {min-width:0;max-width:100%;padding:var(--lpt-side-gap);border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);background-color:var(--lpt-side-bg);color:var(--lpt-side-text);min-height:var(--lpt-side-target);}\r
 .lpt-helper-source,.lpt-helper-connection {width:100%;margin:0 0 var(--lpt-side-gap);}\r
 .lpt-side-source > .lpt-side-label {margin-bottom:var(--lpt-side-gap);font-size:var(--lpt-side-font-size);}\r
 .lpt-side-setting:has(.lpt-side-number) {display:flex;flex-direction:column;gap:var(--lpt-side-gap);margin:var(--lpt-side-gap) 0;font-size:var(--lpt-side-font-size);}\r
 .lpt-side-number {width:100%;}\r
 .lpt-side-numbers {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--lpt-side-space);}\r
 .lpt-side-css-summary {min-height:var(--lpt-side-target);display:flex;align-items:center;cursor:pointer;font-size:var(--lpt-side-font-size);}\r
-.lpt-sidebar-css {display:block;width:100%;min-height:160px;resize:vertical;font-family:monospace;font-size:var(--lpt-side-font-size)!important;}\r
 @container (min-width:300px) {.lpt-store-grid {grid-template-columns:repeat(3,minmax(0,1fr));}}\r
 @container (min-width:340px) {.lpt-toolbar-label {display:none;}}\r
 @container (max-width:239px) {.lpt-recovery-actions {grid-template-columns:repeat(2,minmax(0,1fr));}}\r
@@ -4549,6 +4619,13 @@ var sidebar_default = `/* Sidebar only: protected from the phone Shadow DOM/cust
 
 .lpt-wording > summary::before {content:"\\25b8";margin-right:var(--lpt-side-gap);}
 .lpt-wording[open] > summary::before {content:"\\25be";}
+
+/* This parent is outside uploaded CSS scope; fixed/oversized settings cannot cover Reset. */
+.lpt-sidebar-style-boundary {contain:layout paint;isolation:isolate;}
+.lpt-style-upload {display:flex;flex-direction:column;gap:var(--lpt-side-gap);font-size:var(--lpt-side-font-size);margin:var(--lpt-side-space) 0 var(--lpt-side-gap);}
+.lpt-css-file {display:block;min-height:var(--lpt-side-target);height:auto;resize:none;width:100%;min-width:0;max-width:100%;font:inherit;color:var(--lpt-side-text);}
+.lpt-css-file::file-selector-button {min-height:var(--lpt-side-target);padding:var(--lpt-side-gap);border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);background:var(--lpt-side-btn-bg);color:var(--lpt-side-btn-text);cursor:pointer;}
+.lpt-style-file-status {display:block;color:var(--lpt-side-muted);font-size:var(--lpt-side-font-size);}
 `;
 
 // src/helper-status.ts
@@ -4626,6 +4703,14 @@ function setup(ctx) {
   let backendBusy = false;
   const busy = () => backendBusy || !!(activeChat && streaming.get(activeChat)?.size);
   const helperRequests = new Map;
+  let removeSidebarStyle = () => {};
+  const applySidebarStyle = (text) => {
+    const scoped = prepareSidebarCSS(text);
+    const remove = scoped ? ctx.dom.addStyle(scoped) : () => {};
+    removeSidebarStyle();
+    removeSidebarStyle = remove;
+  };
+  disposers.push(() => removeSidebarStyle());
   const removeHostStyle = ctx.dom.addStyle(styles_default);
   disposers.push(removeHostStyle, ctx.dom.addStyle(sidebar_default));
   const sendSync = () => {
@@ -4641,9 +4726,9 @@ function setup(ctx) {
     }));
   const prefsChange = (change) => {
     const requestId = crypto.randomUUID();
-    if (change?.css !== undefined) {
+    if (change?.css !== undefined || change?.sidebarCss !== undefined) {
       appearanceEpoch++;
-      preferences = { ...preferences, css: change.css };
+      preferences = { ...preferences, ...change.css !== undefined ? { css: change.css } : {}, ...change.sidebarCss !== undefined ? { sidebarCss: change.sidebarCss } : {} };
     }
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -4699,7 +4784,9 @@ function setup(ctx) {
   };
   const reset = () => {
     sidebar?.reset();
-    const saving = prefsChange({ css: "" });
+    removeSidebarStyle();
+    removeSidebarStyle = () => {};
+    const saving = prefsChange({ css: "", sidebarCss: "" });
     const originalView = view;
     openRequested = true;
     lastSize = "";
@@ -4833,14 +4920,17 @@ function setup(ctx) {
   results.className = "lpt-toolbar-results";
   results.append(...statuses);
   const scroll = document.createElement("div");
-  scroll.className = "lpt-sidebar-scroll";
+  scroll.className = "lpt-sidebar-scroll lpt-sidebar-style-boundary";
   scroll.append(help);
   panel.append(recoveryActions, results, scroll);
   tab.root.append(panel);
-  sidebar = new Sidebar(scroll, { personal, update: async (settings, revision) => await update({ settings }, revision), connections: async () => await requestHelper("phone_connections"), css: (text) => prefsChange({ css: text }), applyCSS: (text) => {
+  sidebar = new Sidebar(scroll, { personal, update: async (settings, revision) => await update({ settings }, revision), connections: async () => await requestHelper("phone_connections"), css: (change) => prefsChange(change), applyCSS: (change) => {
+    if (change.sidebarCss !== undefined)
+      applySidebarStyle(change.sidebarCss);
+    if (change.css !== undefined)
+      view?.applyCSS(change.css);
     appearanceEpoch++;
-    preferences = { ...preferences, css: text };
-    view?.applyCSS(text);
+    preferences = { ...preferences, ...change };
   } }, preferences);
   updateBusy();
   disposers.push(() => {
@@ -5067,6 +5157,11 @@ function setup(ctx) {
             preferences = prefs;
             sidebar?.preferences(prefs);
             view?.receivePreferences(prefs);
+            try {
+              applySidebarStyle(prefs.sidebarCss ?? "");
+            } catch {
+              help.textContent = "Saved sidebar styles could not be applied. Reset appearance restores the defaults.";
+            }
           }
           preferenceRequest.resolve(prefs);
         } catch {
@@ -5222,6 +5317,7 @@ function setup(ctx) {
     view?.receivePreferences(p);
     try {
       view?.applyCSS(p.css);
+      applySidebarStyle(p.sidebarCss ?? "");
     } catch {
       help.textContent = "Saved custom CSS could not be applied. Reset appearance to clear it.";
     }

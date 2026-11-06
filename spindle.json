@@ -1,11 +1,11 @@
 {
   "identifier": "lumi_phone_tracker",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "name": "Lumi Phone Tracker",
   "author": "lizardqu33n",
   "github": "https://github.com/lizardqu33n/lumiphonetracker",
   "homepage": "https://github.com/lizardqu33n/lumiphonetracker#readme",
-  "description": "A small story phone with Scene, Weather, Locations, Notes, Contacts and Messages. Optional Helper AI uses a saved connection.",
+  "description": "A small story phone with Scene, Weather, Locations, Notes, Contacts and Messages. Optional custom connection tracking uses a saved connection.",
   "permissions": [
     "chats",
     "chat_mutation",

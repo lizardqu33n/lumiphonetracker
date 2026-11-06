@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.15.0 - Clearer names and CSS file uploads
+
+- Source controls now say Connections / Custom connection; Presets is Settings
+  profiles. Existing data, connections, profiles and wording remain compatible.
+- Appearance uses separate styles.css and sidebar.css uploads instead of a text
+  box, up to 256 KB each, personal across the user's chats.
+- Sidebar CSS is confined below the toolbar. Reset clears both uploaded styles
+  immediately, retains story data and remains outside hostile styling.
+- Added upload validation, scoped-storage and browser recovery tests. No new
+  permission or AI/prompt behavior change.
+
+
 ## 0.14.0 - Settings presets and editable prompt wording
 
 - Personal presets in the sidebar: read-only Default/Minimal, save, rename, delete

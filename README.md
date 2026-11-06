@@ -2,7 +2,11 @@
 
 A small phone for keeping track of story facts. Each chat has its own Scene, Weather, Locations, Notes, Contacts and Messages, plus optional Calls, Email and Bank. The existing Phone sidebar tab controls apps, tracking and appearance.
 
-**Version 0.14.0: all six build steps are delivered.** Source, manifest, built frontend/backend, tests and guides are included. The new Helper AI has been tested with mocks, not a real paid connection.
+**Version 0.15.0: all six build steps are delivered.** Source, manifest, built frontend/backend, tests and guides are included. The new Helper AI has been tested with mocks, not a real paid connection.
+
+Version 0.15.0 uses Connections > Custom connection and Settings profiles in the
+sidebar. Appearance accepts your own styles.css and sidebar.css files; Reset clears
+both, with the toolbar protected. See [CSS uploads](docs/APPEARANCE-UPLOADS.md).
 
 Version 0.14.0 adds personal settings presets and editable Main AI/Helper AI prompt wording in the sidebar, with protected syntax and free Preview. See [Presets and wording](docs/PART-5.md).
 

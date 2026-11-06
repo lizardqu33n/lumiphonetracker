@@ -1722,7 +1722,7 @@ class HelperAI {
       if (!this.io.allowed()) {
         if (doc.settings.source === "helper" && doc.helperOwner === userId)
           await this.failure(userId, chatId, "permission missing", true);
-        return { available: false, choices: [], note: "Allow generation permission in Extensions to use Helper AI." };
+        return { available: false, choices: [], note: "Allow generation permission in Extensions to use a custom connection." };
       }
       const profiles = await this.profiles(userId);
       if (doc.settings.source === "helper" && doc.helperOwner === userId && !profiles.some((c) => c.id === doc.settings.connection_id)) {
@@ -3155,13 +3155,18 @@ function trimPhoneHistory(messages, settings, document2) {
   });
 }
 
+// src/style-files.ts
+var STYLE_FILE_LIMIT = 256 * 1024;
+
 // src/preferences.ts
 var APPS = ALL_APPS;
 var defaultPreferences = () => ({ revision: 0, css: "", dismissed: [] });
 function readPreferences(value) {
-  if (!isRecord(value) || typeof value.css !== "string" || value.css.length > 32000 || !Number.isSafeInteger(value.revision) || !Array.isArray(value.dismissed) || value.dismissed.some((a) => ![...APPS, "Home", "Draft hint", "Settings"].includes(a)))
+  if (!isRecord(value) || typeof value.css !== "string" || value.css.length > STYLE_FILE_LIMIT || !Number.isSafeInteger(value.revision) || !Array.isArray(value.dismissed) || value.dismissed.some((a) => ![...APPS, "Home", "Draft hint", "Settings"].includes(a)))
     throw new Error("Invalid appearance preferences");
-  return { revision: value.revision, css: value.css, dismissed: [...new Set(value.dismissed)].filter((a) => a !== "Settings") };
+  if (value.sidebarCss !== undefined && (typeof value.sidebarCss !== "string" || value.sidebarCss.length > STYLE_FILE_LIMIT))
+    throw Error("Invalid sidebar appearance");
+  return { ...typeof value.sidebarCss === "string" ? { sidebarCss: value.sidebarCss } : {}, revision: value.revision, css: value.css, dismissed: [...new Set(value.dismissed)].filter((a) => a !== "Settings") };
 }
 
 class PreferenceStore {
@@ -3175,14 +3180,15 @@ class PreferenceStore {
   }
   update(user, change) {
     return this.serial(user, async () => {
-      if (!isRecord(change) || Object.keys(change).some((k) => !["css", "dismiss"].includes(k)))
+      if (!isRecord(change) || Object.keys(change).some((k) => !["css", "sidebarCss", "dismiss"].includes(k)))
         throw new Error("Invalid appearance change");
       const prefs = readPreferences(await this.io.read(user));
-      if (change.css !== undefined) {
-        if (typeof change.css !== "string" || change.css.length > 32000)
-          throw new Error("Custom CSS is too long");
-        prefs.css = change.css;
-      }
+      for (const key of ["css", "sidebarCss"])
+        if (change[key] !== undefined) {
+          if (typeof change[key] !== "string" || change[key].length > STYLE_FILE_LIMIT)
+            throw Error("CSS file is too large");
+          prefs[key] = change[key];
+        }
       if (change.dismiss !== undefined) {
         if (![...APPS, "Home", "Draft hint"].includes(change.dismiss))
           throw new Error("Invalid app");

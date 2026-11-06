@@ -1,6 +1,6 @@
 import { chromium, type Page } from "@playwright/test";
 import assert from "node:assert/strict";
-import { mkdir } from "node:fs/promises";
+import { mkdir,readFile } from "node:fs/promises";
 
 const result = await Bun.build({ entrypoints: ["tests/browser-harness.ts"], target: "browser" });
 if (!result.success) throw new Error(result.logs.join("\n"));
@@ -21,6 +21,7 @@ async function ready(page: Page) { await page.waitForFunction(() => !!document.q
 async function seed(page: Page, kind = "story") { await page.evaluate(k => (window as any).harness.seed(k), kind); await ready(page); }
 async function section(page:Page,key:string){await page.locator(`.lpt-side-${key}`).evaluate((n:HTMLDetailsElement)=>{n.open=true;n.dispatchEvent(new Event("toggle"));});}
 async function pageAppearance(page:Page){await section(page,"appearance");await page.locator(".lpt-side-css-collapse").evaluate((n:HTMLDetailsElement)=>{n.open=true;n.dispatchEvent(new Event("toggle"));});}
+async function uploadStyle(page:Page,text:string,target:"phone"|"sidebar"="phone"){await page.locator(target==="phone"?".lpt-phone-css-file":".lpt-sidebar-css-file").setInputFiles({name:target==="phone"?"styles.css":"sidebar.css",mimeType:"text/css",buffer:Buffer.from(text,"utf8")});}
 async function settings(page:Page){await section(page,"tracking");}
 async function open(page: Page, app?: string) { const launcher=page.locator(".lpt-island").getByRole("button",{name:"Open phone",exact:true});if(await launcher.isVisible())await launcher.click();if(app==="Settings")await settings(page);else if(app)await page.locator(".lpt-island").locator(`[data-app="${app}"]`).click(); }
 async function home(page: Page) {const threadBack=page.locator(".lpt-island .lpt-thread-back");if(await threadBack.isVisible())await threadBack.click();const back=page.locator(".lpt-island").getByRole("button",{name:"Back to Home",exact:true});if(await back.isVisible())await back.click(); }
@@ -63,7 +64,7 @@ try {
     await ui(iconPage).getByRole("button",{name:"Close phone",exact:true}).click();
     await open(iconPage,"Settings");
     await pageAppearance(iconPage);
-    await ui(iconPage).locator(".lpt-sidebar-css").fill('.lpt-root { --lpt-launcher-size: 64px; --lpt-space: 4px; --lpt-card-bg: #123145; } .lpt-launcher { border-radius: 50%; }');
+    await uploadStyle(iconPage,'.lpt-root { --lpt-launcher-size: 64px; --lpt-space: 4px; --lpt-card-bg: #123145; } .lpt-launcher { border-radius: 50%; }');
     await iconPage.waitForTimeout(700);await ui(iconPage).getByRole("button",{name:"Close phone",exact:true}).click();await iconPage.waitForTimeout(100);
     check(await launcher.evaluate(b=>b.getBoundingClientRect().width===64)&&await artwork.evaluate(n=>(n as HTMLImageElement).complete&&getComputedStyle(n).imageRendering==="auto"),`Custom CSS still sizes/restyles the launcher without replacing the PNG at ${density}x`);
     await launcher.screenshot({path:`.test-artifacts/launcher-custom-${density}x.png`});
@@ -79,12 +80,12 @@ try {
       await preview.screenshot({path:'.test-artifacts/launcher-fit-options.png'});await preview.close();
     }
     await launcher.click();await settings(iconPage);await pageAppearance(iconPage);
-    await ui(iconPage).locator(".lpt-sidebar-css").fill('.lpt-root { --lpt-launcher-size: 50px; --lpt-launcher-shadow-blur: 3px; --lpt-launcher-shadow-color: rgba(20, 10, 40, .6); } .lpt-launcher { height: 55px; }');
+    await uploadStyle(iconPage,'.lpt-root { --lpt-launcher-size: 50px; --lpt-launcher-shadow-blur: 3px; --lpt-launcher-shadow-color: rgba(20, 10, 40, .6); } .lpt-launcher { height: 55px; }');
     await iconPage.waitForTimeout(700);await ui(iconPage).getByRole("button",{name:"Close phone",exact:true}).click();
     check(await launcher.evaluate(b=>b.getBoundingClientRect().width===50&&b.getBoundingClientRect().height===55)&&await artwork.evaluate(n=>getComputedStyle(n).filter.includes("3px")&&getComputedStyle(n).objectFit==="contain"),`Tall option keeps a 50 x 55 target and editable image-only shadow at ${density}x`);
     await launcher.screenshot({path:`.test-artifacts/launcher-tall-${density}x.png`});
     await launcher.click();await settings(iconPage);await pageAppearance(iconPage);
-    await ui(iconPage).locator(".lpt-sidebar-css").fill('.lpt-root { --lpt-launcher-size: 30px; }');await iconPage.waitForTimeout(700);await ui(iconPage).getByRole("button",{name:"Close phone",exact:true}).click();
+    await uploadStyle(iconPage,'.lpt-root { --lpt-launcher-size: 30px; }');await iconPage.waitForTimeout(700);await ui(iconPage).getByRole("button",{name:"Close phone",exact:true}).click();
     check(await launcher.evaluate(b=>b.getBoundingClientRect().width===50&&b.getBoundingClientRect().height===50),`Small size preference retains the default minimum tap target at ${density}x`);
     check(imageRequests.length===0,`No external image request at ${density}x`);
     await context.close();
@@ -124,7 +125,7 @@ try {
   check(await compactPage.locator(".lpt-story-strip").innerText()==="Late afternoon \u00b7 Monday"&&await compactPage.locator(".lpt-island .lpt-heading").isHidden(),"Home replaces its title with real saved story time/date, never a device clock");await compactPage.locator(".harness-widget").screenshot({path:".test-artifacts/home-story-strip.png"});
   await dateChip.locator("input").uncheck();await compactPage.waitForTimeout(80);check(await compactPage.locator(".lpt-story-strip").innerText()==="Late afternoon","Date switch removes only Date from the strip");await timeChip.locator("input").uncheck();await compactPage.waitForTimeout(80);check(await compactPage.locator(".lpt-story-strip").isHidden()&&await compactPage.evaluate(()=>(window as any).harness.getDocument().state.scene.date.value)==="Monday","Empty or switched-off time/date hides the entire strip with no dash");await dateChip.locator("input").check();await compactPage.waitForTimeout(80);check(await compactPage.locator(".lpt-story-strip").innerText()==="Monday","Date alone works without a placeholder for missing Time");
   for(const app of ["Scene","Locations","Notes","Contacts","Messages"]){await compactPage.locator(`.lpt-island [data-app="${app}"]`).click();check(await compactPage.locator(".lpt-story-strip").innerText()==="Monday"&&await compactPage.locator('.lpt-island [aria-label="Close phone"]').isVisible(),`Story strip and Close remain on ${app}`);await home(compactPage);}
-  await section(compactPage,"appearance");check(await compactSide.locator(".lpt-side-css-collapse").getAttribute("open")===null,"Custom CSS editor starts collapsed within Appearance");await section(compactPage,"advanced");check(await compactSide.locator(".lpt-side-numbers").evaluate(n=>getComputedStyle(n).gridTemplateColumns.split(" ").length===2),"Advanced number settings use two columns");check(await compactSide.locator(".lpt-safety-setting .lpt-side-help").count()===2&&!(await compactSide.locator('[data-setting="aiPlayerTexts"] input').isChecked())&&!(await compactSide.locator('[data-setting="inferMissing"] input').isChecked()),"Both safety settings retain visible hints and OFF defaults");
+  await section(compactPage,"appearance");check(await compactSide.locator(".lpt-side-css-collapse").getAttribute("open")===null,"CSS upload controls start collapsed within Appearance");await section(compactPage,"advanced");check(await compactSide.locator(".lpt-side-numbers").evaluate(n=>getComputedStyle(n).gridTemplateColumns.split(" ").length===2),"Advanced number settings use two columns");check(await compactSide.locator(".lpt-safety-setting .lpt-side-help").count()===2&&!(await compactSide.locator('[data-setting="aiPlayerTexts"] input').isChecked())&&!(await compactSide.locator('[data-setting="inferMissing"] input').isChecked()),"Both safety settings retain visible hints and OFF defaults");
   await compactPage.locator(".harness-drawer").evaluate(n=>{(n as HTMLElement).style.width="210px";});await compactPage.setViewportSize({width:390,height:420});await compactPage.waitForTimeout(80);await compactSide.locator(".lpt-sidebar-scroll").evaluate(n=>{n.scrollTop=n.scrollHeight;});check(await toolbar.evaluate(n=>{const r=n.getBoundingClientRect(),scroll=n.parentElement!.querySelector(".lpt-sidebar-scroll")!.getBoundingClientRect();return Math.abs(r.top-document.querySelector(".harness-drawer-header")!.getBoundingClientRect().bottom)<1&&scroll.top>=r.bottom;}),"Scrolling narrow content never moves or overlaps the toolbar");check(await compactSide.getByRole("button",{name:"Reset appearance",exact:true}).isVisible()&&await compactSide.evaluate(n=>n.scrollWidth<=n.clientWidth),"Protected Reset stays visible with no horizontal overflow in a very narrow drawer");
   await compactPage.screenshot({path:".test-artifacts/toolbar-narrow.png"});await compactPage.setViewportSize({width:1100,height:900});await compactPage.locator(".harness-drawer").evaluate(n=>{(n as HTMLElement).style.width="320px";});await section(compactPage,"apps");await compactSide.locator(".lpt-sidebar-scroll").evaluate(n=>{n.scrollTop=0;});await compactSide.screenshot({path:".test-artifacts/sidebar-compact.png"});
   await compactPage.evaluate(()=>(window as any).harness.seed("empty"));await ready(compactPage);await open(compactPage);check(await compactPage.locator(".lpt-story-strip").isHidden(),"A new empty chat never invents time or a date");
@@ -312,13 +313,12 @@ try {
   check(!(await ui(page).locator(".lpt-weather").innerText()).includes("Soft rain"), "Off switch hides tracked weather");
   if(await page.locator(".lpt-island .lpt-back").isVisible())await home(page); await settings(page);
   await pageAppearance(page);
-  const editor = ui(page).locator(".lpt-sidebar-css");
-  await editor.fill('.lpt-root { --lpt-accent: rgb(100, 200, 150); --lpt-width: 500px; --lpt-frame-radius: 10px; }'); await page.waitForTimeout(700);
+  await uploadStyle(page,'.lpt-root { --lpt-accent: rgb(100, 200, 150); --lpt-width: 500px; --lpt-frame-radius: 10px; }'); await page.waitForTimeout(700);
   check(await page.evaluate(() => (window as any).harness.getPreferences().css.includes("500px")), "Custom CSS is saved per user");
   check(await page.locator(".harness-widget").evaluate(e => e.getBoundingClientRect().width) >= 490, "Custom dimensions resize the placement");
-  await editor.fill('.lpt-root {'); await page.waitForTimeout(120);
+  await uploadStyle(page,'.lpt-root {'); await page.waitForTimeout(120);
   check((await ui(page).locator(".lpt-side-status").innerText()).includes("Finish"), "Broken CSS reports error without breaking UI");
-  await editor.fill('* { display: none !important; } :host { position: fixed !important; z-index: 2147483647 !important; width: 100000px !important; height: 100000px !important; }'); await page.waitForTimeout(700);
+  await uploadStyle(page,'* { display: none !important; } :host { position: fixed !important; z-index: 2147483647 !important; width: 100000px !important; height: 100000px !important; }'); await page.waitForTimeout(700);
   const protectedReset = page.locator(".harness-drawer").getByRole("button", { name: "Reset appearance", exact: true });
   check(await protectedReset.isVisible(), "Sidebar Reset remains visible under hostile CSS");
   await protectedReset.click(); await page.waitForTimeout(120);
@@ -358,7 +358,7 @@ try {
   check(await ui(page).locator(".lpt-card-title", { hasText: /^Renamed contact$/ }).count() === 1, "Contact rename saves");
   if(await page.locator(".lpt-island .lpt-back").isVisible())await home(page); await settings(page);
   await pageAppearance(page);
-  await ui(page).locator(".lpt-sidebar-css").fill('.lpt-root { background: url(https://example.invalid/image); }'); await page.waitForTimeout(100);
+  await uploadStyle(page,'.lpt-root { background: url(https://example.invalid/image); }'); await page.waitForTimeout(100);
   check((await ui(page).locator(".lpt-side-status").innerText()).includes("local styles"), "Network-loading CSS is rejected");
   await seed(page); await open(page, "Notes");
   await ui(page).locator('[data-section="misc"]').getByRole("button", { name: "+ Add", exact: true }).click();
@@ -517,10 +517,10 @@ try {
   await section(personalPage,"presets");
   const presetBox=personalPage.locator(".lpt-personal-presets");
   check(await presetBox.getByRole("button",{name:"Rename",exact:true}).isDisabled()&&await presetBox.getByRole("button",{name:"Delete",exact:true}).isDisabled(),"Built-in presets are read-only in the sidebar");
-  await presetBox.getByLabel("Preset name",{exact:true}).fill("My full phone");await presetBox.getByRole("button",{name:"Save current as...",exact:true}).click();await personalPage.waitForTimeout(100);
-  check(await presetBox.getByLabel("Settings preset").locator("option").count()===3,"Save current makes a personal preset");
+  await presetBox.getByLabel("Profile name",{exact:true}).fill("My full phone");await presetBox.getByRole("button",{name:"Save current as...",exact:true}).click();await personalPage.waitForTimeout(100);
+  check(await presetBox.getByLabel("Settings profile").locator("option").count()===3,"Save current makes a personal preset");
   const storyBefore=await personalPage.evaluate(()=>(window as any).harness.getDocument().state);
-  await presetBox.getByLabel("Settings preset").selectOption("minimal");await presetBox.getByRole("button",{name:"Apply",exact:true}).click();
+  await presetBox.getByLabel("Settings profile").selectOption("minimal");await presetBox.getByRole("button",{name:"Apply",exact:true}).click();
   check(await personalPage.evaluate(()=>(window as any).harness.getDocument().settings.apps.Contacts),"Apply waits for one-tap confirmation");
   await presetBox.getByRole("button",{name:"Apply to this chat",exact:true}).click();await personalPage.waitForTimeout(120);
   check(!await personalPage.evaluate(()=>(window as any).harness.getDocument().settings.apps.Contacts),"Confirmed Minimal hides non-minimal apps");
@@ -542,12 +542,40 @@ try {
   await personalPage.locator(".harness-drawer").screenshot({path:".test-artifacts/personal-settings-mobile.png"});
   check(await personalPage.locator(".lpt-sidebar").evaluate(n=>n.scrollWidth<=n.clientWidth+1),"New personal sections fit the narrow sidebar");
   await personalPage.evaluate(()=>(window as any).harness.switchChat(null));await personalPage.waitForTimeout(150);await section(personalPage,"presets");
-  check(await presetBox.getByRole("button",{name:"Apply",exact:true}).isDisabled()&&await presetBox.getByRole("button",{name:"Save current as...",exact:true}).isDisabled()&&await presetBox.getByLabel("Settings preset").locator("option").count()===3,"No-chat state retains personal presets and disables chat actions");
+  check(await presetBox.getByRole("button",{name:"Apply",exact:true}).isDisabled()&&await presetBox.getByRole("button",{name:"Save current as...",exact:true}).isDisabled()&&await presetBox.getByLabel("Settings profile").locator("option").count()===3,"No-chat state retains personal presets and disables chat actions");
   check(await personalPage.getByRole("button",{name:"Reset appearance",exact:true}).isVisible(),"Protected Reset stays reachable with personal sections and no chat");
   await personalPage.evaluate(()=>(window as any).harness.switchChat("a"));await personalPage.waitForTimeout(150);await section(personalPage,"presets");
-  await presetBox.getByLabel("Settings preset").selectOption("minimal");await presetBox.getByRole("button",{name:"Apply",exact:true}).click();await personalPage.evaluate(()=>(window as any).harness.updateDelay(220));await presetBox.getByRole("button",{name:"Apply to this chat",exact:true}).click();await personalPage.evaluate(()=>(window as any).harness.switchChat("b"));await personalPage.waitForTimeout(400);
+  await presetBox.getByLabel("Settings profile").selectOption("minimal");await presetBox.getByRole("button",{name:"Apply",exact:true}).click();await personalPage.evaluate(()=>(window as any).harness.updateDelay(220));await presetBox.getByRole("button",{name:"Apply to this chat",exact:true}).click();await personalPage.evaluate(()=>(window as any).harness.switchChat("b"));await personalPage.waitForTimeout(400);
   check(await personalPage.evaluate(()=>(window as any).harness.getDocument("b").settings.apps.Contacts)&&!await personalPage.evaluate(()=>(window as any).harness.getDocument("a").settings.apps.Contacts),"A delayed preset apply stays in its original chat after switching");
   await personalPage.close();
+  const stylePage=await browser.newPage({viewport:{width:1100,height:850}});await stylePage.goto(`http://127.0.0.1:${server.port}`);await seed(stylePage);await stylePage.waitForTimeout(160);await pageAppearance(stylePage);
+  check(await stylePage.locator(".lpt-side-source .lpt-side-heading").textContent()==="Connections"&&await stylePage.locator('.lpt-helper-source option[value="helper"]').textContent()==="Custom connection"&&await stylePage.locator(".lpt-side-presets .lpt-side-heading").textContent()==="Settings profiles","Connections and settings profiles use the requested visible names");
+  check(await stylePage.locator(".lpt-side-appearance textarea").count()===0&&await stylePage.locator(".lpt-side-appearance input[type=file]").count()===2,"Appearance replaces the text editor with two CSS file uploads");
+  await stylePage.locator(".lpt-phone-css-file").setInputFiles({name:"styles.css",mimeType:"text/css",buffer:await readFile("src/styles.css")});await stylePage.waitForTimeout(150);
+  check(await stylePage.evaluate(()=>(window as any).harness.getPreferences().css.length>32000),"The full default styles.css uploads and saves above the old character limit");
+  await stylePage.locator(".lpt-sidebar-css-file").setInputFiles({name:"sidebar.css",mimeType:"text/css",buffer:await readFile("src/sidebar.css")});await stylePage.waitForTimeout(150);
+  check(await stylePage.evaluate(()=>(window as any).harness.getPreferences().sidebarCss.includes("@container"))&&!(await stylePage.locator(".lpt-side-status").innerText()).includes("Could not"),"Full sidebar.css uploads with container rules and escaped arrow glyphs");
+  await section(stylePage,"advanced");check(await stylePage.locator(".lpt-safety-setting").first().isVisible(),"Uploading the full sidebar stylesheet keeps its settings reachable");
+  await pageAppearance(stylePage);const beforeBad=await stylePage.evaluate(()=>(window as any).harness.getPreferences());
+  await stylePage.locator(".lpt-sidebar-css-file").setInputFiles({name:"bad.css",mimeType:"text/css",buffer:Buffer.from('.x { background:u\\72l("https://example.invalid/bad.png"); }')});await stylePage.waitForTimeout(120);
+  check((await stylePage.locator(".lpt-side-status").innerText()).includes("local styles")&&JSON.stringify(await stylePage.evaluate(()=>(window as any).harness.getPreferences()))===JSON.stringify(beforeBad),"Escape-obfuscated network CSS is rejected without replacing saved files");
+  await stylePage.locator(".lpt-phone-css-file").setInputFiles({name:"too-big.css",mimeType:"text/css",buffer:Buffer.alloc(262145,32)});await stylePage.waitForTimeout(100);
+  check((await stylePage.locator(".lpt-side-status").innerText()).includes("256 KB"),"An oversized upload gives a plain size-limit result");
+  await uploadStyle(stylePage,'body { opacity:0!important; } .lpt-sidebar { --lpt-side-text: rgb(123,45,67); } .lpt-side-heading { color:rgb(123,45,67); } .lpt-recovery-actions {display:none!important;} :scope + * {display:none!important;}',"sidebar");await stylePage.waitForTimeout(120);
+  check(await stylePage.locator(".lpt-side-appearance .lpt-side-heading").evaluate(n=>getComputedStyle(n).color)==="rgb(123, 45, 67)"&&await stylePage.locator("body").evaluate(n=>getComputedStyle(n).opacity)==="1","Uploaded sidebar styles recolor settings while body and siblings stay outside the CSS scope");
+  const safeReset=stylePage.getByRole("button",{name:"Reset appearance",exact:true});
+  check(await safeReset.isVisible()&&await safeReset.evaluate(n=>{const r=n.getBoundingClientRect(),top=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return !!top&&(top===n||n.contains(top));}),"Uploaded sidebar rules cannot hide or cover the protected Reset toolbar");
+  await uploadStyle(stylePage,'* {position:fixed!important;inset:-100000px!important;z-index:2147483647!important;background:red!important;} .lpt-sidebar-style-boundary {contain:none!important;}',"sidebar");await stylePage.waitForTimeout(100);
+  check(await safeReset.evaluate(n=>{const r=n.getBoundingClientRect(),top=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return !!top&&(top===n||n.contains(top));}),"Hostile fixed sidebar content is clipped below the protected toolbar");
+  await safeReset.click();await stylePage.waitForTimeout(120);await pageAppearance(stylePage);
+  await uploadStyle(stylePage,'.lpt-root {display:none!important;}');await stylePage.waitForTimeout(100);await uploadStyle(stylePage,'* {display:none!important;}',"sidebar");await stylePage.waitForTimeout(100);
+  check(await safeReset.isVisible(),"Reset remains available when both uploaded styles hide their content");
+  await stylePage.evaluate(()=>(window as any).harness.failAppearanceSave(true));await safeReset.click();await stylePage.waitForTimeout(100);
+  check(await stylePage.locator(".lpt-island .lpt-frame").isVisible()&&await stylePage.locator(".lpt-side-apps .lpt-side-heading").isVisible(),"Reset clears both live styles immediately even if persistence fails");
+  await stylePage.evaluate(()=>(window as any).harness.failAppearanceSave(false));await safeReset.click();await stylePage.waitForTimeout(100);
+  check(await stylePage.evaluate(()=>{const p=(window as any).harness.getPreferences();return p.css===""&&p.sidebarCss==="";}),"Reset saves both files as cleared without a refresh");
+  check(await stylePage.locator(".lpt-phone-css-file").evaluate(n=>n.getBoundingClientRect().height<75),"CSS file pickers stay compact without the old textarea height");
+  await stylePage.locator(".harness-drawer").screenshot({path:".test-artifacts/css-file-uploads.png"});await stylePage.close();
   console.log(`Browser UI verification passed: ${checks} checks. Screenshots in .test-artifacts/. No real Lumiverse instance or provider was used.`);
 } catch(error) { console.error(`Browser stopped after check ${checks}: ${lastCheck}`);for(const [i,page]of browser.contexts().flatMap(c=>c.pages()).entries())try{await page.screenshot({path:`.test-artifacts/failure-${i}.png`});}catch{}throw error;
 } finally { await browser.close(); server.stop(true); }

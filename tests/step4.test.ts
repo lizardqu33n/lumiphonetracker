@@ -23,7 +23,7 @@ describe("Step 4 appearance and editable cards", () => {
   });
   test("invalid appearance changes never replace saved preferences", async () => {
     let disk = defaultPreferences(); const store = new PreferenceStore({ read: async () => disk, write: async (_, data) => { disk = data; } });
-    for (const change of [{ css: 1 }, { css: "a".repeat(32001) }, { dismiss: "Extra app" }, { unexpected: true }]) {
+    for (const change of [{ css: 1 }, { css: "a".repeat(262145) }, { dismiss: "Extra app" }, { unexpected: true }]) {
       await expect(store.update("alice", change)).rejects.toThrow(); expect(disk).toEqual(defaultPreferences());
     }
     await expect(store.read("")).rejects.toThrow();

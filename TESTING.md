@@ -1,6 +1,36 @@
-# Verification report - 0.14.0
+# Verification report - 0.15.0
 
 Checked November 5, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **No live Lumiverse session or real model connection was used. A local Lumiverse build and its user-docs were inspected; that is not live-host verification. No paid model request was made.**
+
+## 0.15.0: labels and CSS file uploads
+
+**198 code tests / 1663 assertions; 290 browser checks pass.** Type checking,
+reproducible build checks and package validation pass. No real Lumiverse session,
+mobile file chooser or paid model connection was used.
+
+- Code tests accept UTF-8 .css files above the former 32,000-character limit and
+  reject wrong extensions, invalid UTF-8, binary NUL content and files over 256 KB.
+- Preference tests retain legacy phone CSS, save independent phone/sidebar contents,
+  serialize concurrent updates, preserve dismissed hints and separate users. Reset
+  clears both. The operator-scoped backend mock enforces trusted userId for new
+  sidebar-style storage just as for existing appearance.
+- Browser checks use actual file inputs for every previous custom-CSS scenario.
+  Both complete source stylesheets upload successfully, including @container and
+  escaped arrow glyphs. Uploaded sidebar root styles do not break settings layout.
+- New checks cover the Connections/Custom connection/Settings profiles labels, no
+  CSS textarea, compact file pickers, invalid and oversized uploads, escaped URL
+  rejection without replacing saved styles, and actual recoloring inside the scope.
+- Hostile body/sibling/toolbar selectors do not escape the settings scope. Fixed,
+  oversized content is clipped below the toolbar. Reset is visible/clickable when
+  both areas are hidden, restores both in the same session even on save failure,
+  and persists both cleared when storage recovers. Old opacity, no-Send, draft,
+  per-user unread, profile/wording and chat-switch checks still pass.
+
+Not verified live: native mobile/desktop file chooser presentation in Lumiverse,
+CSP/style insertion under the actual installed host, old-browser scope fallback,
+real multi-user persistence or server restart, and real model connections. Tests
+use standard native CSS scope in local Edge; they do not prove real-host placement.
+No permission, macro contract, saved connection or story behavior changed.
 
 ## 0.14.0: personal presets and editable prompt wording
 

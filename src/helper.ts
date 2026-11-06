@@ -144,7 +144,7 @@ export class HelperAI {
       const doc=await this.store.sync(userId,chatId); // Authorize before listing profiles.
       if(!this.io.allowed()) {
         if(doc.settings.source==="helper"&&doc.helperOwner===userId)await this.failure(userId,chatId,"permission missing",true);
-        return {available:false,choices:[],note:"Allow generation permission in Extensions to use Helper AI."};
+        return {available:false,choices:[],note:"Allow generation permission in Extensions to use a custom connection."};
       }
       const profiles=await this.profiles(userId);
       if(doc.settings.source==="helper"&&doc.helperOwner===userId&&!profiles.some(c=>c.id===doc.settings.connection_id)) {

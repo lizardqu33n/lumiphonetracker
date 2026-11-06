@@ -168,6 +168,7 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     expect(other.preferences).toEqual({ revision: 0, css: "", dismissed: [] });
     const reset = await request({ type: "phone_preferences_update", change: { css: "" } }, "u");
     expect(reset.preferences).toEqual({ revision: 2, css: "", dismissed: ["Scene"] });
+    const uploaded=await request({type:"phone_preferences_update",change:{sidebarCss:".lpt-side-title {color:blue;}"}},"u");expect((uploaded.preferences as any).sidebarCss).toContain("blue");expect(((await request({type:"phone_preferences"},"v")).preferences as any).sidebarCss).toBeUndefined();
     const synced = await request({type:"phone_sync",chatId:"a"},"u");
     const text = (synced.snapshot as {state:{messages:{id:string;from:string;to?:string;time?:string;text:string}[]}}).state.messages[0];
     const observed = [{id:text.id,receipt:JSON.stringify([text.from,text.to??null,text.time??null,text.text])}];

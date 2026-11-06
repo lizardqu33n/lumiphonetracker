@@ -2,8 +2,8 @@
    Phone tracker: cute Y2K theme (default look)
    Phone CSS only. The sidebar is outside the Shadow DOM and uses sidebar.css.
    Recolor the whole phone by editing the PALETTE block below.
-   To switch the cute theme off, paste the "plain dark" block found at the
-   very end of this file into the Advanced custom CSS box.
+   To switch the cute theme off, save the "plain dark" block found at the
+   very end of this file as a .css file and upload it under Appearance.
    ========================================================================== */
 
 .lpt-root {

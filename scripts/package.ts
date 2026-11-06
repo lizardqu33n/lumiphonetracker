@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 
 // Include an explicit allowlist; never package dependencies or personal inputs.
 const files = [
+  "src/style-files.ts", "tests/style-files.test.ts", "docs/APPEARANCE-UPLOADS.md",
   "src/personal-settings.ts", "src/personal-controls.ts", "src/wording.ts", "tests/personal.test.ts", "docs/PART-5.md",
   "spindle.json", "package.json", "package-lock.json", "tsconfig.json", ".gitignore",
   "README.md", "INSTALL.md", "TESTING.md", "docs/ARCHITECTURE.md", "docs/BLOCK-FORMAT.md", "docs/PRESET-SNIPPET.txt",

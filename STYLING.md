@@ -4,7 +4,7 @@ Version 0.12.0 keeps the compact story views and adds the read-only story strip 
 
 Version 0.10.1 bundles the supplied styles(1).css and sidebar.css as the default look: pastel tiles, plum outlines, heart markers and solid dark story surfaces. This default does not use the custom CSS character limit. Class names, navigation and tracker behavior are unchanged.
 
-Open **sidebar > Phone > Appearance > Custom CSS** to override the defaults live. Your saved custom CSS still overrides a new default after an update; it is not deleted automatically. To see the new default alone, use **Reset appearance** at the top of the Phone sidebar tab.
+Open **sidebar > Phone > Appearance > Upload CSS files**. Choose `styles.css` for the phone and `sidebar.css` for the settings content. Files are UTF-8 CSS, up to 256 KB each, applied live and saved per user. Your saved custom CSS still overrides a new default after an update; it is not deleted automatically. To see the new default alone, use **Reset appearance** at the top of the Phone sidebar tab.
 
 That single Reset and its confirmation stay outside the phone's Shadow DOM. Custom phone CSS cannot style them or escape the protected clipping area. Reset clears only appearance and reopens the phone without a page refresh, even after hostile CSS. It never deletes story data. If saving fails, the current view is restored and the sidebar tells you to try saving again.
 
@@ -254,8 +254,8 @@ The optional plain-dark override is included as a comment at the end of styles.c
 
 Sidebar defaults live on `.lpt-sidebar` in src/sidebar.css. Text, backgrounds
 and recovery controls continue to follow the existing host theme sources; pastel
-accents have the explicit defaults below. The phone CSS editor cannot reach them.
-Changing sidebar defaults requires editing the bundled sidebar stylesheet.
+accents have the explicit defaults below. The phone CSS upload cannot reach them.
+Upload sidebar.css to change the settings content; the protected toolbar keeps its bundled defaults.
 
 | Variable | Default | What it changes |
 | --- | --- | --- |
@@ -305,8 +305,8 @@ These remain the existing UI hooks, not extra screens or settings. `.lpt-root[da
 | `.lpt-content` | Scrollable app area, separate from the outer frame. |
 | `.lpt-conversation` | Expandable sender conversation, with data-conversation holding the normalized recipient/sender key. |
 | `.lpt-counter` | Notes section count and limit. |
-| `.lpt-css-editor` | Live custom CSS text box. |
-| `.lpt-custom-css` | Collapsed Custom CSS section. |
+| `.lpt-css-editor` | Retired phone text-editor class; no longer rendered. |
+| `.lpt-custom-css` | Retired in-phone Custom CSS section; no longer rendered. |
 | `.lpt-delete` | Delete button and its inline confirmation. |
 | `.lpt-description` | Dismissible one-line app explanation. |
 | `.lpt-description-text` | Explanation text. |
@@ -492,8 +492,8 @@ hidden; Close stays. All app headings and existing navigation remain.
 | `.lpt-toggle-chip` | One native checked-state field chip for an added app. |
 | `.lpt-safety-setting` | Existing safety switch with a visible hint underneath. |
 | `.lpt-side-numbers` | Two-column Advanced numeric settings layout. |
-| `.lpt-side-css-collapse` | Inner collapsed Custom CSS editor inside Appearance. |
-| `.lpt-side-css-summary` | Keyboard-accessible Custom CSS editor heading. |
+| `.lpt-side-css-collapse` | Inner collapsed CSS file uploads inside Appearance. |
+| `.lpt-side-css-summary` | Keyboard-accessible Upload CSS files heading. |
 | `.lpt-story-strip` | Single read-only story time/date element; hidden when empty. |
 
 The eight sidebar PNGs add 46,981 raw bytes / 62,828 data-URI characters.
@@ -536,7 +536,7 @@ The composer now has input, Emoji and Add to draft columns. The thread is a size
 container so the picker can be bounded without inline styles. Its surface uses
 --lpt-card-bg and existing border/focus tokens; protected sidebar Reset is unchanged.
 
-## Copy-paste examples
+## CSS file examples
 
 Change the main accent and the Messages Home tint:
 
@@ -606,3 +606,40 @@ and the sidebar's tap-target size. Long Preview text wraps and scrolls inside it
 
 Custom phone CSS cannot reach these controls or the protected toolbar Reset.
 The phone screens and all existing opaque surfaces are unchanged.
+
+## 0.15.0: CSS file uploads and labels
+
+Save one of the phone examples above in a UTF-8 `.css` file and upload it under
+Phone styles. `sidebar.css` may be uploaded independently under Sidebar styles.
+The former text box is gone. The old 32,000-character limit is replaced by a 256 KB
+file limit. Previously saved phone CSS is retained. No class or saved profile ID
+was renamed; only visible labels now say Connections, Custom connection and Settings profiles.
+
+Phone CSS stays inside its Shadow DOM. Sidebar CSS uses native CSS `@scope` around
+`.lpt-sidebar-settings`, with an extension-owned paint/layout boundary outside the
+scope. It cannot style Lumiverse, the toolbar or the toolbar's result line. Even
+fixed, oversized or hidden settings content is clipped below Reset. Uploads containing
+external loads, imports, fonts, unsupported global rules or broken braces are rejected.
+Ordinary rules, nested selectors, @media, @supports and @container are supported.
+A browser without CSS scope support keeps the default sidebar and reports the limit.
+
+Full default stylesheet files can be uploaded. In sidebar uploads, root selectors
+`.lpt-sidebar`, `:root` and plain `:host` map to the settings root for custom properties
+and visual rules (colors, fonts, borders); their outer-frame layout rules are ignored.
+The protected toolbar and drawer placement keep their defaults. Explicit settings
+selectors style the content normally. Reset clears both files in the same session,
+even if a save fails; a failed save must be retried to persist the reset.
+
+| Stable class | What it styles |
+| --- | --- |
+| `.lpt-sidebar-style-boundary` | Protected parent that clips uploaded sidebar styling; outside its scope. |
+| `.lpt-style-upload` | File-picker label and layout. |
+| `.lpt-css-file` | Both native CSS file inputs. |
+| `.lpt-phone-css-file` | Phone stylesheet file input. |
+| `.lpt-sidebar-css-file` | Sidebar stylesheet file input. |
+| `.lpt-sidebar-css` | Retained alias on the phone file input; now a file input, not a text box. |
+| `.lpt-style-file-status` | Using saved/default styles line for each upload. |
+
+The new controls reuse existing --lpt-side-* variables. There are no new phone
+variables, external assets or permissions. Custom CSS changes appearance only;
+source, tracking data, prompt wording and settings profiles are unaffected.

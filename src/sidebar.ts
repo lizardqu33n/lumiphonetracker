@@ -5,15 +5,16 @@ import { ALL_APPS, APP_FIELDS, type Document, type Settings } from "./model";
 import { DESCRIPTIONS, appImage } from "./phone-view";
 import type { Preferences } from "./preferences";
 import type { ConnectionsInfo } from "./helper";
-import { prepareCustomCSS } from "./custom-css";
+import {readStyleFile} from "./style-files";
+import { prepareCustomCSS,prepareSidebarCSS } from "./custom-css";
 const node = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string) => { const n = document.createElement(tag); n.className = cls; if (text !== undefined)
     n.textContent = text; return n; };
 export interface SidebarActions {
     personal?(change?:unknown,revision?:number):Promise<PersonalReply>;
     update(settings: unknown, revision: number): Promise<Document>;
     connections(): Promise<ConnectionsInfo>;
-    css(text: string): Promise<Preferences>;
-    applyCSS(text: string): void;
+    css(change:{css?:string;sidebarCss?:string}): Promise<Preferences>;
+    applyCSS(change:{css?:string;sidebarCss?:string}): void;
 }
 export class Sidebar {
     readonly root = node("div", "lpt-sidebar-settings");
@@ -25,12 +26,13 @@ export class Sidebar {
     private saving = false;
     private open = new Set(["apps"]);
     private cssOpen=false;
-    private timer: ReturnType<typeof setTimeout> | undefined;
+    private fileEpoch={css:0,sidebarCss:0};
+    private alive=true;
     private info: ConnectionsInfo = { available: false, choices: [], note: "Loading connections..." };
     private helperChoice = false;
     private status = node("p", "lpt-side-status");
-    private cssText = "";
-    constructor(parent: HTMLElement, private actions: SidebarActions, prefs: Preferences) { this.personal=new PersonalControls((change,revision)=>this.actions.personal?this.actions.personal(change,revision):Promise.reject(Error("Unavailable")));this.prefs = prefs; this.cssText = prefs.css; parent.append(this.root); this.personal.receive(null);this.render(); }
+
+    constructor(parent: HTMLElement, private actions: SidebarActions, prefs: Preferences) { this.personal=new PersonalControls((change,revision)=>this.actions.personal?this.actions.personal(change,revision):Promise.reject(Error("Unavailable")));this.prefs = prefs; parent.append(this.root); this.personal.receive(null);this.render(); }
     receive(doc: Document | null, name: string): void {
         const changed = doc?.chatId !== this.doc?.chatId;
         if (this.doc?.settings.source === "helper" && doc?.settings.source === "main")
@@ -48,11 +50,20 @@ export class Sidebar {
         }
         this.render();
     }
-    preferences(prefs: Preferences): void { this.prefs = prefs; this.cssText = prefs.css; const input = this.root.querySelector<HTMLTextAreaElement>(".lpt-sidebar-css"); if (input && document.activeElement !== input)
-        input.value = prefs.css; }
-    reset(): void { clearTimeout(this.timer); this.cssText = ""; const input = this.root.querySelector<HTMLTextAreaElement>(".lpt-sidebar-css"); if (input)
-        input.value = ""; }
-    destroy(): void { clearTimeout(this.timer); this.root.remove(); this.epoch++; }
+    preferences(prefs: Preferences): void {this.prefs=prefs;this.fileStatus();}
+    reset(): void {this.fileEpoch.css++;this.fileEpoch.sidebarCss++;this.prefs={...this.prefs,css:"",sidebarCss:""};for(const input of Array.from(this.root.querySelectorAll<HTMLInputElement>(".lpt-css-file")))input.value="";this.fileStatus();}
+    destroy(): void {this.alive=false;this.fileEpoch.css++;this.fileEpoch.sidebarCss++;this.root.remove();this.epoch++;}
+    private fileStatus():void {for(const key of ["css","sidebarCss"] as const){const status=this.root.querySelector(`[data-style-status="${key}"]`);if(status)status.textContent=this.prefs[key]?"Using saved styles.":"Using default styles.";}}
+    private styleUpload(parent:HTMLElement,key:"css"|"sidebarCss",labelText:string):void {
+      const label=node("label","lpt-style-upload",labelText),input=node("input",`lpt-css-file ${key==="css"?"lpt-sidebar-css lpt-phone-css-file":"lpt-sidebar-css-file"}`);input.type="file";input.accept=".css,text/css";input.setAttribute("aria-label",labelText);label.append(input);
+      const status=node("small","lpt-style-file-status");status.dataset.styleStatus=key;status.textContent=this.prefs[key]?"Using saved styles.":"Using default styles.";parent.append(label,status);
+      input.addEventListener("change",()=>{const file=input.files?.[0];if(!file)return;const epoch=++this.fileEpoch[key];void(async()=>{
+        const text=await readStyleFile(file);if(!this.alive||epoch!==this.fileEpoch[key])return;
+        if(key==="css")prepareCustomCSS(text);else prepareSidebarCSS(text);
+        this.actions.applyCSS({[key]:text});this.prefs={...this.prefs,[key]:text};this.fileStatus();this.status.textContent="Applying styles...";
+        try{const prefs=await this.actions.css({[key]:text});if(!this.alive||epoch!==this.fileEpoch[key])return;this.prefs=prefs;this.fileStatus();this.status.textContent="Appearance saved.";}catch{if(this.alive&&epoch===this.fileEpoch[key])this.status.textContent="Applied for now. Could not save; try again.";}
+      })().catch(error=>{if(this.alive&&epoch===this.fileEpoch[key])this.status.textContent=error instanceof Error?error.message:"Could not read this CSS file.";});});
+    }
     private async connections(): Promise<void> { const epoch = this.epoch; try {
         const info = await this.actions.connections();
         if (epoch !== this.epoch)
@@ -125,7 +136,6 @@ export class Sidebar {
     }
     private render(): void {
         const origin=this.epoch;
-        const active=document.activeElement;const selection=active instanceof HTMLTextAreaElement&&active.classList.contains("lpt-sidebar-css")&&this.root.contains(active)?{start:active.selectionStart,end:active.selectionEnd}:null;
         this.root.replaceChildren();
         this.root.append(node("p", "lpt-side-chat", this.doc ? `Settings for this chat: ${this.name || "Unnamed chat"}` : "Open a chat to change tracker settings"));
         const apps = this.section("apps", "App Store", "This chat");
@@ -163,11 +173,11 @@ export class Sidebar {
                 track.append(group);
             }
         }
-        const source = this.section("source", "Helper AI", "This chat");
+        const source = this.section("source", "Connections", "This chat");
         if (this.doc) {
             const label = node("label", "lpt-side-label", "Who updates the tracker");
             const select = node("select", "lpt-helper-source");
-            for (const [value, title] of [["main", "Main AI"], ["helper", "Helper AI"]]) {
+            for (const [value, title] of [["main", "Main AI"], ["helper", "Custom connection"]]) {
                 const o = node("option", "", title);
                 o.value = value;
                 select.append(o);
@@ -205,26 +215,10 @@ export class Sidebar {
             }
         }
         const appearance = this.section("appearance", "Appearance", "All my chats");
-        const label = node("label", "lpt-side-label");
-        const input = node("textarea", "lpt-sidebar-css");
-        input.value = this.cssText;
-        input.maxLength = 32000;
-        input.spellcheck = false;
-        input.setAttribute("aria-label", "Custom CSS");
-        label.append(input);
-        const cssFold=node("details","lpt-side-css-collapse");cssFold.open=this.cssOpen||selection!==null;cssFold.append(node("summary","lpt-side-css-summary","Custom CSS"),label);cssFold.addEventListener("toggle",()=>{if(cssFold.isConnected)this.cssOpen=cssFold.open;});
-        appearance.append(cssFold, node("p", "lpt-side-help", "Applies live to the phone only. Reset appearance above restores the default look."));
-        input.addEventListener("input", () => { clearTimeout(this.timer); this.cssText = input.value; try {
-            prepareCustomCSS(input.value);
-            this.actions.applyCSS(input.value);
-            this.status.textContent = "";
-            const text = input.value;
-            this.timer = setTimeout(() => { void this.actions.css(text).then(p => { this.prefs = p; this.status.textContent = "Appearance saved."; }).catch(() => { this.status.textContent = "Appearance could not be saved."; }); }, 400);
-        }
-        catch (e) {
-            this.status.textContent = e instanceof Error ? e.message : "Check the CSS.";
-        } });
-        const presets=this.section("presets","Presets","All my chats");presets.append(this.personal.presets);
+        const cssFold=node("details","lpt-side-css-collapse");cssFold.open=this.cssOpen;cssFold.append(node("summary","lpt-side-css-summary","Upload CSS files"));cssFold.addEventListener("toggle",()=>{if(cssFold.isConnected)this.cssOpen=cssFold.open;});
+        this.styleUpload(cssFold,"css","Phone styles (styles.css)");this.styleUpload(cssFold,"sidebarCss","Sidebar styles (sidebar.css)");
+        appearance.append(cssFold,node("p","lpt-side-help","Choose UTF-8 .css files, up to 256 KB each. Applies to all your chats. Sidebar styles affect the settings content only; the toolbar stays protected. Reset appearance above clears both files."));
+        const presets=this.section("presets","Settings profiles","All my chats");presets.append(this.personal.presets);
         const advanced = this.section("advanced", "Advanced", "This chat");
         if (this.doc) {
             const numbers=node("div","lpt-side-numbers");advanced.append(numbers);
@@ -239,6 +233,5 @@ export class Sidebar {
         this.status.setAttribute("role", "status");
         this.status.setAttribute("aria-live", "polite");
         this.root.append(this.status);
-        if(selection){input.focus({preventScroll:true});input.setSelectionRange(selection.start,selection.end);}
     }
 }

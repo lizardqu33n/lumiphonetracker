@@ -72,14 +72,13 @@
 .lpt-safety-setting {display:grid;grid-template-columns:20px minmax(0,1fr);align-items:start;gap:var(--lpt-side-gap);padding:var(--lpt-side-space) 0;cursor:pointer;}
 .lpt-safety-setting input {margin-top:3px;}
 .lpt-safety-setting .lpt-side-help {margin:0;}
-.lpt-side-number,.lpt-helper-source,.lpt-helper-connection,.lpt-sidebar-css {min-width:0;max-width:100%;padding:var(--lpt-side-gap);border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);background-color:var(--lpt-side-bg);color:var(--lpt-side-text);min-height:var(--lpt-side-target);}
+.lpt-side-number,.lpt-helper-source,.lpt-helper-connection {min-width:0;max-width:100%;padding:var(--lpt-side-gap);border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);background-color:var(--lpt-side-bg);color:var(--lpt-side-text);min-height:var(--lpt-side-target);}
 .lpt-helper-source,.lpt-helper-connection {width:100%;margin:0 0 var(--lpt-side-gap);}
 .lpt-side-source > .lpt-side-label {margin-bottom:var(--lpt-side-gap);font-size:var(--lpt-side-font-size);}
 .lpt-side-setting:has(.lpt-side-number) {display:flex;flex-direction:column;gap:var(--lpt-side-gap);margin:var(--lpt-side-gap) 0;font-size:var(--lpt-side-font-size);}
 .lpt-side-number {width:100%;}
 .lpt-side-numbers {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--lpt-side-space);}
 .lpt-side-css-summary {min-height:var(--lpt-side-target);display:flex;align-items:center;cursor:pointer;font-size:var(--lpt-side-font-size);}
-.lpt-sidebar-css {display:block;width:100%;min-height:160px;resize:vertical;font-family:monospace;font-size:var(--lpt-side-font-size)!important;}
 @container (min-width:300px) {.lpt-store-grid {grid-template-columns:repeat(3,minmax(0,1fr));}}
 @container (min-width:340px) {.lpt-toolbar-label {display:none;}}
 @container (max-width:239px) {.lpt-recovery-actions {grid-template-columns:repeat(2,minmax(0,1fr));}}
@@ -101,3 +100,10 @@
 
 .lpt-wording > summary::before {content:"\25b8";margin-right:var(--lpt-side-gap);}
 .lpt-wording[open] > summary::before {content:"\25be";}
+
+/* This parent is outside uploaded CSS scope; fixed/oversized settings cannot cover Reset. */
+.lpt-sidebar-style-boundary {contain:layout paint;isolation:isolate;}
+.lpt-style-upload {display:flex;flex-direction:column;gap:var(--lpt-side-gap);font-size:var(--lpt-side-font-size);margin:var(--lpt-side-space) 0 var(--lpt-side-gap);}
+.lpt-css-file {display:block;min-height:var(--lpt-side-target);height:auto;resize:none;width:100%;min-width:0;max-width:100%;font:inherit;color:var(--lpt-side-text);}
+.lpt-css-file::file-selector-button {min-height:var(--lpt-side-target);padding:var(--lpt-side-gap);border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);background:var(--lpt-side-btn-bg);color:var(--lpt-side-btn-text);cursor:pointer;}
+.lpt-style-file-status {display:block;color:var(--lpt-side-muted);font-size:var(--lpt-side-font-size);}

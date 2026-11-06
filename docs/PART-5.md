@@ -1,6 +1,9 @@
-# Presets and prompt wording — 0.14.0
+Current labels (0.15.0): Settings profiles replaces Presets; Connections > Custom
+connection replaces the Helper AI choice. Internal IDs and saved data are unchanged.
 
-Everything is in the sidebar's Phone tab. Presets is a collapsed section.
+# Settings profiles and prompt wording
+
+Everything is in the sidebar's Phone tab. Settings profiles is a collapsed section.
 Prompt wording is collapsed inside Advanced. The phone gains no settings screen.
 
 ## Settings presets
@@ -26,7 +29,7 @@ Apply and Save current are disabled until a chat is open.
 
 ## Prompt wording
 
-Choose Main AI or Helper AI. Each has its own selection, shared across **your**
+Choose Main AI or Custom connection. Each has its own selection, shared across **your**
 chats. Default follows the current chat's enabled fields and is read-only. Click
 Copy Default, name the copy and edit its text, then Save wording. Up to 10 custom
 wordings **total across both AI choices** per user, each up to 4,000 characters.

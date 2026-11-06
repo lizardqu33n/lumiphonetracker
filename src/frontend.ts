@@ -1,3 +1,4 @@
+import {prepareSidebarCSS} from "./custom-css";
 import type {PersonalReply} from "./personal-settings";
 import {UI_ICONS,type UIIconName} from "./ui-icons";
 import type { SpindleFrontendContext } from "lumiverse-spindle-types";
@@ -44,6 +45,9 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   let backendBusy=false;
   const busy=()=>backendBusy||!!(activeChat&&streaming.get(activeChat)?.size);
   const helperRequests = new Map<string, { chatId:string; epoch:number; resolve:(value:unknown)=>void; reject:(error:Error)=>void; timer:ReturnType<typeof setTimeout> }>();
+  let removeSidebarStyle=()=>{};
+  const applySidebarStyle=(text:string)=>{const scoped=prepareSidebarCSS(text);const remove=scoped?ctx.dom.addStyle(scoped):()=>{};removeSidebarStyle();removeSidebarStyle=remove;};
+  disposers.push(()=>removeSidebarStyle());
   const removeHostStyle = ctx.dom.addStyle(css);
   disposers.push(removeHostStyle,ctx.dom.addStyle(sidebarCSS));
 
@@ -57,9 +61,9 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     if (payload.isUser === false || ([TEXT_TAG,"phone-email"].includes(tagName) && payload.isUser === true)) sendSync();
   }));
 
-  const prefsChange = (change?: { css?: string; dismiss?: import("./preferences").App|"Home"|"Draft hint" }): Promise<Preferences> => {
+  const prefsChange = (change?: { css?: string; sidebarCss?:string; dismiss?: import("./preferences").App|"Home"|"Draft hint" }): Promise<Preferences> => {
     const requestId = crypto.randomUUID();
-    if (change?.css !== undefined) { appearanceEpoch++; preferences = { ...preferences, css: change.css }; }
+    if (change?.css !== undefined||change?.sidebarCss!==undefined) { appearanceEpoch++; preferences = { ...preferences, ...(change.css!==undefined?{css:change.css}:{}),...(change.sidebarCss!==undefined?{sidebarCss:change.sidebarCss}:{}) }; }
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => { prefsRequests.delete(requestId); reject(new Error("Appearance could not be saved. Try again.")); }, 15000);
       prefsRequests.set(requestId, { appearanceEpoch, resolve, reject, timer });
@@ -96,7 +100,8 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   const reset = () => {
     // Clear the local preference before mounting/reopening, without waiting for storage.
     sidebar?.reset();
-    const saving = prefsChange({ css: "" });
+    removeSidebarStyle();removeSidebarStyle=()=>{};
+    const saving = prefsChange({ css: "",sidebarCss:"" });
     const originalView = view;
     openRequested = true; lastSize = ""; view?.resetCSS(); view?.open();
     toolbarResult(recoveryStatus,"Resetting...");
@@ -126,8 +131,8 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   refreshButton.addEventListener("click",()=>{const origin=epoch;portraitChat=null;refreshPending=true;refreshStatus.textContent="";updateBusy();void requestHelper("phone_helper_now").then(value=>{if(origin!==epoch)return;const result=readRefreshResult(value);toolbarResult(refreshStatus,result.ok?"Refreshed":failureLabel(result.category??"invalid output"));sendSync();}).catch(error=>{if(origin===epoch)toolbarResult(refreshStatus,failureLabel(failureCategory(error,"validation rejected")));}).finally(()=>{if(origin===epoch){refreshPending=false;updateBusy();}});});
   recoveryActions.setAttribute("role","toolbar");recoveryActions.setAttribute("aria-label","Phone actions");recoveryActions.append(open,refreshButton,resetButton);
   const results=document.createElement("div");results.className="lpt-toolbar-results";results.append(...statuses);
-  const scroll=document.createElement("div");scroll.className="lpt-sidebar-scroll";scroll.append(help);panel.append(recoveryActions,results,scroll);tab.root.append(panel);
-  sidebar=new Sidebar(scroll,{personal,update:async(settings,revision)=>await update({settings},revision),connections:async()=>await requestHelper("phone_connections") as ConnectionsInfo,css:text=>prefsChange({css:text}),applyCSS:text=>{appearanceEpoch++;preferences={...preferences,css:text};view?.applyCSS(text);}},preferences);
+  const scroll=document.createElement("div");scroll.className="lpt-sidebar-scroll lpt-sidebar-style-boundary";scroll.append(help);panel.append(recoveryActions,results,scroll);tab.root.append(panel);
+  sidebar=new Sidebar(scroll,{personal,update:async(settings,revision)=>await update({settings},revision),connections:async()=>await requestHelper("phone_connections") as ConnectionsInfo,css:change=>prefsChange(change),applyCSS:change=>{if(change.sidebarCss!==undefined)applySidebarStyle(change.sidebarCss);if(change.css!==undefined)view?.applyCSS(change.css);appearanceEpoch++;preferences={...preferences,...change};}},preferences);
   updateBusy();disposers.push(()=>{clearTimeout(toolbarTimer);for(const r of personalRequests.values()){clearTimeout(r.timer);r.reject(Error("Closed"));}personalRequests.clear();sidebar?.destroy();},()=>tab.destroy());
   disposers.push(tab.onActivate(() => { void ensureWidget(); }));
 
@@ -231,7 +236,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
       clearTimeout(preferenceRequest.timer); prefsRequests.delete(payload.requestId);
       if (payload.type === "phone_preferences_error") preferenceRequest.reject(new Error(String(payload.message)));
       else {
-        try { const prefs = readPreferences(payload.preferences); if (preferenceRequest.appearanceEpoch === appearanceEpoch && prefs.revision >= preferences.revision) { preferences = prefs;sidebar?.preferences(prefs); view?.receivePreferences(prefs); }
+        try { const prefs = readPreferences(payload.preferences); if (preferenceRequest.appearanceEpoch === appearanceEpoch && prefs.revision >= preferences.revision) { preferences = prefs;sidebar?.preferences(prefs); view?.receivePreferences(prefs);try{applySidebarStyle(prefs.sidebarCss??"");}catch{help.textContent="Saved sidebar styles could not be applied. Reset appearance restores the defaults.";} }
           preferenceRequest.resolve(prefs);
         } catch { preferenceRequest.reject(new Error("Appearance could not be loaded.")); }
       }
@@ -284,7 +289,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   if (detected) activeChat = detected;
   sendSync();
   const initialAppearanceEpoch = appearanceEpoch;
-  void prefsChange().then(p => { if (disposed || initialAppearanceEpoch !== appearanceEpoch || p.revision < preferences.revision) return; preferences = p;sidebar?.preferences(p); view?.receivePreferences(p); try { view?.applyCSS(p.css); } catch { help.textContent = "Saved custom CSS could not be applied. Reset appearance to clear it."; } }).catch(() => { help.textContent = "Appearance could not be loaded. Default styles are in use."; });
+  void prefsChange().then(p => { if (disposed || initialAppearanceEpoch !== appearanceEpoch || p.revision < preferences.revision) return; preferences = p;sidebar?.preferences(p); view?.receivePreferences(p); try { view?.applyCSS(p.css);applySidebarStyle(p.sidebarCss??""); } catch { help.textContent = "Saved custom CSS could not be applied. Reset appearance to clear it."; } }).catch(() => { help.textContent = "Appearance could not be loaded. Default styles are in use."; });
   void ensureWidget();
   return () => {
     disposed = true; epoch++; widgetResize?.disconnect(); view?.destroy(); widget?.destroy();
