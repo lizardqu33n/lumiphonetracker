@@ -107,3 +107,13 @@
 .lpt-css-file {display:block;min-height:var(--lpt-side-target);height:auto;resize:none;width:100%;min-width:0;max-width:100%;font:inherit;color:var(--lpt-side-text);}
 .lpt-css-file::file-selector-button {min-height:var(--lpt-side-target);padding:var(--lpt-side-gap);border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);background:var(--lpt-side-btn-bg);color:var(--lpt-side-btn-text);cursor:pointer;}
 .lpt-style-file-status {display:block;color:var(--lpt-side-muted);font-size:var(--lpt-side-font-size);}
+
+/* Setup is inside the settings boundary, away from the protected toolbar. */
+.lpt-setup {background:var(--lpt-side-bg);color:var(--lpt-side-text);padding:var(--lpt-side-gap);font:inherit;}
+.lpt-setup-fields {display:flex;flex-wrap:wrap;gap:var(--lpt-side-gap);}
+.lpt-setup-question,.lpt-setup-group-title {font:inherit;font-weight:600;}
+.lpt-setup-source,.lpt-setup-hint,.lpt-setup-status,.lpt-setup-cost {font-size:var(--lpt-side-font-size);line-height:1.5;overflow-wrap:anywhere;}
+.lpt-setup-hint,.lpt-setup-status {color:var(--lpt-side-muted);}
+.lpt-setup-button {margin:var(--lpt-side-gap);min-height:var(--lpt-side-target);border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);background:var(--lpt-side-btn-bg);color:var(--lpt-side-btn-text);cursor:pointer;}
+.lpt-setup-record {background:var(--lpt-side-bg);border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);padding:var(--lpt-side-space);margin:var(--lpt-side-gap) 0;}
+.lpt-setup-record-value {overflow-wrap:anywhere;}

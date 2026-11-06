@@ -1,4 +1,4 @@
-# Contacts and setup wizard - 0.16.0
+# Contacts and setup wizard - 0.16.1
 
 ## Contacts
 
@@ -56,15 +56,17 @@ still writes only changed supported story fields, never these confirmed address 
 
 ## Setup wizard
 
-Use Setup wizard on Home. Choose Contacts, Notes and/or Locations. Scene is never
+Use Setup wizard in the sidebar Phone tab. Choose fields within Contacts and Notes,
+and/or Locations. The full list is in [the setup fix guide](FIX-0.16.1.md). Scene is never
 a choice. Removed apps must be added in the sidebar first. Review token cost is free:
 it reads the current card, your active persona and their attached plus your globally
 active lorebooks, then calls the documented tokenizer for the selected connection.
 Disabled lorebook entries are excluded. It sends no chat transcript or Scene state.
 
-The wizard uses the existing Connections selection (connection_id); there is no new
-picker or key. Select a saved custom connection there first. You may return background
-tracking to Main AI afterwards: a manual wizard run does not change that source.
+The wizard follows Connections: Main AI uses your documented Lumiverse default
+profile; Custom connection uses the saved connection_id. There is no extra picker
+or key. A manual wizard run never changes the background tracker source. Missing
+access, default connection or model is explained before any model request.
 Only clicking Run setup makes a model request. Cost review shows input tokens, an
 approximate marker when reported by Lumiverse, and a requested output limit of 2,000
 tokens. An exact currency charge is not exposed by the documented API. Requests may

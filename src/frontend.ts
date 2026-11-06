@@ -134,7 +134,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   recoveryActions.setAttribute("role","toolbar");recoveryActions.setAttribute("aria-label","Phone actions");recoveryActions.append(open,refreshButton,resetButton);
   const results=document.createElement("div");results.className="lpt-toolbar-results";results.append(...statuses);
   const scroll=document.createElement("div");scroll.className="lpt-sidebar-scroll lpt-sidebar-style-boundary";scroll.append(help);panel.append(recoveryActions,results,scroll);tab.root.append(panel);
-  sidebar=new Sidebar(scroll,{personal,update:async(settings,revision)=>await update({settings},revision),connections:async()=>await requestHelper("phone_connections") as ConnectionsInfo,css:change=>prefsChange(change),applyCSS:change=>{if(change.sidebarCss!==undefined)applySidebarStyle(change.sidebarCss);if(change.css!==undefined)view?.applyCSS(change.css);appearanceEpoch++;preferences={...preferences,...change};}},preferences);
+  sidebar=new Sidebar(scroll,{setup,personal,update:async(settings,revision)=>await update({settings},revision),connections:async()=>await requestHelper("phone_connections") as ConnectionsInfo,css:change=>prefsChange(change),applyCSS:change=>{if(change.sidebarCss!==undefined)applySidebarStyle(change.sidebarCss);if(change.css!==undefined)view?.applyCSS(change.css);appearanceEpoch++;preferences={...preferences,...change};}},preferences);
   updateBusy();disposers.push(()=>{clearTimeout(toolbarTimer);for(const r of personalRequests.values()){clearTimeout(r.timer);r.reject(Error("Closed"));}personalRequests.clear();sidebar?.destroy();},()=>tab.destroy());
   disposers.push(tab.onActivate(() => { void ensureWidget(); }));
 
@@ -169,7 +169,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
       const base = document.createElement("style"); base.textContent = css;
       const custom = document.createElement("style"); shadow.append(base, custom);
       viewport.append(island); transport.append(viewport); widget.root.append(placementStyle, transport);
-      view = new PhoneView(shadow, custom, { setup,update, preferences: prefsChange, markRead,
+      view = new PhoneView(shadow, custom, { update, preferences: prefsChange, markRead,
         draft: (chatId, to, text,group) => {
           if (disposed || activeChat !== chatId || current?.chatId !== chatId || (!current.settings.apps.Messages||!current.settings.enabled.messages)) throw new Error("The chat changed. Reopen the original conversation.");
           return addReplyDraft(ctx, chatId, current.currentPlayer ?? "", to, text,group);

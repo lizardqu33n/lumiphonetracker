@@ -1,3 +1,4 @@
+import {SetupView,type SetupRequest} from "./setup-view";
 import {CONTACT_ICONS} from "./contact-icons";
 import {PersonalControls} from "./personal-controls";
 import type {PersonalReply} from "./personal-settings";
@@ -11,6 +12,7 @@ import { prepareCustomCSS,prepareSidebarCSS } from "./custom-css";
 const node = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string) => { const n = document.createElement(tag); n.className = cls; if (text !== undefined)
     n.textContent = text; return n; };
 export interface SidebarActions {
+    setup?:SetupRequest;
     personal?(change?:unknown,revision?:number):Promise<PersonalReply>;
     update(settings: unknown, revision: number): Promise<Document>;
     connections(): Promise<ConnectionsInfo>;
@@ -21,6 +23,7 @@ export class Sidebar {
     readonly root = node("div", "lpt-sidebar-settings");
     private doc: Document | null = null;
     private personal:PersonalControls;
+    private setup:SetupView;
     private name = "";
     private prefs: Preferences;
     private epoch = 0;
@@ -33,13 +36,13 @@ export class Sidebar {
     private helperChoice = false;
     private status = node("p", "lpt-side-status");
 
-    constructor(parent: HTMLElement, private actions: SidebarActions, prefs: Preferences) { this.personal=new PersonalControls((change,revision)=>this.actions.personal?this.actions.personal(change,revision):Promise.reject(Error("Unavailable")));this.prefs = prefs; parent.append(this.root); this.personal.receive(null);this.render(); }
+    constructor(parent: HTMLElement, private actions: SidebarActions, prefs: Preferences) { this.setup=new SetupView((a,d)=>this.actions.setup?this.actions.setup(a,d):Promise.reject(Error("Setup is unavailable.")));this.personal=new PersonalControls((change,revision)=>this.actions.personal?this.actions.personal(change,revision):Promise.reject(Error("Unavailable")));this.prefs = prefs; parent.append(this.root); this.personal.receive(null);this.render(); }
     receive(doc: Document | null, name: string): void {
         const changed = doc?.chatId !== this.doc?.chatId;
         if (this.doc?.settings.source === "helper" && doc?.settings.source === "main")
             this.helperChoice = false;
         this.doc = doc;
-        this.personal.receive(doc);
+        this.personal.receive(doc);this.setup.receive(doc);
         this.name = name;
         if (changed) {
             this.epoch++;
@@ -53,7 +56,7 @@ export class Sidebar {
     }
     preferences(prefs: Preferences): void {this.prefs=prefs;this.fileStatus();}
     reset(): void {this.fileEpoch.css++;this.fileEpoch.sidebarCss++;this.prefs={...this.prefs,css:"",sidebarCss:""};for(const input of Array.from(this.root.querySelectorAll<HTMLInputElement>(".lpt-css-file")))input.value="";this.fileStatus();}
-    destroy(): void {this.alive=false;this.fileEpoch.css++;this.fileEpoch.sidebarCss++;this.root.remove();this.epoch++;}
+    destroy(): void {this.setup.destroy();this.alive=false;this.fileEpoch.css++;this.fileEpoch.sidebarCss++;this.root.remove();this.epoch++;}
     private fileStatus():void {for(const key of ["css","sidebarCss"] as const){const status=this.root.querySelector(`[data-style-status="${key}"]`);if(status)status.textContent=this.prefs[key]?"Using saved styles.":"Using default styles.";}}
     private styleUpload(parent:HTMLElement,key:"css"|"sidebarCss",labelText:string):void {
       const label=node("label","lpt-style-upload",labelText),input=node("input",`lpt-css-file ${key==="css"?"lpt-sidebar-css lpt-phone-css-file":"lpt-sidebar-css-file"}`);input.type="file";input.accept=".css,text/css";input.setAttribute("aria-label",labelText);label.append(input);
@@ -103,7 +106,7 @@ export class Sidebar {
         details.dataset.section = key;
         details.open = this.open.has(key);
         const summary=node("summary","lpt-side-summary");
-        const icon=node("img","lpt-side-icon");icon.src=key==="presets"?CONTACT_ICONS.profile:UI_ICONS[({apps:"apps",tracking:"track",source:"helper",appearance:"look",advanced:"advanced"} as Record<string,UIIconName>)[key]??"advanced"];icon.alt="";icon.setAttribute("aria-hidden","true");icon.draggable=false;
+        const icon=node("img","lpt-side-icon");icon.src=key==="setup"?CONTACT_ICONS.wizard:key==="presets"?CONTACT_ICONS.profile:UI_ICONS[({apps:"apps",tracking:"track",source:"helper",appearance:"look",advanced:"advanced"} as Record<string,UIIconName>)[key]??"advanced"];icon.alt="";icon.setAttribute("aria-hidden","true");icon.draggable=false;
         summary.append(icon,node("span","lpt-side-heading",title),node("small","lpt-side-scope",scope));details.append(summary);
         details.addEventListener("toggle",()=>{if(!details.isConnected)return;if(details.open){this.open.clear();this.open.add(key);for(const other of Array.from(this.root.querySelectorAll<HTMLDetailsElement>(".lpt-side-section")))if(other!==details)other.open=false;}else this.open.delete(key);});
         this.root.append(details);
@@ -215,6 +218,7 @@ export class Sidebar {
                 source.append(node("p", "lpt-side-help", "Requests may cost money depending on the model chosen."));
             }
         }
+        const setup=this.section("setup","Setup wizard","This chat");setup.append(this.setup.root);
         const appearance = this.section("appearance", "Appearance", "All my chats");
         const cssFold=node("details","lpt-side-css-collapse");cssFold.open=this.cssOpen;cssFold.append(node("summary","lpt-side-css-summary","Upload CSS files"));cssFold.addEventListener("toggle",()=>{if(cssFold.isConnected)this.cssOpen=cssFold.open;});
         this.styleUpload(cssFold,"css","Phone styles (styles.css)");this.styleUpload(cssFold,"sidebarCss","Sidebar styles (sidebar.css)");

@@ -650,25 +650,26 @@ Existing class names stay available. Contacts rows now use buttons and full page
 selectors tied specifically to `details.lpt-contact` should target `.lpt-contact-row`
 or `.lpt-contact-page` instead. None of this changes the protected sidebar toolbar,
 Reset, uploaded CSS boundaries or opaque default phone surfaces. All new phone
-values below are declared on `.lpt-root` in src/styles.css; the wizard reuses them.
+values below are declared on `.lpt-root` in src/styles.css. The sidebar wizard uses
+existing `--lpt-side-*` tokens in src/sidebar.css instead.
 
 | Variable | Default | What it changes |
 | --- | --- | --- |
-| `--lpt-contact-bg` | `var(--lpt-screen-bg,#19171f)` | Opaque Contacts/wizard screen background. |
+| `--lpt-contact-bg` | `var(--lpt-screen-bg,#19171f)` | Opaque Contacts screen background. |
 | `--lpt-contact-surface` | `var(--lpt-card-bg,#24212d)` | Rows, chips and preview cards. |
-| `--lpt-contact-text` | `var(--lpt-text,#eee)` | Contact/wizard text. |
+| `--lpt-contact-text` | `var(--lpt-text,#eee)` | Contact text. |
 | `--lpt-contact-muted` | `var(--lpt-muted,#aaa)` | Review hints and status text. |
 | `--lpt-contact-border` | `var(--lpt-outline,#420642)` | Chip/divider/preview borders. |
 | `--lpt-contact-radius` | `16px` | Rows/pages/preview card corners. |
 | `--lpt-contact-gap` | `8px` | Gaps and short margins. |
 | `--lpt-contact-padding` | `12px` | Page/card/field spacing. |
-| `--lpt-contact-font` | `var(--lpt-font,system-ui)` | Contact/wizard font family. |
-| `--lpt-contact-font-size` | `14px` | Contact/wizard text size. |
+| `--lpt-contact-font` | `var(--lpt-font,system-ui)` | Contact font family. |
+| `--lpt-contact-font-size` | `14px` | Contact text size. |
 | `--lpt-contact-portrait-size` | `40px` | Round list portrait size. |
 | `--lpt-contact-hero-portrait-size` | `88px` | Large contact-page portrait size. |
 | `--lpt-contact-chip-radius` | `999px` | Role chip rounding. |
 | `--lpt-contact-action-size` | `24px` | Supplied action/wizard icon size. |
-| `--lpt-contact-target` | `44px` | Minimum Add/wizard control height. |
+| `--lpt-contact-target` | `44px` | Minimum contact Add control height. |
 | `--lpt-contact-line-width` | `1px` | Divider and border width. |
 
 | Stable class | What it styles |
@@ -731,15 +732,12 @@ values below are declared on `.lpt-root` in src/styles.css; the wizard reuses th
 | `.lpt-contact-input-worn` | Worn input/select in Edit. |
 | `.lpt-contact-edit-removed` | Removed field label in Edit. |
 | `.lpt-contact-input-removed` | Removed input/select in Edit. |
-| `.lpt-setup-open` | Home entry button, with wand art. |
-| `.lpt-setup` | Opaque wizard surface. |
-| `.lpt-setup-header` | Wizard title/icon/Back row. |
-| `.lpt-setup-title` | Wizard heading. |
+| `.lpt-setup` | Opaque sidebar wizard surface; styled in sidebar.css. |
 | `.lpt-setup-button` | Wizard action buttons. |
 | `.lpt-setup-question` | What do you want to add? |
-| `.lpt-setup-choice` | One app checkbox row. |
-| `.lpt-setup-checkbox` | App checkbox. |
-| `.lpt-setup-choice-label` | Visible app name. |
+| `.lpt-setup-choice` | One field toggle chip. |
+| `.lpt-setup-checkbox` | Field switch input. |
+| `.lpt-setup-choice-label` | Visible field name. |
 | `.lpt-setup-hint` | Sources, cost or confirmation explanation. |
 | `.lpt-setup-cost` | Token count and requested output limit. |
 | `.lpt-setup-preview` | Unsaved preview container. |
@@ -773,3 +771,22 @@ Example for a phone CSS upload:
 }
 .lpt-contact-page.is-main .lpt-contact-chip { font-weight: bold; }
 ```
+
+### 0.16.1 sidebar setup classes
+
+Wizard styling is now in src/sidebar.css. Phone styles.css uploads cannot reach it.
+Use sidebar.css to style it within the existing settings boundary; the protected
+Reset/toolbar remain outside that scope. No new variables were needed: use existing
+--lpt-side-bg, text, muted, gap, space, font-size, target, radius, border, btn-bg and
+btn-text tokens. The obsolete Home entry/header/title elements have been removed.
+
+| Class | Purpose |
+| --- | --- |
+| `.lpt-side-setup` | Setup accordion section, collapsed initially. |
+| `.lpt-setup-fields` | Contacts/Notes/Locations field group; also uses lpt-side-group. |
+| `.lpt-setup-source` | Main AI/default or Custom connection explanation. |
+| `.lpt-setup-choice.lpt-toggle-chip` | A field choice; checked state includes a check mark. |
+| `.lpt-setup-checkbox.lpt-side-checkbox` | Keyboard-operable switch; data-field identifies its stable field ID. |
+
+All other lpt-setup-* preview/action/status classes listed above remain. No change
+to Contacts classes or phone opacity. Sidebar setup shares the existing accordion.

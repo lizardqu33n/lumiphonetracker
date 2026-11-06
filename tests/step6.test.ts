@@ -170,3 +170,5 @@ describe("Part 2 safe refresh and Helper failures",()=>{
     expect(readRefreshResult({ok:false,category:"PRIVATE"})).toEqual({ok:false,category:"invalid output"});
   });
 });
+
+test("connection labels use an ASCII separator without mojibake",async()=>{const f=fixture();const result=await f.helper.connections("owner-a","a");expect(result.choices[0].label).toBe("Small saved connection - chosen-small-model");});

@@ -6,7 +6,7 @@ import { validateEmail,validateActivity } from "./activity";
 import { isHelperNotice } from "./helper-status";
 import { isRecord } from "./shared";
 import { chatPath } from "./store";
-import { effectiveDocument, emptyDocument, emptyState, readSettings, SECTIONS, normalize, type Document, type ManualEdit, type HelperEntry, type Section } from "./model";
+import { effectiveDocument, CONTACT_KEYS, emptyDocument, emptyState, readSettings, SECTIONS, normalize, type Document, type ManualEdit, type HelperEntry, type Section } from "./model";
 import { applyManual, replay, rowSignature, helperSourceSignature, type StoryRow } from "./engine";
 import { validateExpanded, short } from "./schema";
 import { readSnapshot } from "./history";
@@ -203,8 +203,8 @@ export class PhoneStore {
     return this.serial(chatId,async()=>{
       if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");const raw=await this.io.read(chatId),saved=readDocument(raw,chatId);if(saved.revision!==revision)throw Error("The tracker changed. Nothing was saved.");let {doc,rows}=await this.build(chatId,userId);if(JSON.stringify(doc.accepted,canonicalKeys)!==JSON.stringify(saved.accepted,canonicalKeys))throw Error("The story changed. Nothing was saved.");const data=setupCandidates(doc,input),last=[...rows].sort((a,b)=>a.index_in_chat-b.index_in_chat).at(-1);
       const add=(target:ManualEdit["target"],name:string,value:unknown,section?:Section)=>doc.edits.push(validateEdit({id:crypto.randomUUID(),target,name,value,...(target==="contact"?{playerAtEdit:doc.playerNames.some(n=>normalize(n)===normalize(name))}:{}),...(section?{section}:{}),after:last?.id??null,index:last?.index_in_chat??-1}));
-      for(const c of data.contacts){const old=doc.state.contacts.find(x=>normalize(x.name)===normalize(c.name));if(!old||c.roles?.length)add("contact",c.name,c.roles?.length?{roles:c.roles}:{});const prior=doc.contactInfo?.[normalize(c.name)]??old?.info??emptyContactInfo(c.name);const fields=Object.keys(c).filter(k=>["phone","email","relationship","details"].includes(k));const info=readContactInfo({...prior,...c,kind:prior.locked?prior.kind:names.some(n=>normalize(n)===normalize(c.name))?"Main":prior.kind,confirmed:[...new Set([...(prior.confirmed??[]),...fields])]},c.name);(doc.contactInfo??=Object.create(null))[normalize(c.name)]=info;}
-      for(const n of data.notes)add("note",n.name,{detail:n.detail,context:n.context},n.section);
+      for(const c of data.contacts){const old=doc.state.contacts.find(x=>normalize(x.name)===normalize(c.name));const values=Object.fromEntries(CONTACT_KEYS.filter(k=>c[k]!==undefined).map(k=>[k,c[k]]));if(!old||Object.keys(values).length)add("contact",c.name,values);const prior=doc.contactInfo?.[normalize(c.name)]??old?.info??emptyContactInfo(c.name);const fields=Object.keys(c).filter(k=>["phone","email","relationship","details"].includes(k));const info=readContactInfo({...prior,...c,kind:prior.locked?prior.kind:names.some(n=>normalize(n)===normalize(c.name))?"Main":prior.kind,confirmed:[...new Set([...(prior.confirmed??[]),...fields])]},c.name);(doc.contactInfo??=Object.create(null))[normalize(c.name)]=info;}
+      for(const n of data.notes)add("note",n.name,{detail:n.detail,context:n.context,...(n.section==="misc"?{sendToAI:false}:{})},n.section);
       for(const p of data.locations)add("location",p.name,{description:p.description,relation:p.relation});
       doc=replay(doc,rows,doc.playerNames);projectContacts(doc,names);doc.revision=saved.revision+1;await this.io.write(chatId,JSON.stringify(doc));return doc;
     });

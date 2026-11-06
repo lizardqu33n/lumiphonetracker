@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.16.1 - Sidebar setup and connection fix
+
+- Moved Setup wizard from Home to a collapsed sidebar section, outside phone CSS.
+- Added field-by-field import switches for nine Contacts fields, five Notes sections
+  and Locations; Scene stays excluded. Preview and explicit saving remain required.
+- Main AI setup now uses the requesting user's documented default connection,
+  rather than requiring an unrelated saved Custom connection. Recheck before Run.
+- Connection name/model separator is now ASCII " - ", fixing the mis-encoded dot.
+- Keep user edits, player restrictions, trusted user IDs, free token review and
+  protected Reset. Macros, permission list and story-tag formats are unchanged.
+
+
 ## 0.16.0 - Contacts pages and setup wizard
 
 - Contacts now use A-Z rows, round portraits and full pages with context-aware Back,

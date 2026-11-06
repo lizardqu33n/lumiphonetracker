@@ -1,6 +1,29 @@
-# Verification report - 0.16.0
+# Verification report - 0.16.1
 
 Checked November 5, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **No live Lumiverse session or real model connection was used. A local Lumiverse build and its user-docs were inspected; that is not live-host verification. No paid model request was made.**
+
+## 0.16.1: sidebar setup fix
+
+218 code tests / 1819 assertions and 316 browser checks pass. Type checking,
+reproducible build and package checks pass. No real Lumiverse or model connection used.
+
+- Reproduced the old exact custom-connection error with Main AI and no saved ID;
+  fixed code uses the requesting user's documented default. Explicit custom choice,
+  missing/default ambiguity and changed-default-before-Run cases are covered.
+- Fifteen field choices, source-proven contact/attire/Misc imports, unselected-field
+  rejection, private Misc continuity and player-field restrictions are covered.
+- All scoped mock calls require a trusted user ID; preview tickets remain pinned
+  to user/chat/revision. Existing user edits and deletion protections still pass.
+- Connection labels are tested as name - model, without the mis-encoded separator.
+- Browser tests verify the sidebar-only wizard, all fifteen switches, no extra picker,
+  Main AI with no custom ID, permission failure, free cost review, explicit Run/Save,
+  opaque surface, narrow layout and clearing choices/previews on chat switches.
+- Existing full-suite opacity, hostile CSS and protected Reset checks still pass.
+
+Unverified: actual server grants/default-connection resolution, card/persona/lorebook
+access, native mobile drawer and keyboard, real provider token counts/billing and
+model extraction accuracy. No direct access to the user's real server logs was used.
+See docs/FIX-0.16.1.md for the cause and documented Main AI resolution limit.
 
 ## 0.16.0: Contacts and setup wizard
 

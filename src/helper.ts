@@ -150,7 +150,7 @@ export class HelperAI {
       if(doc.settings.source==="helper"&&doc.helperOwner===userId&&!profiles.some(c=>c.id===doc.settings.connection_id)) {
         this.cancel(chatId);await this.failure(userId,chatId,"no connection",true);
       }
-      return {available:true,choices:profiles.map(c=>({id:c.id,label:[c.name,c.model].filter(Boolean).join(" Â· ")})),note:""};
+      return {available:true,choices:profiles.map(c=>({id:c.id,label:[c.name,c.model].filter(Boolean).join(" - ")})),note:""};
     } catch(error) {
       const category=failureCategory(error);await this.failure(userId,chatId,category);
       return {available:false,choices:[],note:helperNoticeText(category)};

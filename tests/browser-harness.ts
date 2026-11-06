@@ -27,7 +27,7 @@ const store = new PhoneStore({ authorize: async (chat, user) => user === `owner-
   read: async chat => docs.get(chat) ?? "", write: async (chat, data) => { docs.set(chat, data); },
   history: async chat => structuredClone(histories.get(chat) ?? []), player: async () => "Player" });
 const preferenceStore = new PreferenceStore({ read: async () => prefs, write: async (_u, value) => { prefs = structuredClone(value); } });
-let helperProfiles=[{id:"small",name:"Saved small connection",model:"Small test model"}];let helperDelay=0;let helperOutput='{"weather":"Clear skies"}';const helperCalls:Parameters<HelperIO["generate"]>[0][]=[];
+let helperProfiles=[{id:"small",name:"Saved small connection",model:"Small test model",is_default:true}];let helperDelay=0;let helperOutput='{"weather":"Clear skies"}';const helperCalls:Parameters<HelperIO["generate"]>[0][]=[];
 const helper=new HelperAI(store,{allowed:()=>granted.includes("generation"),connections:async()=>helperProfiles,generate:async input=>{helperCalls.push(input);await new Promise(resolve=>setTimeout(resolve,helperDelay));return {content:helperOutput,finish_reason:"stop"};},changed:(_,chatId)=>onBackend({type:"phone_helper_changed",chatId}),warn:()=>{}});
 let personalData:unknown=emptyPersonal();const personalStore=new PersonalStore({read:async()=>structuredClone(personalData),write:async(_u,v)=>{personalData=structuredClone(v);},warn:()=>{}});
 let setupCalls=0;
@@ -132,7 +132,7 @@ function start() { cleanup = setup(ctx as never); }
 const api = {
   async seed(kind: "empty" | "story" = "story") {
     cleanup?.(); helper.cancelAll(); docs.clear(); histories.clear(); events.clear(); readFiles.clear(); prefs = defaultPreferences(); activeChat = "a"; granted = ["chats", "chat_mutation", "interceptor", "ui_panels","generation"]; updateDelay = 0;
-    setupCalls=0;helperCalls.length=0;helperDelay=0;helperOutput='{"weather":"Clear skies"}';helperProfiles=[{id:"small",name:"Saved small connection",model:"Small test model"}];
+    setupCalls=0;helperCalls.length=0;helperDelay=0;helperOutput='{"weather":"Clear skies"}';helperProfiles=[{id:"small",name:"Saved small connection",model:"Small test model",is_default:true}];
     composerState = { mounted:true, chatId:"a", text:"" }; focusCount = 0; sendCalls = 0; ctx.host.capabilities["composer-v1"] = 1;
     failAppearanceSave = false; failWidget = false;
     if (new URL(location.href).searchParams.has("stale-appearance")) prefs = { ...defaultPreferences(), css: ".lpt-root { display: none !important; }" };

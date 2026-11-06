@@ -1748,14 +1748,3 @@
 .lpt-contact-link,.lpt-contact-detail-add {display:flex;align-items:center;gap:var(--lpt-contact-gap);}
 .lpt-contact-detail-edit-row {display:flex;flex-wrap:wrap;gap:var(--lpt-contact-gap);margin:var(--lpt-contact-gap) 0;}
 .lpt-contact-detail-label,.lpt-contact-detail-value {flex:1;min-width:0;}
-
-/* Setup wizard shares the Contacts surface tokens. */
-.lpt-setup {background:var(--lpt-contact-bg);color:var(--lpt-contact-text);padding:var(--lpt-contact-padding);border-radius:var(--lpt-contact-radius);font-family:var(--lpt-contact-font);font-size:var(--lpt-contact-font-size);}
-.lpt-setup-header,.lpt-setup-open,.lpt-setup-choice {display:flex;align-items:center;gap:var(--lpt-contact-gap);}
-.lpt-setup-title,.lpt-setup-question,.lpt-setup-group-title {font:inherit;font-weight:bold;}
-.lpt-setup-choice {min-height:var(--lpt-contact-target);flex-wrap:wrap;}
-.lpt-setup-checkbox {accent-color:var(--lpt-contact-border);}
-.lpt-setup-button {margin:var(--lpt-contact-gap);min-height:var(--lpt-contact-target);}
-.lpt-setup-hint,.lpt-setup-status {color:var(--lpt-contact-muted);overflow-wrap:anywhere;}
-.lpt-setup-record {background:var(--lpt-contact-surface);border:var(--lpt-contact-line-width) solid var(--lpt-contact-border);border-radius:var(--lpt-contact-radius);padding:var(--lpt-contact-padding);margin:var(--lpt-contact-gap) 0;}
-.lpt-setup-record-value {overflow-wrap:anywhere;}

@@ -1,4 +1,3 @@
-import {SetupView,type SetupRequest} from "./setup-view";
 import {CONTACT_ICONS} from "./contact-icons";
 import {emptyContactInfo,contactDuplicates,contactMatch} from "./contact-info";
 import {renderEmojiText,attachEmojiPicker} from "./emoji";
@@ -15,7 +14,6 @@ import { conversations, emptyReads, isUnread, receipt, threadKey, type Conversat
 import { isRecord } from "./shared";
 
 export interface ViewActions {
-  setup?:SetupRequest;
   update(change: { edit?: Partial<ManualEdit>; settings?: unknown; dismissNotice?: string;portrait?:{name:string;data:string|null};contactInfo?:unknown }, revision: number): Promise<PhoneDocument>;
   preferences(change: { css?: string; dismiss?: App|"Home"|"Draft hint" }): Promise<Preferences>;
   markRead(chatId: string, key: string, observed: { id: string; receipt: string }[]): Promise<ReadState>;
@@ -88,8 +86,6 @@ export class PhoneView {
   private portraitEpoch=0;
   private pendingThreadScroll=false;
   private viewportFit=()=>this.measure();
-  private setupView:SetupView;
-  private setupOpen=false;
   private selectedContact:string|null=null;
   private contactOrigin:"Contacts"|"Messages"="Contacts";
   private contactScroll=0;
@@ -104,7 +100,6 @@ export class PhoneView {
   private textNotice = el("p", "lpt-text-notice");
   private noticeTimer: ReturnType<typeof setTimeout> | undefined;
   constructor(private mount: ShadowRoot | HTMLElement, private customStyle: HTMLStyleElement, private actions: ViewActions) {
-    this.setupView=new SetupView((action,data)=>this.actions.setup?this.actions.setup(action,data):Promise.reject(Error("Setup is unavailable.")),()=>{this.setupOpen=false;this.render();});
     this.launcher.setAttribute("aria-label", "Open phone");
     const launcherImage=el("img","lpt-launcher-image");
     launcherImage.src=LAUNCHER_ICON;launcherImage.alt="";launcherImage.setAttribute("aria-hidden","true");launcherImage.draggable=false;
@@ -127,10 +122,10 @@ export class PhoneView {
     const oldActivities=new Set([...(this.doc?.state.calls??[]),...(this.doc?.state.emails??[])].map(e=>activityReceipt(e)));
     const previous = new Set(this.doc?.state.messages.filter(m => m.direction === "incoming").map(m => JSON.stringify([m.id, receipt(m)])) ?? []);
     const arrived = !changedChat && this.doc && doc?.settings.apps.Messages&&doc.settings.enabled.messages ? doc.state.messages.filter(m => m.direction === "incoming" && !previous.has(JSON.stringify([m.id, receipt(m)]))) : [];
-    this.doc = doc;this.setupView.receive(doc);
+    this.doc = doc;
     if(this.app!=="Home"&&!doc?.settings.apps[this.app])this.app="Home";
     if (changedChat) {
-      this.setupOpen=false;this.selectedContact=null;this.contactOrigin="Contacts";this.contactScroll=0;this.portraitEpoch++;this.portraitSources=emptyPortraitSources();this.chatEpoch++; this.pendingReads.clear(); this.reads = reads ?? emptyReads(); this.replyDrafts.clear();this.replySelections.clear(); this.manualDrafts.clear();
+      this.selectedContact=null;this.contactOrigin="Contacts";this.contactScroll=0;this.portraitEpoch++;this.portraitSources=emptyPortraitSources();this.chatEpoch++; this.pendingReads.clear(); this.reads = reads ?? emptyReads(); this.replyDrafts.clear();this.replySelections.clear(); this.manualDrafts.clear();
       this.clearTextNotice(); this.editing = false; this.app = "Home"; this.selectedText = null;
 
 
@@ -204,10 +199,8 @@ export class PhoneView {
     renderEmojiText(this.storyStrip,clock.join(" \u00b7 "));this.storyStrip.hidden=!clock.length;
     const header=this.frame.querySelector<HTMLElement>(".lpt-header")!;
     if(this.app==="Home")header.prepend(this.storyStrip);else this.frame.insertBefore(this.storyStrip,header);
-    this.back.hidden = this.setupOpen||this.app === "Home" ||(this.app==="Contacts"&&this.selectedContact!==null)|| (this.app==="Messages"&&this.selectedText!==null);
-    if(this.setupOpen){this.content.append(this.setupView.root);}
-    else if (this.app === "Home") {
-      const setup=button("Setup wizard","lpt-button lpt-setup-open",()=>{this.setupOpen=true;this.setupView.receive(this.doc);this.render();});setup.prepend(this.contactIcon("wizard"));setup.disabled=!this.doc;this.content.append(setup);
+    this.back.hidden = this.app === "Home" ||(this.app==="Contacts"&&this.selectedContact!==null)|| (this.app==="Messages"&&this.selectedText!==null);
+    if (this.app === "Home") {
       const home = el("div", "lpt-home");
       for (const app of APPS.filter(a=>this.doc?.settings.apps[a])) {
         const b = button("", "lpt-app-button", () => this.navigate(app)); b.dataset.app = app;
