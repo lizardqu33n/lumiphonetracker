@@ -315,3 +315,12 @@ The record/tag parser and format are unchanged. Custom wording substitutes
 fields, with structural constraints protected. If omitted, that reference is appended.
 Helper safety stays locked. See [Presets and wording](PART-5.md); the preset still
 uses `{{phone_format}}` once. Custom prose does not relax parsing or player protections.
+
+## Confirmed contact metadata (0.16.0)
+
+The hidden block/tag syntax is unchanged. Phone, email, relationship and custom
+contact details have no AI-writable shorthand keys. `c: ... | roles=...` remains a
+free-label field; Main/NPC classification is separate, set from verified names or
+locked by a user. Attempts to write metadata keys in a tracker line are rejected.
+The wizard uses its own validated source-quote JSON, with no writes before explicit
+preview confirmation; it does not rewrite saved blocks or presets. See PART-6.md.

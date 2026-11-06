@@ -1,3 +1,4 @@
+import {contactContinuity} from "./contact-info";
 import { composeWording, templateFromLines } from "./wording";
 import { activityUnread } from "./activity";
 import type { MacroDefinitionDTO, MacroInvocationContextDTO, SpindleAPI } from "lumiverse-spindle-types";
@@ -29,6 +30,7 @@ export function sceneMacro(doc: Document): string {
       .map(k => `${k}=${cellText(contact.fields[k], Math.max(24, Math.min(160, Math.floor(2200 / Math.max(1, presentNames(doc).length * CONTACT_KEYS.filter(f => doc.settings.enabled[`contacts.${f}`]).length)))))}`);
     if (fields.length) lines.push(`${clip(contact.name, 100)}${contact.player ? " (You)" : ""}: ${fields.join("; ")}`);
   }
+  const details=contactContinuity(doc);if(details)lines.push(details);
   return lines.join("\n");
 }
 export function locationsMacro(doc: Document): string {
@@ -73,7 +75,7 @@ export function trackerInstructions(doc: Document, helper=false): string[] {
   doc=effectiveDocument(doc);
   const s=doc.settings;const lines=[
     helper?"Return only <phone-state>changed lines</phone-state>; empty=no change.":"End each reply with <phone-state>changed lines</phone-state>; empty=no change.",
-    "Write ONLY changed fields.",
+    "Write ONLY changed fields. Phone/email/relationship/custom contact details are user or wizard confirmed only; never create or change them.",
     'One record/line; fields " | ", lists "; ". Reword values containing " | ", line breaks or "<". No fences.',
     "Only shown fields; established facts. Omit Absent/N/A/none/unknown; newer confirmations win.",
   ];

@@ -1,11 +1,11 @@
 # Install Lumi Phone Tracker
 
-Version 0.15.0 includes the built files. You do not need to build or upload anything yourself.
+Version 0.16.0 includes the built files. You do not need to build or upload anything yourself.
 
 ## Install or update
 
 1. Open Lumiverse > Extensions > Install.
-2. Paste this repository address: https://github.com/lizardqu33n/lumiphonetracker . For an existing install from this repository, use its update option to get version 0.15.0. Enable the extension.
+2. Paste this repository address: https://github.com/lizardqu33n/lumiphonetracker . For an existing install from this repository, use its update option to get version 0.16.0. Enable the extension.
 3. Allow chat access, message processing, prompt interception and floating panels (chats, chat_mutation, interceptor, ui_panels, macro_interceptor). The existing generation permission enables optional Custom connection: completed-reply tracking and calls through the connection you select. Main AI makes no extra model requests. If generation permission is declined, Main AI still works.
 4. Open a chat. Tap the floating phone, or use Open phone in the Phone sidebar tab.
 5. Add this exact single line to your active preset and save it:
@@ -206,3 +206,26 @@ and saves the defaults, without changing story data or dismissed hints.
 Connections and Settings profiles are new labels for the same existing controls.
 Your saved choices, profiles and wording survive; the preset line is still
 `{{phone_format}}` once. No permission has been added.
+
+## Contacts and setup (0.16.0)
+
+Tap a contact for its full page; Edit has phone/email, relationship, free role labels,
+custom details, portraits and confirmed Delete. Main/NPC is a label you can change.
+Phone and Email fields follow whether those apps are added. Message opens the
+contact's thread; Add to draft still does not send. Email opens the existing inbox.
+
+Setup wizard is on Home. Add the apps you want in App Store, choose an existing
+custom connection in Connections, then open the wizard. Choose Contacts, Notes
+and/or Locations, review the token count and cost note, and click Run setup.
+Inspect the preview; only Save these additions confirms it. Existing edits stay.
+You can leave background tracking on Main AI; the wizard is a separate explicit run.
+
+The server operator must allow **world_books** for lorebook reads, plus the existing
+characters, personas and generation permissions. Normal phone use still works
+without lorebook access. Without card/persona access, new contacts start NPC.
+No new API key or connection is needed. Input token counts may be approximate;
+there is no documented exact price quote. No model request runs before Run setup.
+
+Keep your preset line `{{phone_format}}` once. New confirmed contact metadata is
+sent compactly for NPCs; Main/player cards omit it. The AI cannot write those fields.
+See [Contacts and setup](docs/PART-6.md) for source limits and permission details.

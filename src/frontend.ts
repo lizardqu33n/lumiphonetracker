@@ -36,6 +36,8 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   let widgetWasConnected = false;
   let openRequested = false;
   let appearanceEpoch = 0;
+  const setupRequests=new Map<string,{chat:string;epoch:number;resolve:(v:Record<string,unknown>)=>void;reject:(e:Error)=>void;timer:ReturnType<typeof setTimeout>}>();
+  const setup:import("./setup-view").SetupRequest=(action,data)=>{if(!activeChat||!current||disposed)return Promise.reject(Error("Open a chat first."));if(busy())return Promise.reject(Error("Wait for the current reply to finish."));const chat=activeChat,requestId=crypto.randomUUID();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{setupRequests.delete(requestId);reject(Error("Setup took too long. Check the tracker before trying again."));},action==="run"?105000:20000);setupRequests.set(requestId,{chat,epoch,resolve,reject,timer});ctx.sendToBackend({type:`phone_setup_${action}`,chatId:chat,requestId,...data});});};
   const personalRequests=new Map<string,{chatId:string|null;epoch:number;resolve:(r:PersonalReply)=>void;reject:(e:Error)=>void;timer:ReturnType<typeof setTimeout>}>();
   const personal=(change?:unknown,revision?:number):Promise<PersonalReply>=>{const chatId=activeChat,requestId=crypto.randomUUID();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{personalRequests.delete(requestId);reject(Error("Saving took too long."));},15000);personalRequests.set(requestId,{chatId,epoch,resolve,reject,timer});ctx.sendToBackend({type:"phone_personal",requestId,chatId,chatRevision:current?.revision,revision,change});});};
   const updates = new Map<string, { chatId: string; epoch: number; resolve: (doc: PhoneDocument) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
@@ -167,7 +169,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
       const base = document.createElement("style"); base.textContent = css;
       const custom = document.createElement("style"); shadow.append(base, custom);
       viewport.append(island); transport.append(viewport); widget.root.append(placementStyle, transport);
-      view = new PhoneView(shadow, custom, { update, preferences: prefsChange, markRead,
+      view = new PhoneView(shadow, custom, { setup,update, preferences: prefsChange, markRead,
         draft: (chatId, to, text,group) => {
           if (disposed || activeChat !== chatId || current?.chatId !== chatId || (!current.settings.apps.Messages||!current.settings.enabled.messages)) throw new Error("The chat changed. Reopen the original conversation.");
           return addReplyDraft(ctx, chatId, current.currentPlayer ?? "", to, text,group);
@@ -208,6 +210,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     if (disposed || !isRecord(payload)) return;
     if(payload.type==="phone_helper_changed") { if(activeChat && payload.chatId===activeChat)sendSync();return; }
     if(typeof payload.requestId!=="string")return;
+    const sr=setupRequests.get(payload.requestId);if(sr&&["phone_setup_result","phone_setup_error"].includes(String(payload.type))){clearTimeout(sr.timer);setupRequests.delete(payload.requestId);if(sr.epoch!==epoch||sr.chat!==activeChat||payload.chatId!==activeChat){sr.reject(Error("The chat changed. Reopen setup in the original chat."));return;}if(payload.type==="phone_setup_error"){sr.reject(Error(typeof payload.message==="string"?payload.message:"Setup failed. Nothing was saved."));return;}if(!isRecord(payload.result)){sr.reject(Error("Invalid setup response."));return;}if(isRecord(payload.result.snapshot)&&payload.result.snapshot.chatId===activeChat){current=payload.result.snapshot as unknown as PhoneDocument;sidebar?.receive(current,chatName);view?.receive(current,reads);}sr.resolve(payload.result);return;}
     const pr=personalRequests.get(payload.requestId);
     if(pr&&["phone_personal_result","phone_personal_error"].includes(String(payload.type))){clearTimeout(pr.timer);personalRequests.delete(payload.requestId);if(pr.epoch!==epoch||pr.chatId!==activeChat){pr.reject(Error("The chat changed."));return;}if(payload.type==="phone_personal_error"){pr.reject(Error("Could not save your choices."));return;}const result=payload as unknown as PersonalReply;if(result.snapshot&&result.snapshot.chatId===activeChat){current=result.snapshot;sidebar?.receive(current,chatName);view?.receive(current,reads);updateBusy();}pr.resolve(result);return;}
     const helperRequest=helperRequests.get(payload.requestId);
@@ -292,7 +295,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   void prefsChange().then(p => { if (disposed || initialAppearanceEpoch !== appearanceEpoch || p.revision < preferences.revision) return; preferences = p;sidebar?.preferences(p); view?.receivePreferences(p); try { view?.applyCSS(p.css);applySidebarStyle(p.sidebarCss??""); } catch { help.textContent = "Saved custom CSS could not be applied. Reset appearance to clear it."; } }).catch(() => { help.textContent = "Appearance could not be loaded. Default styles are in use."; });
   void ensureWidget();
   return () => {
-    disposed = true; epoch++; widgetResize?.disconnect(); view?.destroy(); widget?.destroy();
+    disposed = true; epoch++;for(const r of setupRequests.values()){clearTimeout(r.timer);r.reject(Error("Phone closed."));}setupRequests.clear(); widgetResize?.disconnect(); view?.destroy(); widget?.destroy();
     for (const p of updates.values()) { clearTimeout(p.timer); p.reject(new Error("The phone closed before saving completed. Check the chat before trying again.")); }
     for (const p of prefsRequests.values()) { clearTimeout(p.timer); p.reject(new Error("The phone closed.")); }
     for (const p of readRequests.values()) { clearTimeout(p.timer); p.reject(new Error("The phone closed.")); }

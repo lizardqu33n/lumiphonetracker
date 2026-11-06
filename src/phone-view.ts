@@ -1,3 +1,6 @@
+import {SetupView,type SetupRequest} from "./setup-view";
+import {CONTACT_ICONS} from "./contact-icons";
+import {emptyContactInfo,contactDuplicates,contactMatch} from "./contact-info";
 import {renderEmojiText,attachEmojiPicker} from "./emoji";
 import {preparePortrait,portraitBytes,portraitSource,portraitKey,initialTone,emptyPortraitSources,PORTRAIT_INPUT_LIMIT,type PortraitSources} from "./portraits";
 import type { Cell, Contact, Document as PhoneDocument, ManualEdit, Note, Section } from "./model";
@@ -12,7 +15,8 @@ import { conversations, emptyReads, isUnread, receipt, threadKey, type Conversat
 import { isRecord } from "./shared";
 
 export interface ViewActions {
-  update(change: { edit?: Partial<ManualEdit>; settings?: unknown; dismissNotice?: string;portrait?:{name:string;data:string|null} }, revision: number): Promise<PhoneDocument>;
+  setup?:SetupRequest;
+  update(change: { edit?: Partial<ManualEdit>; settings?: unknown; dismissNotice?: string;portrait?:{name:string;data:string|null};contactInfo?:unknown }, revision: number): Promise<PhoneDocument>;
   preferences(change: { css?: string; dismiss?: App|"Home"|"Draft hint" }): Promise<Preferences>;
   markRead(chatId: string, key: string, observed: { id: string; receipt: string }[]): Promise<ReadState>;
   draft(chatId: string, to: string, text: string,group?:string): { manual: boolean; tag: string };
@@ -84,6 +88,11 @@ export class PhoneView {
   private portraitEpoch=0;
   private pendingThreadScroll=false;
   private viewportFit=()=>this.measure();
+  private setupView:SetupView;
+  private setupOpen=false;
+  private selectedContact:string|null=null;
+  private contactOrigin:"Contacts"|"Messages"="Contacts";
+  private contactScroll=0;
   private selectedText: string | null = null;
   private probe = el("div", "lpt-size-probe");
   private reads = emptyReads();
@@ -95,6 +104,7 @@ export class PhoneView {
   private textNotice = el("p", "lpt-text-notice");
   private noticeTimer: ReturnType<typeof setTimeout> | undefined;
   constructor(private mount: ShadowRoot | HTMLElement, private customStyle: HTMLStyleElement, private actions: ViewActions) {
+    this.setupView=new SetupView((action,data)=>this.actions.setup?this.actions.setup(action,data):Promise.reject(Error("Setup is unavailable.")),()=>{this.setupOpen=false;this.render();});
     this.launcher.setAttribute("aria-label", "Open phone");
     const launcherImage=el("img","lpt-launcher-image");
     launcherImage.src=LAUNCHER_ICON;launcherImage.alt="";launcherImage.setAttribute("aria-hidden","true");launcherImage.draggable=false;
@@ -117,10 +127,10 @@ export class PhoneView {
     const oldActivities=new Set([...(this.doc?.state.calls??[]),...(this.doc?.state.emails??[])].map(e=>activityReceipt(e)));
     const previous = new Set(this.doc?.state.messages.filter(m => m.direction === "incoming").map(m => JSON.stringify([m.id, receipt(m)])) ?? []);
     const arrived = !changedChat && this.doc && doc?.settings.apps.Messages&&doc.settings.enabled.messages ? doc.state.messages.filter(m => m.direction === "incoming" && !previous.has(JSON.stringify([m.id, receipt(m)]))) : [];
-    this.doc = doc;
+    this.doc = doc;this.setupView.receive(doc);
     if(this.app!=="Home"&&!doc?.settings.apps[this.app])this.app="Home";
     if (changedChat) {
-      this.portraitEpoch++;this.portraitSources=emptyPortraitSources();this.chatEpoch++; this.pendingReads.clear(); this.reads = reads ?? emptyReads(); this.replyDrafts.clear();this.replySelections.clear(); this.manualDrafts.clear();
+      this.setupOpen=false;this.selectedContact=null;this.contactOrigin="Contacts";this.contactScroll=0;this.portraitEpoch++;this.portraitSources=emptyPortraitSources();this.chatEpoch++; this.pendingReads.clear(); this.reads = reads ?? emptyReads(); this.replyDrafts.clear();this.replySelections.clear(); this.manualDrafts.clear();
       this.clearTextNotice(); this.editing = false; this.app = "Home"; this.selectedText = null;
 
 
@@ -175,8 +185,9 @@ export class PhoneView {
     const closedHeight = this.textNotice.hidden ? height : Math.max(48, Math.ceil(this.root.getBoundingClientRect().height));
     this.actions.size(Math.max(48, width), Math.max(48, this.openState ? height : closedHeight), this.openState);
   }
-  private navigate(app: App | "Home"): void { this.app = app!=="Home"&&!this.doc?.settings.apps[app]?"Home":app; this.editing = false; this.render(); this.content.scrollTop = 0; this.markVisibleActivity(); }
+  private navigate(app: App | "Home"): void { if(app==="Home")this.selectedContact=null; this.app = app!=="Home"&&!this.doc?.settings.apps[app]?"Home":app; this.editing = false; this.render(); this.content.scrollTop = 0; this.markVisibleActivity(); }
   private render(): void {
+    if(this.app==="Contacts"&&this.selectedContact===null&&this.content.querySelector(".lpt-contact-row"))this.contactScroll=this.content.scrollTop;
     if(this.app==="Messages"&&this.selectedText!==null&&(!this.enabled("messages")||!this.doc||( !this.doc.state.messages.some(m=>threadKey(m)===this.selectedText)&&!this.doc.state.contacts.some(c=>normalize(c.name)===this.selectedText))))this.selectedText=null;
     const previousReply=this.content.querySelector<HTMLTextAreaElement>(".lpt-reply-input"),previousThread=previousReply?.closest<HTMLElement>(".lpt-thread")?.dataset.conversation;
     if(previousReply&&previousThread!==undefined&&this.app==="Messages")this.replySelections.set(previousThread,{start:previousReply.selectionStart,end:previousReply.selectionEnd});
@@ -193,8 +204,10 @@ export class PhoneView {
     renderEmojiText(this.storyStrip,clock.join(" \u00b7 "));this.storyStrip.hidden=!clock.length;
     const header=this.frame.querySelector<HTMLElement>(".lpt-header")!;
     if(this.app==="Home")header.prepend(this.storyStrip);else this.frame.insertBefore(this.storyStrip,header);
-    this.back.hidden = this.app === "Home" || (this.app==="Messages"&&this.selectedText!==null);
-    if (this.app === "Home") {
+    this.back.hidden = this.setupOpen||this.app === "Home" ||(this.app==="Contacts"&&this.selectedContact!==null)|| (this.app==="Messages"&&this.selectedText!==null);
+    if(this.setupOpen){this.content.append(this.setupView.root);}
+    else if (this.app === "Home") {
+      const setup=button("Setup wizard","lpt-button lpt-setup-open",()=>{this.setupOpen=true;this.setupView.receive(this.doc);this.render();});setup.prepend(this.contactIcon("wizard"));setup.disabled=!this.doc;this.content.append(setup);
       const home = el("div", "lpt-home");
       for (const app of APPS.filter(a=>this.doc?.settings.apps[a])) {
         const b = button("", "lpt-app-button", () => this.navigate(app)); b.dataset.app = app;
@@ -210,7 +223,7 @@ export class PhoneView {
       }
       if (!this.doc) this.content.append(el("p", "lpt-empty", "Open a chat to start keeping track of your story."));
     } else {
-      if (!this.prefs.dismissed.includes(this.app)&&!(this.app==="Messages"&&this.selectedText!==null)) this.description(this.app);
+      if (!this.prefs.dismissed.includes(this.app)&&!(this.app==="Messages"&&this.selectedText!==null)&&!(this.app==="Contacts"&&this.selectedContact!==null)) this.description(this.app);
       if (!this.doc && true) this.empty("Open a chat first. Each chat keeps its own story information.");
       else if (this.app === "Scene") this.scene();
       else if (this.app === "Weather") this.weather();
@@ -281,7 +294,7 @@ export class PhoneView {
       if(originEpoch!==this.chatEpoch||originChat!==this.doc?.chatId||!form.isConnected)return;
       const values: Record<string, string | boolean> = {};
       for (const [key, input] of controls) values[key] = input instanceof HTMLInputElement && input.type === "checkbox" ? input.checked : input.value.trim();
-      void this.change(save(values), revision);
+      try{void this.change(save(values), revision);}catch(error){this.setError(error instanceof Error?error.message:"Check the form.");}
     });
     parent.append(form); controls.values().next().value?.focus();
   }
@@ -339,39 +352,50 @@ export class PhoneView {
         button("Cancel", "lpt-cancel", () => row.remove())); b.replaceWith(row);
     }); parent.append(b);
   }
+  private contactIcon(key:keyof typeof CONTACT_ICONS):HTMLImageElement {const img=el("img","lpt-contact-action-icon");img.src=CONTACT_ICONS[key];img.alt="";img.setAttribute("aria-hidden","true");img.draggable=false;return img;}
+  private openContact(name:string,origin:"Contacts"|"Messages"="Contacts"):void {if(origin==="Contacts")this.contactScroll=this.content.scrollTop;this.selectedContact=normalize(name);this.contactOrigin=origin;this.navigate("Contacts");}
   private contacts(): void {
-    const section = el("section", "lpt-contacts"); this.content.append(section);
-    const enabledFields = CONTACT_KEYS.filter(k => this.enabled(`contacts.${k}`));
-    if (!enabledFields.length) { this.empty("Contact fields are off. Turn them on in the sidebar's Phone tab.", section); return; }
-    section.append(button("+ Add contact", "lpt-add", () => this.contactForm(section)));
-    const v = this.doc!.state.scene.present?.value; const present = new Set((Array.isArray(v) ? v : []).map(normalize));
-    const contacts = this.doc!.state.contacts;
-    for (const c of contacts.filter(c => present.has(normalize(c.name)))) this.contactCard(section, c, true);
-    for(const c of contacts.filter(c=>!present.has(normalize(c.name))))this.contactCard(section,c,false);
-    if (!contacts.length) this.empty("No contacts yet. Named characters appear when the story establishes them.", section);
+    const section=el("section","lpt-contacts");this.content.append(section);
+    const c=this.doc!.state.contacts.find(c=>normalize(c.name)===this.selectedContact);
+    if(c){this.contactPage(section,c);return;}this.selectedContact=null;
+    const heading=el("header","lpt-contact-list-header");heading.append(el("h2","lpt-contact-list-title","Contacts"));const add=button("+","lpt-add lpt-contact-add",()=>this.contactForm(section));add.setAttribute("aria-label","Add contact");heading.append(add);section.append(heading);
+    const sorted=[...this.doc!.state.contacts].sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:"base"}));let letter="";
+    for(const c of sorted){const next=Array.from(c.name.trim())[0]?.toLocaleUpperCase()??"#";if(next!==letter){letter=next;section.append(el("h3","lpt-contact-letter",letter));}const info=c.info??emptyContactInfo(c.name);const row=button("",`lpt-card lpt-contact lpt-contact-row ${info.kind==="Main"?"is-main":"is-npc"}`,()=>this.openContact(c.name));row.append(this.portrait(c.name,c.player));const words=el("span","lpt-contact-copy");words.append(el("span","lpt-card-title",c.name));const roles=c.fields.roles?.value;words.append(el("span","lpt-card-subtitle",[info.kind,...(Array.isArray(roles)&&this.enabled("contacts.roles")?roles:[])].join(" / ")));if(c.player)words.append(el("span","lpt-marker","You"));row.append(words);section.append(row);}
+    if(!sorted.length){section.classList.add("is-empty");this.empty("No contacts yet. Add a contact or let the story establish one.",section);}
+    requestAnimationFrame(()=>{if(this.app==="Contacts"&&this.selectedContact===null)this.content.scrollTop=this.contactScroll;});
   }
-  private contactCard(parent: HTMLElement, c: Contact, here: boolean): void {
-    const card = el("details", "lpt-card lpt-contact"); const summary = el("summary", "lpt-summary");
-    summary.append(this.portrait(c.name,c.player));const words=el("span","lpt-contact-copy");summary.append(words);words.append(el("span", "lpt-card-title", c.name), ...(c.player ? [el("span", "lpt-marker", "You")] : []));
-    if (c.editedByUser) words.append(el("span", "lpt-marker", "edited by you"));
-    if (!c.player && this.enabled("contacts.roles") && Array.isArray(c.fields.roles?.value) && c.fields.roles.value.length) words.append(el("span", "lpt-card-subtitle", c.fields.roles.value.join(" / ")));
-    words.append(el("span", "lpt-card-subtitle", here ? "Here now" : `Last seen: ${c.lastSeen ?? "not established"}`));
-    const body = el("div", "lpt-card-body");
-    for (const key of CONTACT_KEYS) if (this.enabled(`contacts.${key}`) && (!c.player || ["physical", "position", "attire"].includes(key))) this.field(body, key, c.fields[key], "contact", c);
-    const actions = el("div", "lpt-actions");
-    const openTexts = button("Open texts", "lpt-open-texts", () => { this.selectedText = normalize(c.name); this.navigate("Messages"); this.markVisibleConversation(); });
-    openTexts.append(this.unreadBadge(normalize(c.name)));
-    actions.append(button("Edit contact", "lpt-button", () => this.contactForm(body, c)));if(this.enabled("messages"))actions.append(openTexts);
-    this.deleteAction(actions, { target: "contact", name: c.name }); body.append(actions); card.append(summary, body); parent.append(card);
+  private contactPage(parent:HTMLElement,c:Contact):void {
+    const info=c.info??emptyContactInfo(c.name),page=el("section",`lpt-card lpt-contact-page is-open ${info.kind==="Main"?"is-main":"is-npc"}`);parent.append(page);
+    const nav=el("header","lpt-contact-nav"),back=button("Back","lpt-button lpt-contact-back",()=>{this.selectedContact=null;this.editing=false;if(this.contactOrigin==="Messages")this.navigate("Messages");else this.render();});back.setAttribute("aria-label",this.contactOrigin==="Messages"?"Back to Messages":"Back to Contacts");nav.append(back,button("Edit","lpt-button lpt-contact-edit",()=>this.contactForm(page,c)));page.append(nav);
+    const hero=el("div","lpt-contact-hero");hero.append(this.portrait(c.name,c.player),el("h2","lpt-contact-name lpt-card-title",c.name));const chips=el("div","lpt-contact-chips");for(const role of [info.kind,...(Array.isArray(c.fields.roles?.value)&&this.enabled("contacts.roles")?c.fields.roles.value:[])])chips.append(el("span","lpt-contact-chip",role));hero.append(chips);if(c.player)hero.append(el("span","lpt-marker","You"));if(c.editedByUser)hero.append(el("span","lpt-marker","edited by you"));page.append(hero);
+    if(c.matchHint)page.append(el("p","lpt-contact-match-hint",c.matchHint));if(contactDuplicates(this.doc!.contactInfo??{}))page.append(el("p","lpt-contact-duplicate-warning","Duplicate phone number or email address. Matching will not choose between them."));
+    const line=(label:string,value:string,action?:()=>void,image?:keyof typeof CONTACT_ICONS)=>{if(!value)return;const field=label==="Phone"?"phone":label==="Email"?"email":label==="Relationship type"?"relationship":"detail";const row=el("div",`lpt-contact-info-row lpt-contact-${field}-row`);row.append(el("span","lpt-contact-info-label",label),el("span","lpt-contact-info-value",value));if(action){const b=button(label==="Phone"?"Message":"Email","lpt-button lpt-contact-link",action);if(image)b.prepend(this.contactIcon(image));row.append(b);}page.append(row);};
+    if(this.doc!.settings.apps.Messages)line("Phone",info.phone,()=>{this.selectedContact=null;this.selectedText=normalize(c.name);this.navigate("Messages");this.markVisibleConversation();},"message");
+    if(this.doc!.settings.apps.Email)line("Email",info.email,()=>{this.selectedContact=null;this.navigate("Email");},"email");
+    line("Relationship type",info.relationship);for(const d of info.details)line(d.label,d.value);
+    const extra=el("div","lpt-contact-extra");for(const key of CONTACT_KEYS)if(key!=="roles"&&this.enabled(`contacts.${key}`)&&c.fields[key]&&(!c.player||["physical","position","attire"].includes(key))){const row=el("div","lpt-contact-info-row");row.append(el("span","lpt-contact-info-label",FIELD_NAMES[key]),el("span","lpt-contact-info-value",valueText(c.fields[key])));extra.append(row);}page.append(extra);
+    if(this.doc!.settings.apps.Messages&&!info.phone){const b=button("Message","lpt-button lpt-contact-link",()=>{this.selectedContact=null;this.selectedText=normalize(c.name);this.navigate("Messages");this.markVisibleConversation();});b.prepend(this.contactIcon("message"));page.append(b);}
   }
   private contactForm(parent:HTMLElement,contact?:Contact):void {
     if(this.editing)return;
     if(!contact&&this.doc!.state.contacts.length>=30){this.setError("Contacts is full (30/30). Delete a contact to make room.");return;}
     let pendingPortrait:string|null|undefined;
-    this.form(parent,[{key:"name",label:"Name",value:contact?.name??"",required:true,max:100}],v=>({
-      ...(contact&&v.name===contact.name?{}:{edit:{target:"contact" as const,name:contact?.name??String(v.name),...(contact&&v.name!==contact.name?{rename:String(v.name)}:{}),value:{}}}),
+    const info=contact?.info??emptyContactInfo(contact?.name??"");let kindTouched=false;const details=info.details.map(d=>({...d}));
+    const fields:FormField[]=[{key:"name",label:"Name",value:contact?.name??"",required:true,max:100},{key:"kind",label:"Tag",value:info.kind,options:[["Main","Main"],["NPC","NPC"]]},
+    ...(this.doc!.settings.apps.Messages?[{key:"phone",label:"Phone",value:info.phone,max:100}]:[]),...(this.doc!.settings.apps.Email?[{key:"email",label:"Email",value:info.email,max:150}]:[]),{key:"relationship",label:"Relationship type",value:info.relationship,max:100},
+    ...CONTACT_KEYS.filter(k=>k!=="attire"&&(!contact?.player||["physical","position"].includes(k))).map(k=>({key:k,label:k==="roles"?"Roles (free labels, for example occupation or affiliation)":FIELD_NAMES[k],value:valueText(contact?.fields[k]),multiline:k==="roles",max:500})),{key:"worn",label:"Worn items (one per line)",value:contact?.fields.attire&&typeof contact.fields.attire.value==="object"&&"worn" in contact.fields.attire.value?contact.fields.attire.value.worn.join("\n"):"",multiline:true},{key:"removed",label:"Removed items (one per line)",value:contact?.fields.attire&&typeof contact.fields.attire.value==="object"&&"removed" in contact.fields.attire.value?contact.fields.attire.value.removed.join("\n"):"",multiline:true}];
+    this.form(parent,fields,v=>{if(details.some(d=>!!d.label.trim()!==!!d.value.trim()))throw Error("Give each detail a label and a value, or remove it.");const name=String(v.name),value:Record<string,unknown>={};for(const key of CONTACT_KEYS)if(v[key]&&String(v[key])!==valueText(contact?.fields[key]))value[key]=key==="roles"?String(v[key]).split(/\n|; /).filter(Boolean):String(v[key]);const attire=contact?.fields.attire?.value,oldWorn=attire&&typeof attire==="object"&&"worn" in attire?attire.worn:[],oldRemoved=attire&&typeof attire==="object"&&"removed" in attire?attire.removed:[];const worn=lines(String(v.worn)),removed=lines(String(v.removed));if(JSON.stringify([worn,removed])!==JSON.stringify([oldWorn,oldRemoved]))value.attire={worn,removed};this.selectedContact=normalize(name);return {
+      edit:{target:"contact" as const,name:contact?.name??name,...(contact&&name!==contact.name?{rename:name}:{}),value},
+      contactInfo:{name,...(v.phone!==undefined?{phone:String(v.phone)}:{}),...(v.email!==undefined?{email:String(v.email)}:{}),relationship:String(v.relationship),details:details.filter(d=>d.label.trim()&&d.value.trim()),...(kindTouched?{kind:String(v.kind)}:{})},
       ...(contact&&pendingPortrait!==undefined?{portrait:{name:contact.name,data:pendingPortrait}}:{}),
-    }));
+    };});
+    const editForm=parent.querySelector<HTMLFormElement>(".lpt-form");if(!editForm)return;
+    for(const input of Array.from(editForm.querySelectorAll<HTMLInputElement>("[name]"))){input.classList.add("lpt-contact-input",`lpt-contact-input-${input.name}`);input.closest("label")?.classList.add("lpt-contact-edit-field",`lpt-contact-edit-${input.name}`);}
+    editForm.querySelector('[name="kind"]')?.addEventListener("change",()=>kindTouched=true);
+    const detailBox=el("div","lpt-contact-detail-editor");const detailRow=(d:{label:string;value:string})=>{const row=el("div","lpt-contact-detail-edit-row"),label=el("input","lpt-input lpt-contact-detail-label"),value=el("input","lpt-input lpt-contact-detail-value");label.value=d.label;value.value=d.value;label.maxLength=40;value.maxLength=200;label.setAttribute("aria-label","Detail label");value.setAttribute("aria-label","Detail value");label.placeholder="Label";value.placeholder="Value";label.addEventListener("input",()=>d.label=label.value);value.addEventListener("input",()=>d.value=value.value);row.append(label,value,button("Remove","lpt-button lpt-contact-detail-remove",()=>{details.splice(details.indexOf(d),1);row.remove();}));detailBox.append(row);};for(const d of details)detailRow(d);
+    const addDetail=button("Add detail","lpt-button lpt-contact-detail-add",()=>{if(details.length>=12){this.setError("Keep up to 12 details per contact.");return;}const d={label:"",value:""};details.push(d);detailRow(d);});addDetail.prepend(this.contactIcon("addDetail"));editForm.append(detailBox,addDetail);
+    for(const label of Array.from(editForm.querySelectorAll(".lpt-label"))){const input=label.querySelector<HTMLInputElement|HTMLTextAreaElement>("input,textarea");if(input){label.classList.toggle("is-empty",!input.value);input.addEventListener("input",()=>label.classList.toggle("is-empty",!input.value));}}
+    if(contact)this.deleteAction(editForm,{target:"contact",name:contact.name});
     if(!contact)return;
     const form=parent.querySelector<HTMLFormElement>(".lpt-form");if(!form)return;
     const epoch=this.chatEpoch,name=contact.name,key=portraitKey(name);
@@ -475,7 +499,7 @@ export class PhoneView {
   }
   private conversation(parent:HTMLElement,thread:Conversation):void{
     const chatId=this.doc!.chatId,epoch=this.chatEpoch;const card=el("div","lpt-thread");card.dataset.conversation=thread.key;const header=el("header","lpt-thread-header");
-    const back=button("Back","lpt-button lpt-thread-back",()=>{this.selectedText=null;this.render();});back.setAttribute("aria-label","Back to Messages");header.append(back,this.portrait(thread.name,false,thread.group),el("h2","lpt-thread-name",thread.name));card.append(header);
+    const back=button("Back","lpt-button lpt-thread-back",()=>{this.selectedText=null;this.render();});back.setAttribute("aria-label","Back to Messages");header.append(back,this.portrait(thread.name,false,thread.group),el("h2","lpt-thread-name",thread.name));if(!thread.group){const c=this.doc!.state.contacts.find(c=>normalize(c.name)===thread.key);if(c){const link=button("Contact","lpt-button lpt-thread-contact",()=>this.openContact(c.name,"Messages"));header.append(link);}}card.append(header);
     const list=el("div","lpt-text-list");list.setAttribute("role","log");list.setAttribute("aria-label",`Texts with ${thread.name}`);let sender="",direction="",day:string|undefined;
     const group=thread.group===true||new Set(thread.messages.filter(m=>m.direction==="incoming").map(m=>normalize(m.from))).size>1;
     for(const message of thread.messages){if(this.enabled("scene.date")&&message.date&&message.date!==day){list.append(el("p","lpt-text-date",message.date));day=message.date;sender="";}
@@ -489,7 +513,7 @@ export class PhoneView {
       const form=el("form","lpt-reply"),label=el("label","lpt-reply-label",`Reply to ${thread.name}`),input=el("textarea","lpt-textarea lpt-reply-input");input.rows=1;input.maxLength=3000;input.required=true;input.placeholder="Write a reply";input.value=this.replyDrafts.get(thread.key)??"";label.append(input);const selection=this.replySelections.get(thread.key);if(selection)input.setSelectionRange(selection.start,selection.end);input.addEventListener("select",()=>{if(epoch===this.chatEpoch&&input.isConnected)this.replySelections.set(thread.key,{start:input.selectionStart,end:input.selectionEnd});});
       const grow=()=>{const bottom=list.scrollHeight-list.clientHeight-list.scrollTop<30;input.rows=1;const css=getComputedStyle(input),height=input.scrollHeight-parseFloat(css.paddingTop)-parseFloat(css.paddingBottom);input.rows=Math.min(4,Math.max(1,Math.ceil(height/parseFloat(css.lineHeight))));if(bottom)list.scrollTop=list.scrollHeight;};input.addEventListener("input",()=>{if(epoch!==this.chatEpoch)return;this.replyDrafts.set(thread.key,input.value);grow();});requestAnimationFrame(grow);
       const add=el("button","lpt-button lpt-add-draft","Add to draft");add.type="submit";const status=el("p","lpt-reply-status lpt-help");status.setAttribute("aria-live","polite");const fallback=el("textarea","lpt-textarea lpt-manual-tag");fallback.readOnly=true;fallback.setAttribute("aria-label","Text tag to copy into the chat input");fallback.value=this.manualDrafts.get(thread.key)??"";fallback.hidden=!fallback.value;form.append(label,add,status,fallback);const emoji=attachEmojiPicker(form,input,status,()=>epoch===this.chatEpoch&&this.doc?.chatId===chatId&&form.isConnected);form.insertBefore(emoji,add);
-      form.addEventListener("submit",event=>{event.preventDefault();if(epoch!==this.chatEpoch||this.doc?.chatId!==chatId||!form.isConnected)return;try{const result=this.actions.draft(chatId,thread.name,input.value,thread.group?thread.name:undefined);if(result.manual){this.manualDrafts.set(thread.key,result.tag);fallback.value=result.tag;fallback.hidden=false;status.textContent="Copy this tag into the chat input, then review and send it yourself.";fallback.select();}else{this.replyDrafts.delete(thread.key);this.replySelections.delete(thread.key);this.manualDrafts.delete(thread.key);input.value="";grow();fallback.value="";fallback.hidden=true;status.textContent="Added to the chat draft. Review it there.";}}catch(error){status.textContent=error instanceof Error?error.message:"Could not add to draft. Your reply is still here.";}});card.append(form);
+      form.addEventListener("submit",event=>{event.preventDefault();if(epoch!==this.chatEpoch||this.doc?.chatId!==chatId||!form.isConnected)return;try{const contact=!thread.group?this.doc?.state.contacts.find(c=>normalize(c.name)===thread.key):undefined;const phone=contact?.info?.phone;const recipient=phone&&contactMatch(this.doc!,phone)===contact?.name?phone:thread.name;const result=this.actions.draft(chatId,recipient,input.value,thread.group?thread.name:undefined);if(result.manual){this.manualDrafts.set(thread.key,result.tag);fallback.value=result.tag;fallback.hidden=false;status.textContent="Copy this tag into the chat input, then review and send it yourself.";fallback.select();}else{this.replyDrafts.delete(thread.key);this.replySelections.delete(thread.key);this.manualDrafts.delete(thread.key);input.value="";grow();fallback.value="";fallback.hidden=true;status.textContent="Added to the chat draft. Review it there.";}}catch(error){status.textContent=error instanceof Error?error.message:"Could not add to draft. Your reply is still here.";}});card.append(form);
     }
     parent.append(card);
   }
@@ -523,12 +547,12 @@ export class PhoneView {
       if(!this.enabled("calls")){this.empty("Calls is off. Change it in the sidebar's Phone tab.",section);return;}
       section.append(button("+ Add call","lpt-add",()=>add("call")));
       if(!this.doc!.state.calls.length)this.empty("No calls recorded. This fills only when the story establishes a call.",section);
-      for(const c of [...this.doc!.state.calls].reverse()){const card=el("article","lpt-card lpt-call");const name=this.doc!.state.contacts.find(x=>normalize(x.name)===normalize(c.name))?.name??c.name;card.append(el("h2","lpt-card-title",name),el("p","lpt-call-direction",(c.direction==="in"?"Incoming":c.direction==="out"?"Outgoing":"Missed")+((c.count??1)>1?` x${c.count}`:"")));if(c.time)card.append(el("p","lpt-muted",c.time));this.activityControls(card,"call",c as unknown as Record<string,unknown>,add);section.append(card);}
+      for(const c of [...this.doc!.state.calls].reverse()){const card=el("article","lpt-card lpt-call");const name=contactMatch(this.doc!,c.name)??this.doc!.state.contacts.find(x=>normalize(x.name)===normalize(c.name))?.name??c.name;card.append(el("h2","lpt-card-title",name),el("p","lpt-call-direction",(c.direction==="in"?"Incoming":c.direction==="out"?"Outgoing":"Missed")+((c.count??1)>1?` x${c.count}`:"")));if(c.time)card.append(el("p","lpt-muted",c.time));this.activityControls(card,"call",c as unknown as Record<string,unknown>,add);section.append(card);}
     }else if(app==="Email"){
       if(!this.enabled("email")){this.empty("Email is off. Change it in the sidebar's Phone tab.",section);return;}
       section.append(button("+ Add email record","lpt-add",()=>add("email")));
       if(!this.doc!.state.emails.length)this.empty("No emails recorded. Actual story emails will appear here.",section);
-      for(const e of [...this.doc!.state.emails].reverse()){const card=el("details","lpt-card lpt-email");card.dataset.email=e.id;const summary=el("summary","lpt-email-summary");summary.append(el("strong","lpt-email-from",e.from),el("span","lpt-email-subject",e.subject));if(e.time)summary.append(el("small","lpt-muted",e.time));if(e.direction==="incoming"&&activityUnread(e,this.reads.seen))summary.append(el("span","lpt-email-unread","Unread"));else if(e.direction==="outgoing")summary.append(el("small","lpt-muted","Outgoing"));const body=el("div","lpt-card-body");if(e.to)body.append(el("p","lpt-muted",`To: ${e.to}`));body.append(el("p","lpt-email-body",e.body));this.activityControls(body,"email",e as unknown as Record<string,unknown>,add);card.append(summary,body);card.addEventListener("toggle",()=>{if(card.open){card.querySelector(".lpt-email-unread")?.remove();this.markVisibleActivity();}});section.append(card);}
+      for(const e of [...this.doc!.state.emails].reverse()){const card=el("details","lpt-card lpt-email");card.dataset.email=e.id;const summary=el("summary","lpt-email-summary");summary.append(el("strong","lpt-email-from",contactMatch(this.doc!,e.from,"email")??e.from),el("span","lpt-email-subject",e.subject));if(e.time)summary.append(el("small","lpt-muted",e.time));if(e.direction==="incoming"&&activityUnread(e,this.reads.seen))summary.append(el("span","lpt-email-unread","Unread"));else if(e.direction==="outgoing")summary.append(el("small","lpt-muted","Outgoing"));const body=el("div","lpt-card-body");if(e.to)body.append(el("p","lpt-muted",`To: ${e.to}`));body.append(el("p","lpt-email-body",e.body));this.activityControls(body,"email",e as unknown as Record<string,unknown>,add);card.append(summary,body);card.addEventListener("toggle",()=>{if(card.open){card.querySelector(".lpt-email-unread")?.remove();this.markVisibleActivity();}});section.append(card);}
     }else{
       if(this.enabled("bank.balance")){section.append(button("+ Add account","lpt-add",()=>add("bank")));if(!this.doc!.state.bank.length)this.empty("No balances stated. The tracker never calculates a balance.",section);for(const b of this.doc!.state.bank){const card=el("article","lpt-card lpt-bank-account");const stale=this.doc!.state.transactions.some(t=>t.at.index>b.at.index);card.append(el("h2","lpt-card-title",b.name),el("p","lpt-bank-balance",`${stale?"Last stated":"Balance"}: ${b.balance}`));if(b.time)card.append(el("p","lpt-bank-time",`As of ${b.time}`));this.activityControls(card,"bank",b as unknown as Record<string,unknown>,add);section.append(card);}}
       if(this.enabled("bank.transactions")){section.append(el("h2","lpt-section-title","Recent transactions"),button("+ Add transaction","lpt-add",()=>add("transaction")));if(!this.doc!.state.transactions.length)this.empty("No transactions stated. Adding one never changes a balance.",section);for(const t of [...this.doc!.state.transactions].reverse()){const card=el("article","lpt-card lpt-bank-transaction");card.append(el("strong","lpt-card-title",t.description),el("p","lpt-transaction-amount",t.amount));if(t.time)card.append(el("p","lpt-muted",t.time));this.activityControls(card,"transaction",t as unknown as Record<string,unknown>,add);section.append(card);}}

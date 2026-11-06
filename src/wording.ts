@@ -32,7 +32,7 @@ export function composeWording(doc:Document,target:WordingTarget,lines:string[],
  // Escape native macro delimiters in editable prose; no recursive evaluation.
  prose=prose.replaceAll("{{","{ {").replaceAll("}}","} }");let inserted=false;
  prose=prose.replaceAll(SYNTAX_TOKEN,()=>{if(inserted)return "";inserted=true;return syntax;});
- const safety=[`Use ONLY these enabled fields: ${Object.entries(doc.settings.enabled).filter(([,on])=>on).map(([k])=>k).join(", ")}. Omit every other field.`,
+ const safety=[...(doc.settings.apps.Contacts?["Phone/email/relationship/custom contact details are user or wizard confirmed only; never create or change them."]:[]),`Use ONLY these enabled fields: ${Object.entries(doc.settings.enabled).filter(([,on])=>on).map(([k])=>k).join(", ")}. Omit every other field.`,
  ...((doc.settings.enabled.messages||doc.settings.enabled.email||doc.settings.enabled.calls)?[doc.settings.aiPlayerTexts?"Player entries only when actually established.":`NEVER write ${[doc.settings.enabled.messages?"texts":"",doc.settings.enabled.email?"emails":"",doc.settings.enabled.calls?"outgoing calls":""].filter(Boolean).join(", ")} from the player; never invent player replies.`]:[]),
  doc.settings.inferMissing?"Inference only for empty NPC contact fields, marked inferred.":"Never infer missing details.",
  ...(target==="helper"?[HELPER_SAFETY]:[])];

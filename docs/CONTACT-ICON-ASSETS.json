@@ -1,0 +1,87 @@
+{
+  "source_size": [
+    1774,
+    887
+  ],
+  "cells": [
+    {
+      "name": "profile",
+      "bounds": [
+        0,
+        0,
+        443,
+        443
+      ],
+      "bytes": 101190,
+      "pixels_sha256": "730af5ea6452703b79cd43e118539be40c35de51ab3298cc1534e7ae4e49719d"
+    },
+    {
+      "name": "message",
+      "bounds": [
+        443,
+        0,
+        887,
+        443
+      ],
+      "bytes": 86340,
+      "pixels_sha256": "4014a4c1b1538f0de9a538a070ebd2e5b27a1a5c7428c3f2e3856317f20b4776"
+    },
+    {
+      "name": "email",
+      "bounds": [
+        887,
+        0,
+        1330,
+        443
+      ],
+      "bytes": 91741,
+      "pixels_sha256": "406027a36722e3302f767e2c78e82155bfc5e34a0645f04cb504002ec355ec3c"
+    },
+    {
+      "name": "call",
+      "bounds": [
+        1330,
+        0,
+        1774,
+        443
+      ],
+      "bytes": 79717,
+      "pixels_sha256": "49bd7ba3f743ac1a587ff5cf50d4e70bb215315e16cdbe6b8f5e0ca9cf51efc8"
+    },
+    {
+      "name": "addDetail",
+      "bounds": [
+        0,
+        443,
+        443,
+        887
+      ],
+      "bytes": 93434,
+      "pixels_sha256": "e71ad5cda9c17071cffd47f0812cdf6b6af5f469fa9b3f3c077c852de11b1cf6"
+    },
+    {
+      "name": "wizard",
+      "bounds": [
+        443,
+        443,
+        887,
+        887
+      ],
+      "bytes": 80789,
+      "pixels_sha256": "5b8495b94599dc4c403b0f878e36c95c4ad627795f0c41170e47413fd690d42d"
+    },
+    {
+      "name": "numpad",
+      "bounds": [
+        887,
+        443,
+        1330,
+        887
+      ],
+      "bytes": 123649,
+      "pixels_sha256": "a936d71a7bdfaa7b49ee2e668faed4498d97e1329693fe47d446c1b3ae578f40"
+    }
+  ],
+  "png_bytes": 656860,
+  "encoded_characters": 875978
+}

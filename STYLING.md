@@ -643,3 +643,133 @@ even if a save fails; a failed save must be retried to persist the reset.
 The new controls reuse existing --lpt-side-* variables. There are no new phone
 variables, external assets or permissions. Custom CSS changes appearance only;
 source, tracking data, prompt wording and settings profiles are unaffected.
+
+## 0.16.0: Contacts and setup wizard (Argon/custom CSS)
+
+Existing class names stay available. Contacts rows now use buttons and full pages;
+selectors tied specifically to `details.lpt-contact` should target `.lpt-contact-row`
+or `.lpt-contact-page` instead. None of this changes the protected sidebar toolbar,
+Reset, uploaded CSS boundaries or opaque default phone surfaces. All new phone
+values below are declared on `.lpt-root` in src/styles.css; the wizard reuses them.
+
+| Variable | Default | What it changes |
+| --- | --- | --- |
+| `--lpt-contact-bg` | `var(--lpt-screen-bg,#19171f)` | Opaque Contacts/wizard screen background. |
+| `--lpt-contact-surface` | `var(--lpt-card-bg,#24212d)` | Rows, chips and preview cards. |
+| `--lpt-contact-text` | `var(--lpt-text,#eee)` | Contact/wizard text. |
+| `--lpt-contact-muted` | `var(--lpt-muted,#aaa)` | Review hints and status text. |
+| `--lpt-contact-border` | `var(--lpt-outline,#420642)` | Chip/divider/preview borders. |
+| `--lpt-contact-radius` | `16px` | Rows/pages/preview card corners. |
+| `--lpt-contact-gap` | `8px` | Gaps and short margins. |
+| `--lpt-contact-padding` | `12px` | Page/card/field spacing. |
+| `--lpt-contact-font` | `var(--lpt-font,system-ui)` | Contact/wizard font family. |
+| `--lpt-contact-font-size` | `14px` | Contact/wizard text size. |
+| `--lpt-contact-portrait-size` | `40px` | Round list portrait size. |
+| `--lpt-contact-hero-portrait-size` | `88px` | Large contact-page portrait size. |
+| `--lpt-contact-chip-radius` | `999px` | Role chip rounding. |
+| `--lpt-contact-action-size` | `24px` | Supplied action/wizard icon size. |
+| `--lpt-contact-target` | `44px` | Minimum Add/wizard control height. |
+| `--lpt-contact-line-width` | `1px` | Divider and border width. |
+
+| Stable class | What it styles |
+| --- | --- |
+| `.lpt-contact-list-header` | Alphabetical list header. |
+| `.lpt-contact-list-title` | List title. |
+| `.lpt-contact-add` | Small labelled + button. |
+| `.lpt-contact-letter` | Letter heading. |
+| `.lpt-contact-row` | Full-width row that opens a page. |
+| `.lpt-contact-page` | Full contact page with an opaque background. |
+| `.lpt-contact-nav` | Back/Edit row. |
+| `.lpt-contact-back` | Return to list or originating Messages. |
+| `.lpt-contact-edit` | Open the contact edit form. |
+| `.lpt-contact-hero` | Large portrait, name and chips. |
+| `.lpt-contact-name` | Name below the portrait; retains lpt-card-title too. |
+| `.lpt-contact-chips` | Wrapping role chips. |
+| `.lpt-contact-chip` | Main/NPC or a free role label. |
+| `.lpt-contact-match-hint` | First-name-only review hint. |
+| `.lpt-contact-duplicate-warning` | Duplicate address warning. |
+| `.lpt-contact-info-row` | A nonempty labelled value. |
+| `.lpt-contact-info-label` | Read-only field label. |
+| `.lpt-contact-info-value` | Read-only field text. |
+| `.lpt-contact-phone-row` | Phone value and Message action. |
+| `.lpt-contact-email-row` | Email value and inbox action. |
+| `.lpt-contact-relationship-row` | Relationship type row. |
+| `.lpt-contact-detail-row` | Custom label/value row. |
+| `.lpt-contact-link` | Message or Email button. |
+| `.lpt-contact-extra` | Established story details after confirmed fields. |
+| `.lpt-contact-action-icon` | Static supplied action PNG. |
+| `.lpt-contact-detail-editor` | Custom detail inputs in Edit. |
+| `.lpt-contact-detail-edit-row` | One editable custom detail. |
+| `.lpt-contact-detail-label` | Custom label input. |
+| `.lpt-contact-detail-value` | Custom value input. |
+| `.lpt-contact-detail-remove` | Remove one custom detail. |
+| `.lpt-contact-detail-add` | Add detail button. |
+| `.lpt-contact-edit-field` | All built-in contact edit labels. |
+| `.lpt-contact-input` | All built-in contact edit inputs/selects. |
+| `.lpt-thread-contact` | Open a contact from a non-group text thread. |
+| `.lpt-contact-edit-name` | Name field label in Edit. |
+| `.lpt-contact-input-name` | Name input/select in Edit. |
+| `.lpt-contact-edit-kind` | Kind field label in Edit. |
+| `.lpt-contact-input-kind` | Kind input/select in Edit. |
+| `.lpt-contact-edit-phone` | Phone field label in Edit. |
+| `.lpt-contact-input-phone` | Phone input/select in Edit. |
+| `.lpt-contact-edit-email` | Email field label in Edit. |
+| `.lpt-contact-input-email` | Email input/select in Edit. |
+| `.lpt-contact-edit-relationship` | Relationship field label in Edit. |
+| `.lpt-contact-input-relationship` | Relationship input/select in Edit. |
+| `.lpt-contact-edit-roles` | Roles field label in Edit. |
+| `.lpt-contact-input-roles` | Roles input/select in Edit. |
+| `.lpt-contact-edit-physical` | Physical field label in Edit. |
+| `.lpt-contact-input-physical` | Physical input/select in Edit. |
+| `.lpt-contact-edit-mood` | Mood field label in Edit. |
+| `.lpt-contact-input-mood` | Mood input/select in Edit. |
+| `.lpt-contact-edit-position` | Position field label in Edit. |
+| `.lpt-contact-input-position` | Position input/select in Edit. |
+| `.lpt-contact-edit-thoughts` | Thoughts field label in Edit. |
+| `.lpt-contact-input-thoughts` | Thoughts input/select in Edit. |
+| `.lpt-contact-edit-worn` | Worn field label in Edit. |
+| `.lpt-contact-input-worn` | Worn input/select in Edit. |
+| `.lpt-contact-edit-removed` | Removed field label in Edit. |
+| `.lpt-contact-input-removed` | Removed input/select in Edit. |
+| `.lpt-setup-open` | Home entry button, with wand art. |
+| `.lpt-setup` | Opaque wizard surface. |
+| `.lpt-setup-header` | Wizard title/icon/Back row. |
+| `.lpt-setup-title` | Wizard heading. |
+| `.lpt-setup-button` | Wizard action buttons. |
+| `.lpt-setup-question` | What do you want to add? |
+| `.lpt-setup-choice` | One app checkbox row. |
+| `.lpt-setup-checkbox` | App checkbox. |
+| `.lpt-setup-choice-label` | Visible app name. |
+| `.lpt-setup-hint` | Sources, cost or confirmation explanation. |
+| `.lpt-setup-cost` | Token count and requested output limit. |
+| `.lpt-setup-preview` | Unsaved preview container. |
+| `.lpt-setup-group-title` | Contacts/Notes/Locations preview heading. |
+| `.lpt-setup-record` | One proposed record. |
+| `.lpt-setup-record-name` | Proposed name. |
+| `.lpt-setup-record-value` | A proposed plain-text value. |
+| `.lpt-setup-empty` | No new supported records message. |
+| `.lpt-setup-status` | Working, failure or saved confirmation. |
+
+| State class | Meaning |
+| --- | --- |
+| `.is-main` | Contact row/page currently tagged Main. |
+| `.is-npc` | Contact row/page currently tagged NPC. |
+| `.is-empty` | Empty Contacts, empty edit field or empty setup preview. |
+| `.is-open` | Mounted full contact page or wizard surface. |
+
+Portrait children retain `.lpt-portrait`, `.lpt-portrait-image` and
+`.lpt-portrait-initial`. Forms/deletion retain `.lpt-form`, `.lpt-label`, `.lpt-input`,
+`.lpt-textarea`, `.lpt-actions`, `.lpt-delete` and `.lpt-cancel`. All new elements
+have stable classes; there are no authored inline styles. Profiles retains
+`.lpt-side-presets` and `.lpt-side-icon` but now uses its own supplied PNG.
+
+Example for a phone CSS upload:
+
+```css
+.lpt-root {
+  --lpt-contact-portrait-size: 48px;
+  --lpt-contact-hero-portrait-size: 112px;
+  --lpt-contact-gap: 10px;
+}
+.lpt-contact-page.is-main .lpt-contact-chip { font-weight: bold; }
+```

@@ -1,3 +1,4 @@
+import {CONTACT_ICONS} from "./contact-icons";
 import {PersonalControls} from "./personal-controls";
 import type {PersonalReply} from "./personal-settings";
 import {UI_ICONS,type UIIconName} from "./ui-icons";
@@ -102,7 +103,7 @@ export class Sidebar {
         details.dataset.section = key;
         details.open = this.open.has(key);
         const summary=node("summary","lpt-side-summary");
-        const icon=node("img","lpt-side-icon");icon.src=UI_ICONS[({apps:"apps",tracking:"track",source:"helper",appearance:"look",advanced:"advanced"} as Record<string,UIIconName>)[key]??"advanced"];icon.alt="";icon.setAttribute("aria-hidden","true");icon.draggable=false;
+        const icon=node("img","lpt-side-icon");icon.src=key==="presets"?CONTACT_ICONS.profile:UI_ICONS[({apps:"apps",tracking:"track",source:"helper",appearance:"look",advanced:"advanced"} as Record<string,UIIconName>)[key]??"advanced"];icon.alt="";icon.setAttribute("aria-hidden","true");icon.draggable=false;
         summary.append(icon,node("span","lpt-side-heading",title),node("small","lpt-side-scope",scope));details.append(summary);
         details.addEventListener("toggle",()=>{if(!details.isConnected)return;if(details.open){this.open.clear();this.open.add(key);for(const other of Array.from(this.root.querySelectorAll<HTMLDetailsElement>(".lpt-side-section")))if(other!==details)other.open=false;}else this.open.delete(key);});
         this.root.append(details);

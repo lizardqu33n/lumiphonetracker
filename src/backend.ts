@@ -1,3 +1,5 @@
+import {SetupWizard,SetupError} from "./setup-wizard";
+import {cardNames} from "./card-access";
 import { PersonalStore, emptyPersonal, builtInPresets, selectedWording } from "./personal-settings";
 import { defaultWordingTemplate, formatMacro } from "./phone-macros";
 import { helperInput } from "./helper";
@@ -31,6 +33,7 @@ const messageReads = new MessageReads({
 });
 
 const store = new PhoneStore({
+  names:(chat,user)=>cardNames(spindle,chat,user),
   warn: text => warn(text),
   authorize: async (chatId, userId) => (await spindle.chats.get(chatId, userId))?.id === chatId,
   history: async chatId => spindle.chat.getMessages(chatId),
@@ -69,6 +72,7 @@ const helper = new HelperAI(store, {
   changed: (userId,chatId) => spindle.sendToFrontend({type:"phone_helper_changed",chatId},userId),
   warn: text => warn(text),
 });
+const setupWizard=new SetupWizard(spindle,store);
 if (spindle.frontendCapabilities?.declare) spindle.frontendCapabilities.declare("message_tag_interceptor");
 else warn("Lumi Phone Tracker: host lacks documented cold-load tag hiding; update Lumiverse.");
 
@@ -135,6 +139,9 @@ spindle.onFrontendMessage((payload, userId) => {
     if(isRecord(payload)&&["phone_connections","phone_helper_now"].includes(String(payload.type)))warn("Lumi Phone Tracker: Helper AI: permission missing.");
     else warn("Lumi Phone Tracker: frontend user context unavailable; request ignored.");
     return; // Never turn a reply into an operator-wide broadcast.
+  }
+  if(isRecord(payload)&&["phone_setup_prepare","phone_setup_run","phone_setup_save"].includes(String(payload.type))&&typeof payload.requestId==="string"&&payload.requestId.length<=100&&typeof payload.chatId==="string"&&payload.chatId.length<=256){
+    void(async()=>{requireReadPermissions();const chat=payload.chatId as string;let result:unknown;if(payload.type==="phone_setup_prepare")result=await setupWizard.prepare(userId,chat,payload.choices);else{if(typeof payload.id!=="string"||payload.id.length>100)throw new SetupError("Review setup first.");if(payload.type==="phone_setup_run")result=await setupWizard.run(userId,chat,payload.id);else{if(payload.confirm!==true)throw new SetupError("Confirm the setup preview before saving.");result={snapshot:await setupWizard.save(userId,chat,payload.id)};helper.cancel(chat);}}spindle.sendToFrontend({type:"phone_setup_result",requestId:payload.requestId,chatId:chat,result},userId);})().catch(error=>{warn("Lumi Phone Tracker: setup request failed; check saved state.");spindle.sendToFrontend({type:"phone_setup_error",requestId:payload.requestId,chatId:payload.chatId,message:error instanceof SetupError?error.message:"Setup could not finish. Check access and the tracker before trying again."},userId);});return;
   }
   if(isRecord(payload)&&payload.type==="phone_personal"&&typeof payload.requestId==="string"&&payload.requestId.length<=100) {
     void(async()=>{
@@ -212,7 +219,7 @@ spindle.onFrontendMessage((payload, userId) => {
     const chatId = typeof payload.chatId === "string" ? payload.chatId : payload.chatId===null?null:(await spindle.chats.getActive(userId))?.id;
     if (!chatId) { spindle.sendToFrontend({ type: "phone_snapshot", requestId, chatId: null }, userId); return; }
     let snapshot = payload.type === "phone_update" ? await store.update(userId, chatId,
-      typeof payload.revision === "number" ? payload.revision : -1, { settings: payload.settings, edit: payload.edit, dismissNotice: payload.dismissNotice,portrait:payload.portrait }) : await store.sync(userId, chatId);
+      typeof payload.revision === "number" ? payload.revision : -1, { settings: payload.settings, edit: payload.edit, dismissNotice: payload.dismissNotice,portrait:payload.portrait,contactInfo:payload.contactInfo }) : await store.sync(userId, chatId);
     if(payload.type==="phone_update") {
       helper.cancel(chatId); // Revision changed: stop an older in-flight extraction.
       if(snapshot.settings.source==="helper" && snapshot.helperOwner===userId) { await helper.connections(userId,chatId); snapshot=await store.sync(userId,chatId); }
@@ -222,7 +229,7 @@ spindle.onFrontendMessage((payload, userId) => {
     spindle.sendToFrontend({ type: "phone_snapshot", requestId, chatId, chatName, snapshot, reads, helperBusy:helper.busy(chatId) }, userId);
   })().catch(error => {
     const reason = error instanceof Error ? error.message : "";
-    const known = ["Outgoing player entries need", "This app is full.", "An account with that name", "The tracker changed.", "The story changed.", "This section is full.", "Contacts is full", "Locations is full", "A contact with that name", "A place with that name", "A note with that name"];
+    const known = ["Invalid contact details", "Reopen this contact.", "Outgoing player entries need", "This app is full.", "An account with that name", "The tracker changed.", "The story changed.", "This section is full.", "Contacts is full", "Locations is full", "A contact with that name", "A place with that name", "A note with that name"];
     const message = known.some(s => reason.startsWith(s)) ? reason : "Could not save or open this chat. Check extension permissions and try again.";
     spindle.sendToFrontend({ type: "phone_error", requestId, message }, userId);
     warn("Lumi Phone Tracker: chat sync failed; saved data retained.");

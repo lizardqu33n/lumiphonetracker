@@ -12,7 +12,7 @@ for (const key of ["version", "name", "identifier", "author", "github", "homepag
 }
 assert.equal(new URL(manifest.github).hostname, "github.com");
 assert.equal(new URL(manifest.homepage).protocol, "https:");
-assert.deepEqual(manifest.permissions, ["chats", "chat_mutation", "interceptor", "ui_panels", "generation", "macro_interceptor", "characters", "personas", "images"]);
+assert.deepEqual(manifest.permissions, ["chats", "chat_mutation", "interceptor", "ui_panels", "generation", "macro_interceptor", "characters", "personas", "world_books", "images"]);
 assert.equal(manifest.entry_backend, "dist/backend.js");
 assert.equal(manifest.entry_frontend, "dist/frontend.js");
 for (const key of ["entry_backend", "entry_frontend"]) {
@@ -20,5 +20,5 @@ for (const key of ["entry_backend", "entry_frontend"]) {
 }
 const frontend = await import(`../${manifest.entry_frontend}`);
 assert.equal(typeof frontend.setup, "function", "Frontend must export setup(ctx)");
-console.log("Step 6 manifest, entry files, and frontend export: passed.");
+console.log("Manifest, built entry files, and frontend export: passed.");
 console.log("This does not validate installation in Lumiverse.");

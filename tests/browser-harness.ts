@@ -1,3 +1,4 @@
+import {SetupWizard,SetupError} from "../src/setup-wizard";
 import {PersonalStore,emptyPersonal,builtInPresets,selectedWording} from "../src/personal-settings";
 import {defaultWordingTemplate,formatMacro} from "../src/phone-macros";
 import {emptyDocument} from "../src/model";
@@ -29,11 +30,16 @@ const preferenceStore = new PreferenceStore({ read: async () => prefs, write: as
 let helperProfiles=[{id:"small",name:"Saved small connection",model:"Small test model"}];let helperDelay=0;let helperOutput='{"weather":"Clear skies"}';const helperCalls:Parameters<HelperIO["generate"]>[0][]=[];
 const helper=new HelperAI(store,{allowed:()=>granted.includes("generation"),connections:async()=>helperProfiles,generate:async input=>{helperCalls.push(input);await new Promise(resolve=>setTimeout(resolve,helperDelay));return {content:helperOutput,finish_reason:"stop"};},changed:(_,chatId)=>onBackend({type:"phone_helper_changed",chatId}),warn:()=>{}});
 let personalData:unknown=emptyPersonal();const personalStore=new PersonalStore({read:async()=>structuredClone(personalData),write:async(_u,v)=>{personalData=structuredClone(v);},warn:()=>{}});
+let setupCalls=0;
+const setupFact="Zoe is a guide. Her phone is 555666.";
+const setupApi={permissions:{has:(p:string)=>granted.includes(p)},chats:{get:async(id:string,_u:string)=>({id,character_id:"card"})},characters:{get:async()=>({name:"Ada",description:setupFact,personality:"",scenario:"",world_book_ids:[]})},personas:{getActive:async()=>({name:"Player",description:"Player is a traveler.",attached_world_book_id:null})},world_books:{getGlobal:async()=>[],entries:{list:async()=>({data:[],total:0})}},connections:{list:async()=>helperProfiles},tokens:{countMessages:async()=>({total_tokens:123,approximate:true})},generate:{raw:async()=>{setupCalls++;return {content:JSON.stringify({contacts:[{name:"Zoe",phone:"555666",roles:["guide"],quote:setupFact}]})};}}} as any;
+const setupWizard=new SetupWizard(setupApi,store);
 const sendToBackend = (payload: unknown) => {
   if (!isRecord(payload)) return;
   const id = payload.requestId; const chat = payload.chatId===null?"":String(payload.chatId ?? activeChat ?? ""); const reply = onBackend;
   const run = async () => {
     try {
+      if(["phone_setup_prepare","phone_setup_run","phone_setup_save"].includes(String(payload.type))){let result;if(payload.type==="phone_setup_prepare")result=await setupWizard.prepare(`owner-${chat}`,chat,payload.choices);else if(payload.type==="phone_setup_run")result=await setupWizard.run(`owner-${chat}`,chat,String(payload.id));else{if(payload.confirm!==true)throw Error("Confirm first");result={snapshot:await setupWizard.save(`owner-${chat}`,chat,String(payload.id))};}reply({type:"phone_setup_result",requestId:id,chatId:chat,result});return;}
       if(payload.type==="phone_personal") {
         let personal=await personalStore.read("user");let snapshot;
         const doc=chat?await store.preview(chat,`owner-${chat}`):null,change=payload.change;
@@ -59,10 +65,10 @@ const sendToBackend = (payload: unknown) => {
         const reads = await readStore.mark("user", chat, String(payload.key), payload.observed as { id: string; receipt: string }[], snapshot.state.messages,snapshot.state);
         reply({ type: "phone_reads_result", requestId: id, chatId: chat, reads }); return;
       }
-      let snapshot = payload.type === "phone_update" ? await store.update(`owner-${chat}`, chat, Number(payload.revision), { edit: payload.edit, settings: payload.settings, dismissNotice: payload.dismissNotice,portrait:payload.portrait }) : await store.sync(`owner-${chat}`, chat);
+      let snapshot = payload.type === "phone_update" ? await store.update(`owner-${chat}`, chat, Number(payload.revision), { edit: payload.edit, settings: payload.settings, dismissNotice: payload.dismissNotice,portrait:payload.portrait,contactInfo:payload.contactInfo }) : await store.sync(`owner-${chat}`, chat);
       if(payload.type==="phone_update"){helper.cancel(chat);if(snapshot.settings.source==="helper"){await helper.connections(`owner-${chat}`,chat);snapshot=await store.sync(`owner-${chat}`,chat);}}
       reply({ type: "phone_snapshot", requestId: id, chatId: chat, chatName:chat==="a"?"Lantern story":"Other story", snapshot, reads: await readStore.read("user",chat),helperBusy:helper.busy(chat) });
-    } catch (e) { reply({ type: payload.type === "phone_personal" ? "phone_personal_error" : payload.type === "phone_mark_read" ? "phone_reads_error" : "phone_error", requestId: id, chatId:chat, message: e instanceof Error ? e.message : "Failed" }); }
+    } catch (e) { reply({ type: String(payload.type).startsWith("phone_setup_")?"phone_setup_error": payload.type === "phone_personal" ? "phone_personal_error" : payload.type === "phone_mark_read" ? "phone_reads_error" : "phone_error", requestId: id, chatId:chat, message: e instanceof Error ? e.message : "Failed" }); }
   };
   setTimeout(() => { void run(); }, payload.type === "phone_update"||(payload.type==="phone_personal"&&isRecord(payload.change)&&payload.change.kind==="preset_apply") ? updateDelay : 0);
 };
@@ -126,7 +132,7 @@ function start() { cleanup = setup(ctx as never); }
 const api = {
   async seed(kind: "empty" | "story" = "story") {
     cleanup?.(); helper.cancelAll(); docs.clear(); histories.clear(); events.clear(); readFiles.clear(); prefs = defaultPreferences(); activeChat = "a"; granted = ["chats", "chat_mutation", "interceptor", "ui_panels","generation"]; updateDelay = 0;
-    helperCalls.length=0;helperDelay=0;helperOutput='{"weather":"Clear skies"}';helperProfiles=[{id:"small",name:"Saved small connection",model:"Small test model"}];
+    setupCalls=0;helperCalls.length=0;helperDelay=0;helperOutput='{"weather":"Clear skies"}';helperProfiles=[{id:"small",name:"Saved small connection",model:"Small test model"}];
     composerState = { mounted:true, chatId:"a", text:"" }; focusCount = 0; sendCalls = 0; ctx.host.capabilities["composer-v1"] = 1;
     failAppearanceSave = false; failWidget = false;
     if (new URL(location.href).searchParams.has("stale-appearance")) prefs = { ...defaultPreferences(), css: ".lpt-root { display: none !important; }" };
@@ -149,6 +155,8 @@ const api = {
   setComposer(state: Partial<typeof composerState>) { composerState = { ...composerState, ...state }; },
   composerSupported(value: boolean) { ctx.host.capabilities["composer-v1"] = value ? 1 : 0; },
   generationEvent(name:string,id:string){for(const fn of events.get(name)??[])fn({chatId:activeChat,generationId:id});},
+  setupCalls:()=>setupCalls,
+  setupAllow(value:boolean){for(const p of ["characters","personas","world_books"])if(value&&!granted.includes(p))granted.push(p);else if(!value)granted=granted.filter(x=>x!==p);},
   helperCalls:()=>helperCalls.length,
   helperDelay(ms:number){helperDelay=ms;},
   helperOutput(value:string){helperOutput=value;},

@@ -4,7 +4,7 @@ import { short } from "./schema";
 
 export interface ReadState { revision: number; seen: Record<string, string> }
 export const emptyReads = (): ReadState => ({ revision: 0, seen: {} });
-export const receipt = (m: SavedMessage): string => JSON.stringify([m.from, m.to ?? null, ...(m.group?[m.group]:[]), m.time ?? null, m.text]);
+export const receipt = (m: SavedMessage): string => JSON.stringify([m.originalFrom??m.from, m.originalTo??m.to ?? null, ...(m.group?[m.group]:[]), m.time ?? null, m.text]);
 export const isUnread = (m: SavedMessage, reads: ReadState): boolean => m.direction === "incoming" && reads.seen[m.id] !== receipt(m);
 export const threadKey = (m: SavedMessage): string => m.group?JSON.stringify(["group",normalize(m.group)]):m.direction === "incoming" ? normalize(m.from) : m.to ? normalize(m.to) : "";
 export interface Conversation { key: string; name: string; messages: SavedMessage[]; unread: number; group?:boolean }

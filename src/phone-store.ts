@@ -1,10 +1,12 @@
+import {setupCandidates,type SetupData} from "./setup-wizard";
+import {readContactInfo,emptyContactInfo,projectContacts,contactDuplicates} from "./contact-info";
 import {portraitBytes,portraitKey,PORTRAIT_CHAT_LIMIT} from "./portraits";
 import {callId} from "./calls";
 import { validateEmail,validateActivity } from "./activity";
 import { isHelperNotice } from "./helper-status";
 import { isRecord } from "./shared";
 import { chatPath } from "./store";
-import { effectiveDocument, emptyDocument, emptyState, readSettings, SECTIONS, normalize, type Document, type ManualEdit, type HelperEntry } from "./model";
+import { effectiveDocument, emptyDocument, emptyState, readSettings, SECTIONS, normalize, type Document, type ManualEdit, type HelperEntry, type Section } from "./model";
 import { applyManual, replay, rowSignature, helperSourceSignature, type StoryRow } from "./engine";
 import { validateExpanded, short } from "./schema";
 import { readSnapshot } from "./history";
@@ -18,6 +20,7 @@ export interface PhoneIO {
   history(chatId: string): Promise<StoryRow[]>;
   player(chatId: string, userId: string): Promise<string | null>;
   legacy?(userId: string, path: string): Promise<unknown>;
+  names?(chatId:string,userId:string):Promise<string[]>;
   warn?(text: string): void;
 }
 export function readDocument(raw: string, chatId: string): Document {
@@ -27,6 +30,7 @@ export function readDocument(raw: string, chatId: string): Document {
     !Array.isArray(value.accepted) || !Array.isArray(value.edits)) throw new Error("Invalid saved data");
   const doc = emptyDocument(chatId); doc.revision = value.revision as number;
   if (value.rejected !== undefined && (!Array.isArray(value.rejected) || value.rejected.some(x => typeof x !== "string"))) throw new Error("Invalid rejection data");
+  if(value.contactInfo!==undefined){if(!isRecord(value.contactInfo))throw Error("Invalid contact details");doc.contactInfo=Object.create(null);for(const [key,raw]of Object.entries(value.contactInfo)){if(!isRecord(raw)||typeof raw.name!=="string"||normalize(raw.name)!==key)throw Error("Invalid contact details");doc.contactInfo![key]=readContactInfo(raw,raw.name);}}
   doc.rejected = value.rejected as string[] ?? [];
   for (const key of ["notices", "inferences"] as const) {
     if (value[key] !== undefined && (!Array.isArray(value[key]) || (value[key] as unknown[]).some(x => typeof x !== "string"))) throw new Error("Invalid saved metadata");
@@ -88,7 +92,7 @@ export function validateEdit(value: unknown): ManualEdit {
   if (!isRecord(value) || typeof value.id !== "string" || !value.id ||
     !(value.after === null || typeof value.after === "string") || !Number.isInteger(value.index) || (value.index as number) < -1 ||
     !["scene", "weather", "contact", "location", "note","call","email","bank","transaction"].includes(String(value.target)) ||
-    (value.remove !== undefined && typeof value.remove !== "boolean")||(value.playerWritingAllowed!==undefined&&typeof value.playerWritingAllowed!=="boolean")) throw new Error("Invalid edit");
+    (value.remove !== undefined && typeof value.remove !== "boolean")||(value.playerWritingAllowed!==undefined&&typeof value.playerWritingAllowed!=="boolean")||(value.playerAtEdit!==undefined&&typeof value.playerAtEdit!=="boolean")) throw new Error("Invalid edit");
   const edit = value as unknown as ManualEdit;
   applyManual(emptyState(), edit, new Set(), new Set(),true);
   return structuredClone(edit);
@@ -123,6 +127,7 @@ export class PhoneStore {
     const player = await this.io.player(chatId, userId);
     doc = replay(doc, rows, player ? [player] : [], (row, issues) => this.skips.record(chatId, row, issues));
     doc.currentPlayer = player ?? undefined;
+    projectContacts(doc,await this.io.names?.(chatId,userId)??[]);
     return { doc, rows };
   }
   /** Read-only preview with a trusted user and an authorized chat. Never writes. */
@@ -145,7 +150,7 @@ export class PhoneStore {
     });
   }
   /** Step 4's controls will use this same validated, chat-authorized operation. */
-  update(userId: string, chatId: string, expectedRevision: number, update: { settings?: unknown; edit?: unknown; dismissNotice?: unknown;portrait?:unknown }): Promise<Document> {
+  update(userId: string, chatId: string, expectedRevision: number, update: { settings?: unknown; edit?: unknown; dismissNotice?: unknown;portrait?:unknown;contactInfo?:unknown }): Promise<Document> {
     return this.serial(chatId, async () => {
       if (!userId || !(await this.io.authorize(chatId, userId))) throw new Error("Chat unavailable");
       const raw = await this.io.read(chatId); const saved = readDocument(raw, chatId);
@@ -171,15 +176,18 @@ export class PhoneStore {
         const input = isRecord(update.edit) ? update.edit : {};
         // Anchor/revision/identity come from the saved history, never from UI claims.
         const last = [...rows].sort((a, b) => a.index_in_chat - b.index_in_chat).at(-1);
-        const edit = validateEdit({ ...input,playerWritingAllowed:doc.settings.aiPlayerTexts, id: crypto.randomUUID(), after: last?.id ?? null, index: last?.index_in_chat ?? -1 });
+        const edit = validateEdit({ ...input,...(input.target==="contact"?{playerAtEdit:doc.state.contacts.some(c=>c.player&&[input.name,input.rename].some(n=>typeof n==="string"&&normalize(n)===normalize(c.name)))}:{}),playerWritingAllowed:doc.settings.aiPlayerTexts, id: crypto.randomUUID(), after: last?.id ?? null, index: last?.index_in_chat ?? -1 });
         if (edit.target === "note" && edit.section && !edit.remove) {
           const notes = doc.state.notes[edit.section];
           const existing = notes.some(n => normalize(n.name) === normalize(edit.name ?? ""));
           const resolved = edit.section === "plots" && isRecord(edit.value) && edit.value.resolved === true;
           if (!existing && !resolved && notes.filter(n => !n.resolved).length >= doc.settings.notesPerSection) throw new Error("This section is full. Delete a note to make room.");
         }
+        if(edit.target==="contact"&&isRecord(edit.value)&&doc.state.contacts.some(c=>c.player&&[edit.name,edit.rename].some(n=>typeof n==="string"&&normalize(n)===normalize(c.name)))&&Object.keys(edit.value).some(k=>!["physical","position","attire"].includes(k)))throw Error("Invalid player/contact field");
         doc.edits.push(edit);
       }
+      if(isRecord(update.edit)&&update.edit.target==="contact"&&typeof update.edit.name==="string"&&doc.contactInfo){const key=normalize(update.edit.name);if(update.edit.remove)delete doc.contactInfo[key];else if(typeof update.edit.rename==="string"&&doc.contactInfo[key]){doc.contactInfo[normalize(update.edit.rename)]={...doc.contactInfo[key],name:update.edit.rename};if(normalize(update.edit.rename)!==key)delete doc.contactInfo[key];}}
+      if(update.contactInfo!==undefined){const input=update.contactInfo;if(!isRecord(input)||typeof input.name!=="string")throw Error("Invalid contact details");const name=input.name;const creating=isRecord(update.edit)&&update.edit.target==="contact"&&!update.edit.remove&&[update.edit.name,update.edit.rename].includes(name);if(!creating&&!doc.state.contacts.some(c=>normalize(c.name)===normalize(name)))throw Error("Reopen this contact.");const prior=doc.contactInfo?.[normalize(name)]??doc.state.contacts.find(c=>normalize(c.name)===normalize(name))?.info??emptyContactInfo(name);const info=readContactInfo({...prior,...input,locked:input.kind!==undefined?true:prior.locked,confirmed:[...new Set([...(prior.confirmed??[]),...["phone","email","relationship","details"].filter(k=>input[k]!==undefined)])]},name);(doc.contactInfo??={})[normalize(name)]=info;if(contactDuplicates(doc.contactInfo))this.io.warn?.("Lumi Phone Tracker: duplicate contact number or address; ambiguous matching disabled.");}
       if(update.portrait!==undefined){
         const p=update.portrait;if(!isRecord(p)||typeof p.name!=="string"||!doc.state.contacts.some(c=>portraitKey(c.name)===portraitKey(p.name as string)))throw Error("Reopen the contact before changing its portrait.");
         const data=Object.assign(Object.create(null),doc.portraits) as Record<string,string>;if(p.data===null)delete data[portraitKey(p.name)];else {portraitBytes(p.data);data[portraitKey(p.name)]=p.data as string;}
@@ -189,6 +197,16 @@ export class PhoneStore {
       doc = replay(doc, rows, doc.playerNames);
       doc.revision = saved.revision + 1;
       await this.io.write(chatId, JSON.stringify(doc)); return doc;
+    });
+  }
+  setupApply(userId:string,chatId:string,revision:number,input:SetupData,names:string[]):Promise<Document>{
+    return this.serial(chatId,async()=>{
+      if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");const raw=await this.io.read(chatId),saved=readDocument(raw,chatId);if(saved.revision!==revision)throw Error("The tracker changed. Nothing was saved.");let {doc,rows}=await this.build(chatId,userId);if(JSON.stringify(doc.accepted,canonicalKeys)!==JSON.stringify(saved.accepted,canonicalKeys))throw Error("The story changed. Nothing was saved.");const data=setupCandidates(doc,input),last=[...rows].sort((a,b)=>a.index_in_chat-b.index_in_chat).at(-1);
+      const add=(target:ManualEdit["target"],name:string,value:unknown,section?:Section)=>doc.edits.push(validateEdit({id:crypto.randomUUID(),target,name,value,...(target==="contact"?{playerAtEdit:doc.playerNames.some(n=>normalize(n)===normalize(name))}:{}),...(section?{section}:{}),after:last?.id??null,index:last?.index_in_chat??-1}));
+      for(const c of data.contacts){const old=doc.state.contacts.find(x=>normalize(x.name)===normalize(c.name));if(!old||c.roles?.length)add("contact",c.name,c.roles?.length?{roles:c.roles}:{});const prior=doc.contactInfo?.[normalize(c.name)]??old?.info??emptyContactInfo(c.name);const fields=Object.keys(c).filter(k=>["phone","email","relationship","details"].includes(k));const info=readContactInfo({...prior,...c,kind:prior.locked?prior.kind:names.some(n=>normalize(n)===normalize(c.name))?"Main":prior.kind,confirmed:[...new Set([...(prior.confirmed??[]),...fields])]},c.name);(doc.contactInfo??=Object.create(null))[normalize(c.name)]=info;}
+      for(const n of data.notes)add("note",n.name,{detail:n.detail,context:n.context},n.section);
+      for(const p of data.locations)add("location",p.name,{description:p.description,relation:p.relation});
+      doc=replay(doc,rows,doc.playerNames);projectContacts(doc,names);doc.revision=saved.revision+1;await this.io.write(chatId,JSON.stringify(doc));return doc;
     });
   }
   helperPreview(userId:string,chatId:string):Promise<HelperTicket> {

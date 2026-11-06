@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.16.0 - Contacts pages and setup wizard
+
+- Contacts now use A-Z rows, round portraits and full pages with context-aware Back,
+  role chips, confirmed address/details fields and Edit-only confirmed deletion.
+- Exact card/persona name matching establishes Main; first-name matches remain
+  review hints. User tags lock. Addresses match without guessing duplicates.
+- Added compact NPC continuity and protected wording: AI/background tracking cannot
+  create or change confirmed contact metadata. Old contacts and read receipts remain.
+- Setup wizard reads documented card/persona/lorebooks, reviews token cost for the
+  existing connection, then shows a preview. Explicit save keeps edits/tombstones
+  and checks the requesting chat/revision; no automatic retries or paid requests.
+- Added world_books permission for the optional wizard and seven supplied embedded
+  icons (656,860 PNG bytes). Profiles no longer shares Advanced's icon.
+
+
 ## 0.15.0 - Clearer names and CSS file uploads
 
 - Source controls now say Connections / Custom connection; Presets is Settings

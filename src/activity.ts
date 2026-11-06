@@ -1,3 +1,4 @@
+import {contactMatch} from "./contact-info";
 import { isRecord } from "./shared";
 import { recordText, placeholder } from "./record-values";
 import { normalize, type Document, type State, type Origin, type CallData, type BankData, type TransactionData, type EmailData, type ManualEdit, type Patch } from "./model";
@@ -123,7 +124,7 @@ export function applyActivities(doc: Document, patch: Patch, emails: EmailData[]
         list.push({ ...value as object, id, at, ...(kind==="calls"?{legacyIds:[legacyId]}:{}), by: user ? "user" : "ai" } as never);
     };
     for (const [i, call] of (patch.calls ?? []).entries()) {
-        if ((call.direction === "out" || players.has(normalize(call.name))) && !doc.settings.aiPlayerTexts && !user && !userCallProof(call, rows, players))
+        if ((call.direction === "out" || players.has(normalize(contactMatch(doc,call.name)??call.name))) && !doc.settings.aiPlayerTexts && !user && !userCallProof(call, rows, players))
             continue;
         if (user && (!rows.at(-1)?.name || !players.has(normalize(rows.at(-1)!.name!))))
             continue;
@@ -132,9 +133,9 @@ export function applyActivities(doc: Document, patch: Patch, emails: EmailData[]
     }
     for (const [i, email] of emails.entries()) {
         let direction: "incoming" | "outgoing" = "incoming";
-        const fromPlayer = players.has(normalize(email.from));
+        const fromPlayer = players.has(normalize(contactMatch(doc,email.from,"email")??email.from));
         if (user) {
-            if (!rows.at(-1)?.name || normalize(email.from) !== normalize(rows.at(-1)!.name!))
+            if (!rows.at(-1)?.name || normalize(contactMatch(doc,email.from,"email")??email.from) !== normalize(rows.at(-1)!.name!))
                 continue;
             direction = "outgoing";
         }

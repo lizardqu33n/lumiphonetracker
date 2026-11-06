@@ -1,6 +1,6 @@
 {
   "identifier": "lumi_phone_tracker",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "name": "Lumi Phone Tracker",
   "author": "lizardqu33n",
   "github": "https://github.com/lizardqu33n/lumiphonetracker",
@@ -15,6 +15,7 @@
     "macro_interceptor",
     "characters",
     "personas",
+    "world_books",
     "images"
   ],
   "entry_backend": "dist/backend.js",

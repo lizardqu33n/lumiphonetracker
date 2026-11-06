@@ -1726,3 +1726,36 @@
 .lpt-emoji-option .lpt-emoji {width:var(--lpt-emoji-picker-size);height:var(--lpt-emoji-picker-size);}
 .lpt-emoji-tooltip {display:block;visibility:hidden;min-width:0;padding:var(--lpt-emoji-gap);font-size:var(--lpt-small-font-size);color:var(--lpt-muted);overflow-wrap:anywhere;pointer-events:none;}
 .lpt-emoji-picker:has(.lpt-emoji-option:hover) .lpt-emoji-tooltip,.lpt-emoji-picker:has(.lpt-emoji-option:focus-visible) .lpt-emoji-tooltip {visibility:visible;}
+
+/* Part 6: Contacts; all new appearance values live on the phone root. */
+.lpt-root {--lpt-contact-bg:var(--lpt-screen-bg,#19171f);--lpt-contact-surface:var(--lpt-card-bg,#24212d);--lpt-contact-text:var(--lpt-text,#eee);--lpt-contact-muted:var(--lpt-muted,#aaa);--lpt-contact-radius:16px;--lpt-contact-gap:8px;--lpt-contact-padding:12px;--lpt-contact-font:var(--lpt-font,system-ui);--lpt-contact-font-size:14px;--lpt-contact-portrait-size:40px;--lpt-contact-hero-portrait-size:88px;--lpt-contact-chip-radius:999px;--lpt-contact-action-size:24px;--lpt-contact-border:var(--lpt-outline,#420642);--lpt-contact-target:44px;--lpt-contact-line-width:1px;}
+.lpt-contacts,.lpt-contact-page {background:var(--lpt-contact-bg);color:var(--lpt-contact-text);font-family:var(--lpt-contact-font);font-size:var(--lpt-contact-font-size);}
+.lpt-contact-list-header,.lpt-contact-nav {display:flex;align-items:center;justify-content:space-between;gap:var(--lpt-contact-gap);}
+.lpt-contact-list-title,.lpt-contact-letter,.lpt-contact-name {margin:var(--lpt-contact-gap) 0;font:inherit;font-weight:bold;}
+.lpt-contact-add {min-width:var(--lpt-contact-target);min-height:var(--lpt-contact-target);}
+.lpt-contact-row {display:flex;align-items:center;gap:var(--lpt-contact-gap);width:100%;text-align:left;padding:var(--lpt-contact-padding);border-radius:var(--lpt-contact-radius);background:var(--lpt-contact-surface);color:var(--lpt-contact-text);cursor:pointer;}
+.lpt-contact-row .lpt-portrait {width:var(--lpt-contact-portrait-size);height:var(--lpt-contact-portrait-size);border-radius:50%;overflow:hidden;}
+.lpt-contact-page {padding:var(--lpt-contact-padding);border-radius:var(--lpt-contact-radius);}
+.lpt-contact-hero {display:flex;flex-direction:column;align-items:center;gap:var(--lpt-contact-gap);padding:var(--lpt-contact-padding);}
+.lpt-contact-hero .lpt-portrait {width:var(--lpt-contact-hero-portrait-size);height:var(--lpt-contact-hero-portrait-size);border-radius:50%;overflow:hidden;}
+.lpt-contact-chips {display:flex;flex-wrap:wrap;justify-content:center;gap:var(--lpt-contact-gap);}
+.lpt-contact-chip {padding:var(--lpt-contact-gap);border-radius:var(--lpt-contact-chip-radius);background:var(--lpt-contact-surface);color:var(--lpt-contact-text);border:var(--lpt-contact-line-width) solid var(--lpt-contact-border);}
+.lpt-contact-info-row {display:flex;flex-wrap:wrap;align-items:center;gap:var(--lpt-contact-gap);padding:var(--lpt-contact-padding) 0;border-bottom:var(--lpt-contact-line-width) solid var(--lpt-contact-border);}
+.lpt-contact-info-label {font-weight:bold;}
+.lpt-contact-info-value {flex:1;min-width:0;overflow-wrap:anywhere;}
+.lpt-contact-match-hint,.lpt-contact-duplicate-warning {color:var(--lpt-contact-muted);overflow-wrap:anywhere;}
+.lpt-contact-action-icon {width:var(--lpt-contact-action-size);height:var(--lpt-contact-action-size);object-fit:contain;image-rendering:auto;}
+.lpt-contact-link,.lpt-contact-detail-add {display:flex;align-items:center;gap:var(--lpt-contact-gap);}
+.lpt-contact-detail-edit-row {display:flex;flex-wrap:wrap;gap:var(--lpt-contact-gap);margin:var(--lpt-contact-gap) 0;}
+.lpt-contact-detail-label,.lpt-contact-detail-value {flex:1;min-width:0;}
+
+/* Setup wizard shares the Contacts surface tokens. */
+.lpt-setup {background:var(--lpt-contact-bg);color:var(--lpt-contact-text);padding:var(--lpt-contact-padding);border-radius:var(--lpt-contact-radius);font-family:var(--lpt-contact-font);font-size:var(--lpt-contact-font-size);}
+.lpt-setup-header,.lpt-setup-open,.lpt-setup-choice {display:flex;align-items:center;gap:var(--lpt-contact-gap);}
+.lpt-setup-title,.lpt-setup-question,.lpt-setup-group-title {font:inherit;font-weight:bold;}
+.lpt-setup-choice {min-height:var(--lpt-contact-target);flex-wrap:wrap;}
+.lpt-setup-checkbox {accent-color:var(--lpt-contact-border);}
+.lpt-setup-button {margin:var(--lpt-contact-gap);min-height:var(--lpt-contact-target);}
+.lpt-setup-hint,.lpt-setup-status {color:var(--lpt-contact-muted);overflow-wrap:anywhere;}
+.lpt-setup-record {background:var(--lpt-contact-surface);border:var(--lpt-contact-line-width) solid var(--lpt-contact-border);border-radius:var(--lpt-contact-radius);padding:var(--lpt-contact-padding);margin:var(--lpt-contact-gap) 0;}
+.lpt-setup-record-value {overflow-wrap:anywhere;}

@@ -14,7 +14,7 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
   let deliver: (p: Record<string, unknown>, user: string) => void = () => {};
   let registrationOptions: unknown;
   const calls: string[] = []; const warnings: string[] = [];
-  let failReads = false;let failReceipts=false;
+  let failReads = false;let failReceipts=false;let setupMode=false;
   const scoped = (user: unknown, method: string) => {
     if (typeof user !== "string" || !user.trim()) throw new Error("userId is required for operator-scoped extensions");
     calls.push(method);
@@ -36,8 +36,8 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     onFrontendMessage: (fn: typeof receive) => { receive = fn; return () => {}; },
     on: (event: string,fn:(payload:unknown,userId?:string)=>void) => { events.push(event);handlers.set(event,fn); return () => {}; },
     connections:{list:async(user:string)=>{scoped(user,"connections.list");return [{id:user==="v"?"v-small":"small",name:"Existing profile",model:"Test model"}];}},
-    generate:{raw:async(input:Record<string,unknown>)=>{scoped(input.userId,"generate.raw");generations.push(input);return {content:"{}",finish_reason:"stop"};}},
-    chats: { get: async (id: string, user: string) => {scoped(user,"chats.get");return (user === "u" && id !== "c") || (user === "v" && id === "c") ||(id==="shared"&&["u","v"].includes(user)) ? { id } : null;}, getActive: async (user:string) => {scoped(user,"chats.getActive");return { id: "a" };} },
+    generate:{raw:async(input:Record<string,unknown>)=>{scoped(input.userId,"generate.raw");generations.push(input);return {content:setupMode?JSON.stringify({contacts:[{name:"Zoe",phone:"555666",quote:"Zoe is a guide. Her phone is 555666."}]}):"{}",finish_reason:"stop"};}},
+    chats: { get: async (id: string, user: string) => {scoped(user,"chats.get");return (user === "u" && id !== "c") || (user === "v" && id === "c") ||(id==="shared"&&["u","v"].includes(user)) ? { id,character_id:"card" } : null;}, getActive: async (user:string) => {scoped(user,"chats.getActive");return { id: "a" };} },
     chat: { getMessages: async (chat: string) => chat === "empty" ? [] : [{ id: "m1", chat_id: chat, index_in_chat: 0, role: "assistant", content:chat==="shared"?'Main account has $500.<phone-state>\ncall: Ada | missed\nbank: Main | $500\n</phone-state><phone-email from="Ada" subject="Shared plan">Meet at dusk.</phone-email>': `<phone-state>location="${chat}"</phone-state><phone-text from="Ada">Actual saved test text</phone-text>`, swipe_id: 0 }] },
     userStorage: {
       exists: async (path: string, user: string) => {scoped(user,"userStorage.exists");return persisted.has(`${user}/${path}`);},
@@ -226,6 +226,11 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     const helperPreview=await request({type:"phone_personal",chatId:"c",change:{kind:"preview",target:"helper"}},"v");const hpText=(helperPreview.preview as {text:string}).text;
     await request({type:"phone_helper_now",chatId:"c"},"v");expect(String((generations.at(-1)!.messages as any[])[0].content)).toBe(hpText);expect(hpText).toContain("V HELPER");expect(hpText).toContain("Null means unknown");expect(generations.at(-1)!.userId).toBe("v");
     const p2=await request({type:"phone_personal",chatId:"a",revision:1,change:{kind:"wording_save",target:"main",id:(p1.personal as any).wordings.main[0].id,name:"U wording",text:"U WORDING WITHOUT TOKEN"}},"u");expect(p2.type).toBe("phone_personal_result");expect(await nativePull("a","u")).toContain("<phone-text");expect(warnings.at(-1)).toContain("missing syntax");expect(warnings.at(-1)).not.toContain("U WORDING");
+    Object.assign(fake,{characters:{get:async(_id:string,u:string)=>{scoped(u,"characters.get");return {name:"Ada",description:"Zoe is a guide. Her phone is 555666.",personality:"",scenario:"",world_book_ids:[]};}},personas:{getActive:async(u:string)=>{scoped(u,"personas.getActive");return {name:"Player",description:"Player is a traveler.",attached_world_book_id:null};}},world_books:{getGlobal:async(u:string)=>{scoped(u,"world_books.getGlobal");return ["book"];},entries:{list:async(_id:string,o:any)=>{scoped(o.userId,"world_books.entries.list");return {data:[],total:0};}}},tokens:{countMessages:async(_m:unknown,o:any)=>{scoped(o.userId,"tokens.countMessages");return {total_tokens:123,approximate:true};}}});
+    setupMode=true;const setupSync=await request({type:"phone_sync",chatId:"a"},"u");await request({type:"phone_update",chatId:"a",revision:(setupSync.snapshot as any).revision,settings:{apps:{Contacts:true},source:"main"}},"u");const setupPaid=generations.length;
+    const plan=await request({type:"phone_setup_prepare",chatId:"a",choices:["Contacts"]},"u");expect(plan.type).toBe("phone_setup_result");const planId=(plan.result as any).id;expect((plan.result as any).tokens).toBe(123);expect(generations.length).toBe(setupPaid);
+    const beforeSetupRun=persisted.get("a/lpt_phone_v2");const setupRun=await request({type:"phone_setup_run",chatId:"a",id:planId},"u");expect(setupRun.type).toBe("phone_setup_result");expect(persisted.get("a/lpt_phone_v2")).toBe(beforeSetupRun);expect(generations.length).toBe(setupPaid+1);expect(generations.at(-1)!.userId).toBe("u");
+    expect((await request({type:"phone_setup_save",chatId:"a",id:planId},"u")).type).toBe("phone_setup_error");const setupSaved=await request({type:"phone_setup_save",chatId:"a",id:planId,confirm:true},"u");expect(setupSaved.type).toBe("phone_setup_result");expect((setupSaved.result as any).snapshot.state.contacts.some((c:any)=>c.name==="Zoe")).toBe(true);expect(calls).toContain("tokens.countMessages");expect(calls).toContain("world_books.entries.list");
     const callCount=calls.length;receive({type:"phone_personal",requestId:"spoof",userId:"u",chatId:"a"},undefined as never);await Bun.sleep(5);expect(calls.length).toBe(callCount);
   } finally { (globalThis as unknown as { spindle?: unknown }).spindle = prior; }
 });

@@ -211,3 +211,16 @@ protected generated reference and filters app sections. Macro pull/interceptor p
 load the generating user's wording freshly; Helper IO loads its own target wording.
 Preview uses those same production renderers. Chat mutations use the existing
 revision-checked PhoneStore; no personal choice is written into the chat document.
+
+### Part 6: Contacts and source-only setup
+
+`contact-info.ts` validates separate user/wizard-confirmed metadata and projects it
+onto contacts without changing old story fields. Exact address lookup is used for
+texts/calls/emails, with no duplicate guessing; raw addresses preserve receipts.
+`card-access.ts` uses scoped documented card/active-persona reads for name matching.
+`setup-wizard.ts` owns temporary user/chat/revision-bound plans, free token review,
+one raw model run, evidence validation and explicit confirmation. `setup-view.ts`
+renders the phone question/cost/preview flow. PhoneStore.setupApply commits a whole
+confirmed batch under the existing chat lock, preserving edits, caps and tombstones.
+Sources/quotes stay in temporary memory; confirmed edits live on the shared chat.
+No model key, new connection, automatic wizard request or global user cache is added.

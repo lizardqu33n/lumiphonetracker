@@ -1,6 +1,42 @@
-# Verification report - 0.15.0
+# Verification report - 0.16.0
 
 Checked November 5, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **No live Lumiverse session or real model connection was used. A local Lumiverse build and its user-docs were inspected; that is not live-host verification. No paid model request was made.**
+
+## 0.16.0: Contacts and setup wizard
+
+**213 code tests / 1784 assertions; 311 browser checks pass.** Type checking,
+source/build reproducibility and installable package checks pass. No real Lumiverse
+server, model provider, paid connection or second real user was used.
+
+- Contacts code tests cover whole-name classification, first-name review only,
+  no-access fallback, user-locked tags, address normalization/duplicate ambiguity,
+  rename/delete migration, AI metadata rejection, compact/app-scoped NPC continuity
+  preserved original-address read receipts and NPC-to-player persona-switch replay. Legacy field values remain unchanged.
+- Source/API mocks enforce trusted userId on card/persona/lorebook/token/connection/
+  generation calls. Another user's persona/ticket cannot be substituted. The actual
+  backend RPC test checks prepare, run, confirmation and saved chat data.
+- Wizard tests prove no paid call before Run, no state write before confirmation,
+  JSON/source-quote validation, rejection of Scene/unselected apps/inventions,
+  preservation of edits/cleared metadata/tombstones, source-change detection,
+  chat/revision pinning and rejection of duplicate runs. Failure has no retry loop.
+- Browser checks cover alphabetical letter headers, round portraits, full pages,
+  tag locking, phone/custom details, removed Email edit field, duplicate warnings,
+  Edit-only deletion with confirmation, list scroll restoration and return from a
+  contact to its originating text thread.
+- Wizard browser checks cover the three choices (no Scene), clear permission failure,
+  free approximate-token review, cost warning, explicit Run, unsaved preview,
+  explicit Save and no background model requests. Setup surfaces are opaque.
+- Existing opacity, protected Reset/toolbar, hostile CSS uploads, chat switching,
+  per-user unread state, drafts/no-Send, avatars, emoji and settings profiles still pass.
+
+Unverified live: actual card/persona/lorebook access under server grants, native
+multi-user storage and persona context, mobile drawer/keyboard behavior, native
+preset/dry-run prompt assembly and real connection/provider token billing. Models'
+extraction and attribution accuracy is not proven by literal source-quote checks;
+review the preview. The documented token API may be approximate and does not quote
+an exact money charge. Group-member card enumeration is not provided by the current
+Chat DTO; no undocumented metadata lookup was invented. Call/numpad artwork is
+included, with no new dialing/keypad behavior. See docs/PART-6.md for access limits.
 
 ## 0.15.0: labels and CSS file uploads
 

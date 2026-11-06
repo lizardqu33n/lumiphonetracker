@@ -1,3 +1,4 @@
+import {projectContacts,contactMatch} from "./contact-info";
 import {callId,helperCallSource} from "./calls";
 import { applyActivities,applyActivityEdit } from "./activity";
 import { parseExpandedReply, change, validateExpanded, validateNote, short, type ParseIssue } from "./schema";
@@ -110,7 +111,13 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
     for (const edit of editsByIndex.get(index) ?? []) {
       // A changed/deleted source cannot resurrect its old edited call as a manual add.
       if(edit.target==="call"&&edit.name&&!state.calls.some(c=>c.id===edit.name))continue;
-      applyManual(state, edit, players, tombstones,document.settings.aiPlayerTexts);
+      // A past NPC edit must remain in the journal without becoming a private
+      // player-field edit if that character is later used as a persona.
+      const nowPlayer=players.has(normalize(edit.name??""))||players.has(normalize(edit.rename??""));
+      const previouslyPlayer=document.playerNames.some(n=>[edit.name,edit.rename].some(name=>typeof name==="string"&&normalize(name)===normalize(n)));
+      if(edit.target==="contact"&&edit.playerAtEdit===undefined&&nowPlayer&&!previouslyPlayer)edit.playerAtEdit=false;
+      const replayEdit=edit.target==="contact"&&edit.playerAtEdit===false&&isRecord(edit.value)&&nowPlayer?{...edit,value:Object.fromEntries(Object.entries(edit.value).filter(([key])=>["physical","position","attire"].includes(key)))}:edit;
+      applyManual(state, replayEdit, players, tombstones,document.settings.aiPlayerTexts);
     }
   };
   manualAt(-1);
@@ -166,7 +173,8 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
       const proofRow:StoryRow={...row,content:proven.map(b=>[b.name,b.balance,b.evidence??""].join(" ")).join("\n")};
       applyActivities(next,patch,emails,at,[...(lastUser?[lastUser]:[]),row,...(proven.length?[proofRow]:[])],players,row.role==="user",tombstones,reservedCalls);
       accepted.bankProof=(patch.bank??[]).filter(b=>state.bank.some(saved=>saved.at.id===at.id&&saved.at.variant===at.variant&&normalize(saved.name)===normalize(b.name)&&saved.balance===b.balance));
-      for (const [ordinal, text] of texts.entries()) {
+      for (const [ordinal, rawText] of texts.entries()) {
+        const text={...rawText,from:contactMatch(document,rawText.from)??rawText.from,...(rawText.to?{to:contactMatch(document,rawText.to)??rawText.to}:{})};
         let from = text.from; let direction: "incoming" | "outgoing" = "incoming";
         if (row.role === "user") {
           if (!row.name || normalize(text.from) !== normalize(row.name)) continue;
@@ -181,7 +189,7 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
             continue;
           }
         }
-        state.messages.push({ ...text, from, direction, at, ...(typeof state.scene.date?.value==="string"?{date:state.scene.date.value}:{}), id: JSON.stringify([at.id, at.variant, ordinal]) });
+        state.messages.push({ ...text, from,...(rawText.from!==from?{originalFrom:rawText.from}:{}),...(rawText.to!==text.to?{originalTo:rawText.to}:{}), direction, at, ...(typeof state.scene.date?.value==="string"?{date:state.scene.date.value}:{}), id: JSON.stringify([at.id, at.variant, ordinal]) });
       }
       if(row.role==="assistant")report?.(row,parsed.issues);
     }
@@ -214,6 +222,7 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
   next.callAdmissions=state.calls.map(c=>c.id);
   state.calls.sort((a,b)=>a.at.index-b.at.index);
   next.notices = [...state.notices];
+  projectContacts(next);
   return next;
 }
 

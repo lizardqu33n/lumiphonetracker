@@ -1,3 +1,4 @@
+import type {ContactInfo} from "./contact-info";
 import { isRecord } from "./shared";
 
 export const SCENE_KEYS = ["location", "time", "date", "present"] as const;
@@ -26,8 +27,8 @@ export interface Patch {
   contacts: ContactPatch[]; locations: PlacePatch[]; notes: Partial<Record<Section, NotePatch[]>>;
 }
 export interface TextData { from: string; text: string; time?: string; to?: string; group?:string }
-export interface SavedMessage extends TextData { id: string; direction: "incoming" | "outgoing"; at: Origin; date?:string }
-export interface Contact { name: string; player: boolean; fields: Partial<Record<ContactKey, Cell>>; lastSeen?: string; editedByUser?: boolean }
+export interface SavedMessage extends TextData { originalFrom?:string;originalTo?:string; id: string; direction: "incoming" | "outgoing"; at: Origin; date?:string }
+export interface Contact { info?:ContactInfo;matchHint?:string;name: string; player: boolean; fields: Partial<Record<ContactKey, Cell>>; lastSeen?: string; editedByUser?: boolean }
 export interface Place { name: string; description: string; relation: string; at: Origin; by: "ai" | "user"; updated: boolean }
 export interface Note { name: string; detail: string; context: string; resolved: boolean; sendToAI: boolean;
   at: Origin; by: "ai" | "user"; addedByUser: boolean; updated: boolean }
@@ -50,6 +51,7 @@ export interface Settings {
 }
 export interface HelperEntry { id: string; at: Origin; sources: { id: string; signature: string }[]; values: Record<string, unknown>; prose: string }
 export interface ManualEdit {
+  playerAtEdit?:boolean;
   playerWritingAllowed?:boolean;
   id: string; after: string | null; index: number;
   target: "scene" | "weather" | "contact" | "location" | "note" | "call" | "email" | "bank" | "transaction";
@@ -57,6 +59,7 @@ export interface ManualEdit {
 }
 export interface Accepted { bankProof?:BankData[];at: Origin; patch: Patch; emails?:EmailData[]; texts: TextData[]; role: "user" | "assistant"; name?: string; prose: string }
 export interface Document {
+  contactInfo?:Record<string,ContactInfo>;
   portraits?:Record<string,string>;
   callAdmissions?:string[];
   personalReads?:{seen:Record<string,string>;available?:boolean};
@@ -114,5 +117,5 @@ export function effectiveDocument(doc:Document):Document {
 }
 export const emptyPatch = (): Patch => ({ scene: {}, contacts: [], locations: [], notes: {} });
 export const emptyState = (): State => ({ calls:[],bank:[],transactions:[],emails:[],scene: {}, contacts: [], locations: [], notes: { people: [], items: [], rules: [], plots: [], misc: [] }, messages: [], notices: [] });
-export const emptyDocument = (chatId: string): Document => ({ schema: 2, chatId, revision: 0,
+export const emptyDocument = (chatId: string): Document => ({ contactInfo:{},schema: 2, chatId, revision: 0,
   settings: defaults(), edits: [], accepted: [], state: emptyState(), playerNames: [], rejected: [], notices: [], inferences: [], helperEntries: [], helperAttempts: [] });
