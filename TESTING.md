@@ -1,6 +1,40 @@
-# Verification report - 0.13.0
+# Verification report - 0.14.0
 
 Checked November 5, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **No live Lumiverse session or real model connection was used. A local Lumiverse build and its user-docs were inspected; that is not live-host verification. No paid model request was made.**
+
+## 0.14.0: personal presets and editable prompt wording
+
+**196 code tests / 1642 assertions; 276 browser checks pass.** Type checking,
+reproducible built-file comparison and installable package checks pass.
+No live Lumiverse server, real second user or model connection was used.
+
+- Preset tests cover the exact allowlist, every excluded category, read-only Default
+  and Minimal, duplicate/long names, 20-preset cap, separate users, stale saves and
+  deletion/rename. Applying uses the existing chat revision check: excluded settings,
+  story state and other chats stay unchanged; users in one chat share the switches.
+- Wording tests cover separate users and Main/Helper selections, 10-total cap,
+  4,000-character validation, read-only Default, safe fallback warnings, resetting
+  despite stale personal revision, generated syntax once, inactive-app sections,
+  native macro escaping, Main-AI instruction filtering in Helper mode, and unchanged Helper rejection of text/email output.
+- The actual backend runs against an operator-scoped mock that throws for missing
+  userId. New storage calls and replies use transport identity. Spoofed identities
+  and unauthorized chats fail safely. Real pull/interceptor output equals Preview;
+  an actual mock Helper request's system instructions equal its Preview too.
+  Applying and previewing make no model request. Helper locked rules survive custom prose.
+- Browser checks cover collapsed sections, apply confirmation, saving and built-in
+  read-only controls, custom save/selection/reset, missing syntax warning, plain-text
+  HTML display, character/estimated-token labels, Helper Preview without generation,
+  narrow-sidebar wrapping, no-chat controls and protected Reset. A delayed Apply
+  after switching to another chat changes only the original chat.
+- Existing opacity, hostile custom-CSS Reset, shared story/separate unread state,
+  Messages draft/no-Send, emoji, portraits and Helper failure checks still pass.
+
+Not verified live: multi-user server authentication and storage routing in a running
+Lumiverse; persistence across an actual server restart; native preset/dry-run macro
+execution under the installed host version; real mobile drawer/keyboard behavior;
+real connection/provider responses or model compliance with custom language.
+Mock identity enforcement and browser rendering do not prove those host/model paths.
+No paid requests were made. The optional automatic preset for new chats is omitted.
 
 ## 0.13.0: Step E emoji picker
 

@@ -416,6 +416,68 @@ var OPTIONAL_APPS = ["Calls", "Email", "Bank"];
 var ALL_APPS = [...CORE_APPS, ...OPTIONAL_APPS];
 var APP_FIELDS = { Scene: SCENE_KEYS.map((k) => `scene.${k}`), Weather: ["weather"], Locations: ["locations"], Notes: SECTIONS.map((k) => `notes.${k}`), Contacts: CONTACT_KEYS.map((k) => `contacts.${k}`), Messages: ["messages"], Calls: ["calls"], Email: ["email"], Bank: ["bank.balance", "bank.transactions"] };
 var normalize = (name) => name.normalize("NFKC").trim().toLocaleLowerCase("en-US").split(" ").filter(Boolean).join(" ");
+function defaults() {
+  return {
+    apps: Object.fromEntries(ALL_APPS.map((a) => [a, CORE_APPS.includes(a)])),
+    enabled: Object.fromEntries(SWITCHES.map((k) => [k, k !== "contacts.thoughts"])),
+    aiPlayerTexts: false,
+    inferMissing: false,
+    keepTexts: 3,
+    keepTrackers: 0,
+    notesPerSection: 10,
+    logLines: 20,
+    source: "main",
+    connection_id: null,
+    helperMessages: 3
+  };
+}
+function readSettings(input) {
+  if (!isRecord(input))
+    throw new Error("Invalid settings");
+  const out = defaults();
+  for (const key of Object.keys(input)) {
+    if (!(key in out))
+      throw new Error("Unknown setting");
+    if (key === "apps") {
+      if (!isRecord(input.apps))
+        throw new Error("Invalid apps");
+      for (const [app, on] of Object.entries(input.apps)) {
+        if (!ALL_APPS.includes(app) || typeof on !== "boolean")
+          throw new Error("Invalid app");
+        out.apps[app] = on;
+      }
+    } else if (key === "enabled") {
+      if (!isRecord(input.enabled))
+        throw new Error("Invalid switches");
+      for (const [name, value] of Object.entries(input.enabled)) {
+        if (!SWITCHES.includes(name) || typeof value !== "boolean")
+          throw new Error("Invalid switch");
+        out.enabled[name] = value;
+      }
+    } else if (["aiPlayerTexts", "inferMissing"].includes(key)) {
+      if (typeof input[key] !== "boolean")
+        throw new Error("Invalid switch");
+      Object.assign(out, { [key]: input[key] });
+    } else if (key === "connection_id") {
+      if (input.connection_id !== null && (typeof input.connection_id !== "string" || !input.connection_id || input.connection_id.length > 256))
+        throw new Error("Invalid connection");
+      out.connection_id = input.connection_id;
+    } else if (key === "source") {
+      if (input.source !== "main" && input.source !== "helper")
+        throw new Error("Invalid source");
+      out.source = input.source;
+    } else {
+      const n = input[key];
+      if (typeof n !== "number" || !Number.isSafeInteger(n) || n < (key === "keepTrackers" ? 0 : key === "notesPerSection" ? 3 : 1) || key === "notesPerSection" && n > 30 || key === "helperMessages" && n > 10)
+        throw new Error("Invalid number");
+      Object.assign(out, { [key]: n });
+    }
+  }
+  if (input.apps === undefined)
+    for (const app of CORE_APPS)
+      out.apps[app] = APP_FIELDS[app].some((k) => out.enabled[k]);
+  return out;
+}
 function effectiveDocument(doc) {
   const enabled = { ...doc.settings.enabled };
   for (const app of ALL_APPS)
@@ -3718,6 +3780,329 @@ function readState(value) {
   return { revision: Number(value.revision), seen: { ...value.seen } };
 }
 
+// src/personal-settings.ts
+var SYNTAX_TOKEN = "[[phone_syntax]]";
+var emptyPersonal = () => ({ revision: 0, presets: [], wordings: { main: [], helper: [] }, selected: { main: "default", helper: "default" } });
+var presetSnapshot = (s) => ({ apps: { ...s.apps }, enabled: { ...s.enabled }, notesPerSection: s.notesPerSection, logLines: s.logLines, keepTrackers: s.keepTrackers, keepTexts: s.keepTexts });
+function validatePreset(value) {
+  if (!isRecord(value) || Object.keys(value).sort().join() !== ["apps", "enabled", "notesPerSection", "logLines", "keepTrackers", "keepTexts"].sort().join())
+    throw Error("Invalid preset");
+  const { apps, enabled } = value;
+  if (!isRecord(apps) || ALL_APPS.some((k) => typeof apps[k] !== "boolean") || !isRecord(enabled) || SWITCHES.some((k) => typeof enabled[k] !== "boolean"))
+    throw Error("Invalid preset");
+  return presetSnapshot(readSettings(value));
+}
+function builtInPresets() {
+  const minimal = defaults();
+  for (const app of ALL_APPS)
+    minimal.apps[app] = ["Scene", "Weather", "Messages"].includes(app);
+  return [{ id: "default", name: "Default", settings: presetSnapshot(defaults()) }, { id: "minimal", name: "Minimal", settings: presetSnapshot(minimal) }];
+}
+function name(value) {
+  if (typeof value !== "string" || !value.trim() || value.trim().length > 40 || /[\r\n<>]/.test(value))
+    throw Error("Use a name of 1 to 40 characters.");
+  return value.trim();
+}
+var validWording = (value) => typeof value === "string" && !!value.trim() && value.length <= 4000;
+function readPersonal(value, warn = () => {}) {
+  const out = emptyPersonal();
+  if (!isRecord(value))
+    return out;
+  out.revision = Number.isSafeInteger(value.revision) && Number(value.revision) >= 0 ? Number(value.revision) : 0;
+  if (Array.isArray(value.presets))
+    for (const p of value.presets.slice(0, 20))
+      try {
+        if (!isRecord(p) || typeof p.id !== "string" || ["default", "minimal"].includes(p.id) || out.presets.some((x) => x.id === p.id))
+          throw Error();
+        out.presets.push({ id: p.id, name: name(p.name), settings: validatePreset(p.settings) });
+      } catch {
+        warn("Lumi Phone Tracker: invalid saved preset ignored.");
+      }
+  for (const t of ["main", "helper"]) {
+    if (isRecord(value.wordings) && Array.isArray(value.wordings[t]))
+      for (const w of value.wordings[t].slice(0, 10)) {
+        if (!isRecord(w) || typeof w.id !== "string" || w.id === "default" || out.wordings[t].some((x) => x.id === w.id))
+          continue;
+        try {
+          out.wordings[t].push({ id: w.id, name: name(w.name), text: validWording(w.text) ? w.text : "" });
+        } catch {
+          continue;
+        }
+      }
+    const selected = isRecord(value.selected) ? value.selected[t] : undefined;
+    if (typeof selected === "string" && out.wordings[t].some((w) => w.id === selected))
+      out.selected[t] = selected;
+    if (out.selected[t] !== "default" && !validWording(out.wordings[t].find((w) => w.id === out.selected[t])?.text)) {
+      out.selected[t] = "default";
+      warn("Lumi Phone Tracker: invalid prompt wording; using Default.");
+    }
+  }
+  return out;
+}
+
+// src/personal-controls.ts
+var el2 = (tag, cls, text) => {
+  const n = document.createElement(tag);
+  n.className = cls;
+  if (text !== undefined)
+    n.textContent = text;
+  return n;
+};
+
+class PersonalControls {
+  request;
+  presets = el2("div", "lpt-personal-presets");
+  wording = el2("details", "lpt-wording");
+  p = emptyPersonal();
+  templates = { main: "", helper: "" };
+  doc = null;
+  chat;
+  epoch = 0;
+  pending = false;
+  loaded = false;
+  error = "";
+  preset = "default";
+  presetName = "";
+  confirm = false;
+  target = "main";
+  choice = "default";
+  copy = false;
+  title = "";
+  text = "";
+  preview = "";
+  count = "";
+  note = "";
+  constructor(request) {
+    this.request = request;
+    this.render();
+  }
+  receive(doc) {
+    this.doc = doc;
+    const next = doc?.chatId ?? null;
+    if (this.chat === next)
+      return;
+    this.chat = next;
+    this.epoch++;
+    this.confirm = false;
+    this.preview = "";
+    this.count = "";
+    this.pending = false;
+    this.render();
+    this.load();
+  }
+  async load() {
+    const epoch = this.epoch;
+    try {
+      const result = await this.request();
+      if (epoch !== this.epoch)
+        return;
+      this.p = readPersonal(result.personal);
+      this.templates = result.templates;
+      this.loaded = true;
+      this.choose();
+      this.error = "";
+    } catch {
+      if (epoch !== this.epoch)
+        return;
+      this.loaded = false;
+      this.error = "Your saved choices could not be loaded. Try reopening this chat.";
+    }
+    this.render();
+  }
+  choose() {
+    this.choice = this.p.selected[this.target];
+    this.copy = false;
+    const found = this.p.wordings[this.target].find((w) => w.id === this.choice);
+    this.title = found?.name ?? "";
+    this.text = found?.text ?? this.templates[this.target];
+    this.preview = "";
+    this.count = "";
+    this.note = "";
+  }
+  async run(change) {
+    if (this.pending || !this.loaded)
+      return;
+    const epoch = this.epoch;
+    this.pending = true;
+    this.error = "";
+    this.render();
+    try {
+      const result = await this.request(change, this.p.revision);
+      if (epoch !== this.epoch)
+        return;
+      this.p = readPersonal(result.personal);
+      this.templates = result.templates;
+      if (result.preview) {
+        this.preview = result.preview.text;
+        this.count = `${result.preview.characters} characters · Rough token estimate: ${result.preview.tokenEstimate}`;
+        this.note = result.preview.warning;
+      } else {
+        this.choose();
+        this.error = "Saved.";
+        if (change.kind === "preset_apply")
+          this.error = "Applied to this chat.";
+        if (change.kind === "preset_save")
+          this.preset = this.p.presets.at(-1)?.id ?? "default";
+        if (change.kind === "wording_save" && !validWording(change.text))
+          this.error = "Invalid wording. Default is in use.";
+      }
+    } catch {
+      if (epoch !== this.epoch)
+        return;
+      this.error = "Could not save. Check the name, limits and current chat, then try again.";
+    } finally {
+      if (epoch === this.epoch) {
+        this.pending = false;
+        this.render();
+      }
+    }
+  }
+  button(parent, title, fn, disabled = false) {
+    const b = el2("button", "lpt-personal-button", title);
+    b.type = "button";
+    b.disabled = disabled || this.pending || !this.loaded;
+    b.addEventListener("click", () => {
+      if (b.isConnected && !this.pending)
+        fn();
+    });
+    parent.append(b);
+    return b;
+  }
+  input(parent, label, value, change) {
+    const wrap = el2("label", "lpt-personal-label", label), input = el2("input", "lpt-personal-input");
+    input.value = value;
+    input.maxLength = 40;
+    input.setAttribute("aria-label", label);
+    input.disabled = this.pending;
+    input.addEventListener("input", () => change(input.value));
+    wrap.append(input);
+    parent.append(wrap);
+    return input;
+  }
+  render() {
+    this.presets.replaceChildren();
+    this.wording.replaceChildren();
+    this.presets.append(el2("p", "lpt-side-help", "Up to 20 presets, saved for you. Apply changes only this chat's switches and limits; story data stays, including hidden apps."));
+    const row = el2("div", "lpt-personal-row"), select = el2("select", "lpt-personal-select");
+    select.setAttribute("aria-label", "Settings preset");
+    for (const p of [...builtInPresets(), ...this.p.presets]) {
+      const o = el2("option", "", p.name);
+      o.value = p.id;
+      select.append(o);
+    }
+    select.value = this.preset;
+    if (!select.value) {
+      this.preset = "default";
+      select.value = this.preset;
+    }
+    select.disabled = this.pending || !this.loaded;
+    select.addEventListener("change", () => {
+      this.preset = select.value;
+      this.confirm = false;
+      this.render();
+    });
+    row.append(select);
+    this.presets.append(row);
+    this.button(row, "Apply", () => {
+      this.confirm = true;
+      this.render();
+    }, !this.doc);
+    if (this.confirm) {
+      const box = el2("div", "lpt-preset-confirm");
+      box.append(el2("p", "lpt-side-help", "Apply this preset to the current chat? Story data will stay."));
+      this.button(box, "Apply to this chat", () => {
+        this.confirm = false;
+        this.run({ kind: "preset_apply", id: this.preset, confirm: true });
+      }, !this.doc);
+      this.button(box, "Cancel", () => {
+        this.confirm = false;
+        this.render();
+      });
+      this.presets.append(box);
+    }
+    this.input(this.presets, "Preset name", this.presetName, (v) => this.presetName = v);
+    const actions = el2("div", "lpt-personal-row");
+    this.presets.append(actions);
+    this.button(actions, "Save current as...", () => void this.run({ kind: "preset_save", name: this.presetName }), !this.doc || this.p.presets.length >= 20);
+    const builtin = ["default", "minimal"].includes(this.preset);
+    this.button(actions, "Rename", () => void this.run({ kind: "preset_rename", id: this.preset, name: this.presetName }), builtin);
+    this.button(actions, "Delete", () => void this.run({ kind: "preset_delete", id: this.preset }), builtin);
+    this.presets.append(el2("p", "lpt-personal-status", this.error));
+    const summary = el2("summary", "lpt-side-css-summary", "Prompt wording · All my chats");
+    this.wording.append(summary);
+    this.wording.append(el2("p", "lpt-side-help", "Up to 10 custom wordings total. Copy Default to reword it. Keep [[phone_syntax]] for the protected format. App headings hide their wording when an app is removed. Safety checks stay on."));
+    const target = el2("select", "lpt-personal-select");
+    target.setAttribute("aria-label", "Wording for");
+    for (const [id, name] of [["main", "Main AI"], ["helper", "Helper AI"]]) {
+      const o = el2("option", "", name);
+      o.value = id;
+      target.append(o);
+    }
+    target.value = this.target;
+    target.addEventListener("change", () => {
+      this.target = target.value;
+      this.choose();
+      this.render();
+    });
+    target.disabled = this.pending;
+    this.wording.append(target);
+    const choice = el2("select", "lpt-personal-select");
+    choice.setAttribute("aria-label", "Prompt wording");
+    for (const w of [{ id: "default", name: "Default" }, ...this.p.wordings[this.target]]) {
+      const o = el2("option", "", w.name);
+      o.value = w.id;
+      choice.append(o);
+    }
+    if (this.copy) {
+      const unsaved = el2("option", "", "Unsaved copy");
+      unsaved.value = "new";
+      unsaved.disabled = true;
+      choice.append(unsaved);
+    }
+    choice.value = this.choice;
+    choice.disabled = this.pending || !this.loaded;
+    choice.addEventListener("change", () => void this.run({ kind: "wording_select", target: this.target, id: choice.value }));
+    this.wording.append(choice);
+    this.button(this.wording, "Copy Default", () => {
+      this.copy = true;
+      this.choice = "new";
+      this.title = "";
+      this.text = this.templates[this.target];
+      this.preview = "";
+      this.count = "";
+      this.render();
+    }, this.p.wordings.main.length + this.p.wordings.helper.length >= 10);
+    this.input(this.wording, "Wording name", this.title, (v) => this.title = v).disabled = this.pending || !this.copy && this.choice === "default";
+    const editor = el2("textarea", "lpt-wording-editor");
+    editor.value = this.text;
+    editor.maxLength = 4000;
+    editor.readOnly = !this.copy && this.choice === "default";
+    editor.disabled = this.pending;
+    editor.setAttribute("aria-label", "Wording text");
+    editor.addEventListener("input", () => {
+      this.text = editor.value;
+      this.preview = "";
+      this.note = this.text.includes(SYNTAX_TOKEN) ? "" : "Generated syntax will be appended: [[phone_syntax]] is missing.";
+      note.textContent = this.note;
+    });
+    this.wording.append(editor);
+    const note = el2("p", "lpt-wording-warning", this.note);
+    note.setAttribute("role", "status");
+    this.wording.append(note);
+    const buttons = el2("div", "lpt-personal-row");
+    this.wording.append(buttons);
+    this.button(buttons, "Save wording", () => void this.run({ kind: "wording_save", target: this.target, ...!this.copy ? { id: this.choice } : {}, name: this.title, text: this.text }), !this.copy && this.choice === "default");
+    this.button(buttons, "Delete wording", () => void this.run({ kind: "wording_delete", target: this.target, id: this.choice }), this.copy || this.choice === "default");
+    this.button(buttons, "Reset to default", () => void this.run({ kind: "wording_select", target: this.target, id: "default" }));
+    this.button(buttons, "Preview", () => void this.run({ kind: "preview", target: this.target, ...this.copy || this.choice !== "default" ? { text: this.text } : {} }), !this.doc);
+    this.wording.append(el2("p", "lpt-side-help", this.target === "helper" ? "Preview shows the exact Helper AI system instructions. Its separate recent-story data is unchanged." : "Preview shows the exact phone_format output for this chat. Save edits to use them."));
+    this.wording.append(el2("p", "lpt-wording-count", this.count));
+    const pre = el2("pre", "lpt-wording-preview", this.preview);
+    pre.hidden = !this.preview;
+    this.wording.append(pre, el2("p", "lpt-personal-status", this.error));
+  }
+}
+
 // src/sidebar.ts
 var node = (tag, cls, text) => {
   const n = document.createElement(tag);
@@ -3731,6 +4116,7 @@ class Sidebar {
   actions;
   root = node("div", "lpt-sidebar-settings");
   doc = null;
+  personal;
   name = "";
   prefs;
   epoch = 0;
@@ -3744,9 +4130,11 @@ class Sidebar {
   cssText = "";
   constructor(parent, actions, prefs) {
     this.actions = actions;
+    this.personal = new PersonalControls((change, revision) => this.actions.personal ? this.actions.personal(change, revision) : Promise.reject(Error("Unavailable")));
     this.prefs = prefs;
     this.cssText = prefs.css;
     parent.append(this.root);
+    this.personal.receive(null);
     this.render();
   }
   receive(doc, name) {
@@ -3754,6 +4142,7 @@ class Sidebar {
     if (this.doc?.settings.source === "helper" && doc?.settings.source === "main")
       this.helperChoice = false;
     this.doc = doc;
+    this.personal.receive(doc);
     this.name = name;
     if (changed) {
       this.epoch++;
@@ -3904,7 +4293,7 @@ class Sidebar {
   render() {
     const origin = this.epoch;
     const active = document.activeElement;
-    const selection = active instanceof HTMLTextAreaElement && this.root.contains(active) ? { start: active.selectionStart, end: active.selectionEnd } : null;
+    const selection = active instanceof HTMLTextAreaElement && active.classList.contains("lpt-sidebar-css") && this.root.contains(active) ? { start: active.selectionStart, end: active.selectionEnd } : null;
     this.root.replaceChildren();
     this.root.append(node("p", "lpt-side-chat", this.doc ? `Settings for this chat: ${this.name || "Unnamed chat"}` : "Open a chat to change tracker settings"));
     const apps = this.section("apps", "App Store", "This chat");
@@ -4032,6 +4421,8 @@ class Sidebar {
         this.status.textContent = e instanceof Error ? e.message : "Check the CSS.";
       }
     });
+    const presets = this.section("presets", "Presets", "All my chats");
+    presets.append(this.personal.presets);
     const advanced = this.section("advanced", "Advanced", "This chat");
     if (this.doc) {
       const numbers = node("div", "lpt-side-numbers");
@@ -4043,6 +4434,7 @@ class Sidebar {
       this.toggle(advanced, "aiPlayerTexts", "Let the AI write texts, calls and emails for my character", "Off by default. Your own established messages and calls still count.", this.doc.settings.aiPlayerTexts, (on) => ({ aiPlayerTexts: on }));
       this.toggle(advanced, "inferMissing", "Let the AI fill in missing details", "Off by default. New inferred contact values are marked.", this.doc.settings.inferMissing, (on) => ({ inferMissing: on }));
     }
+    advanced.append(this.personal.wording);
     this.status.setAttribute("role", "status");
     this.status.setAttribute("aria-live", "polite");
     this.root.append(this.status);
@@ -4142,6 +4534,21 @@ var sidebar_default = `/* Sidebar only: protected from the phone Shadow DOM/cust
 \r
 @container (max-width:239px) {.lpt-toolbar-button:nth-child(2) .lpt-toolbar-tooltip {left:auto;right:0;transform:none;}.lpt-toolbar-button:last-child .lpt-toolbar-tooltip {left:0;right:auto;}}\r
 @container (max-width:219px) {.lpt-store-grid {grid-template-columns:1fr;}}\r
+
+/* Personal presets and prompt wording stay outside the phone CSS island. */
+.lpt-personal-row {display:flex;flex-wrap:wrap;align-items:center;gap:var(--lpt-side-gap);margin:var(--lpt-side-gap) 0;}
+.lpt-personal-button {min-height:var(--lpt-side-target);padding:var(--lpt-side-gap);border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);background:var(--lpt-side-btn-bg);color:var(--lpt-side-btn-text);cursor:pointer;font:inherit;}
+.lpt-personal-button:disabled {opacity:.55;cursor:default;}
+.lpt-personal-button:focus-visible,.lpt-personal-input:focus-visible,.lpt-personal-select:focus-visible,.lpt-wording-editor:focus-visible {outline:2px solid var(--lpt-side-outline);outline-offset:2px;}
+.lpt-personal-label {display:flex;flex-direction:column;gap:var(--lpt-side-gap);font-size:var(--lpt-side-font-size);}
+.lpt-personal-input,.lpt-personal-select,.lpt-wording-editor {box-sizing:border-box;width:100%;min-width:0;max-width:100%;min-height:var(--lpt-side-target);padding:var(--lpt-side-gap);border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);background:var(--lpt-side-bg);color:var(--lpt-side-text);font:inherit;}
+.lpt-wording-editor {min-height:180px;resize:vertical;}
+.lpt-wording-preview {white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;max-height:300px;overflow:auto;}
+.lpt-wording-count,.lpt-wording-warning,.lpt-personal-status {font-size:var(--lpt-side-font-size);overflow-wrap:anywhere;}
+.lpt-preset-confirm {border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);padding:var(--lpt-side-gap);}
+
+.lpt-wording > summary::before {content:"\\25b8";margin-right:var(--lpt-side-gap);}
+.lpt-wording[open] > summary::before {content:"\\25be";}
 `;
 
 // src/helper-status.ts
@@ -4200,6 +4607,18 @@ function setup(ctx) {
   let widgetWasConnected = false;
   let openRequested = false;
   let appearanceEpoch = 0;
+  const personalRequests = new Map;
+  const personal = (change, revision) => {
+    const chatId = activeChat, requestId = crypto.randomUUID();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        personalRequests.delete(requestId);
+        reject(Error("Saving took too long."));
+      }, 15000);
+      personalRequests.set(requestId, { chatId, epoch, resolve, reject, timer });
+      ctx.sendToBackend({ type: "phone_personal", requestId, chatId, chatRevision: current?.revision, revision, change });
+    });
+  };
   const updates = new Map;
   const prefsRequests = new Map;
   const readRequests = new Map;
@@ -4418,7 +4837,7 @@ function setup(ctx) {
   scroll.append(help);
   panel.append(recoveryActions, results, scroll);
   tab.root.append(panel);
-  sidebar = new Sidebar(scroll, { update: async (settings, revision) => await update({ settings }, revision), connections: async () => await requestHelper("phone_connections"), css: (text) => prefsChange({ css: text }), applyCSS: (text) => {
+  sidebar = new Sidebar(scroll, { personal, update: async (settings, revision) => await update({ settings }, revision), connections: async () => await requestHelper("phone_connections"), css: (text) => prefsChange({ css: text }), applyCSS: (text) => {
     appearanceEpoch++;
     preferences = { ...preferences, css: text };
     view?.applyCSS(text);
@@ -4426,6 +4845,11 @@ function setup(ctx) {
   updateBusy();
   disposers.push(() => {
     clearTimeout(toolbarTimer);
+    for (const r of personalRequests.values()) {
+      clearTimeout(r.timer);
+      r.reject(Error("Closed"));
+    }
+    personalRequests.clear();
     sidebar?.destroy();
   }, () => tab.destroy());
   disposers.push(tab.onActivate(() => {
@@ -4567,6 +4991,28 @@ function setup(ctx) {
     }
     if (typeof payload.requestId !== "string")
       return;
+    const pr = personalRequests.get(payload.requestId);
+    if (pr && ["phone_personal_result", "phone_personal_error"].includes(String(payload.type))) {
+      clearTimeout(pr.timer);
+      personalRequests.delete(payload.requestId);
+      if (pr.epoch !== epoch || pr.chatId !== activeChat) {
+        pr.reject(Error("The chat changed."));
+        return;
+      }
+      if (payload.type === "phone_personal_error") {
+        pr.reject(Error("Could not save your choices."));
+        return;
+      }
+      const result = payload;
+      if (result.snapshot && result.snapshot.chatId === activeChat) {
+        current = result.snapshot;
+        sidebar?.receive(current, chatName);
+        view?.receive(current, reads);
+        updateBusy();
+      }
+      pr.resolve(result);
+      return;
+    }
     const helperRequest = helperRequests.get(payload.requestId);
     if (helperRequest) {
       if (!["phone_connections_result", "phone_helper_now_result", "phone_helper_error"].includes(String(payload.type)))

@@ -1,3 +1,4 @@
+import type {PersonalReply} from "./personal-settings";
 import {UI_ICONS,type UIIconName} from "./ui-icons";
 import type { SpindleFrontendContext } from "lumiverse-spindle-types";
 import type { Document as PhoneDocument } from "./model";
@@ -34,6 +35,8 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   let widgetWasConnected = false;
   let openRequested = false;
   let appearanceEpoch = 0;
+  const personalRequests=new Map<string,{chatId:string|null;epoch:number;resolve:(r:PersonalReply)=>void;reject:(e:Error)=>void;timer:ReturnType<typeof setTimeout>}>();
+  const personal=(change?:unknown,revision?:number):Promise<PersonalReply>=>{const chatId=activeChat,requestId=crypto.randomUUID();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{personalRequests.delete(requestId);reject(Error("Saving took too long."));},15000);personalRequests.set(requestId,{chatId,epoch,resolve,reject,timer});ctx.sendToBackend({type:"phone_personal",requestId,chatId,chatRevision:current?.revision,revision,change});});};
   const updates = new Map<string, { chatId: string; epoch: number; resolve: (doc: PhoneDocument) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   const prefsRequests = new Map<string, { appearanceEpoch: number; resolve: (prefs: Preferences) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   const readRequests = new Map<string, { chatId: string; epoch: number; resolve: (reads: ReadState) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
@@ -124,8 +127,8 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   recoveryActions.setAttribute("role","toolbar");recoveryActions.setAttribute("aria-label","Phone actions");recoveryActions.append(open,refreshButton,resetButton);
   const results=document.createElement("div");results.className="lpt-toolbar-results";results.append(...statuses);
   const scroll=document.createElement("div");scroll.className="lpt-sidebar-scroll";scroll.append(help);panel.append(recoveryActions,results,scroll);tab.root.append(panel);
-  sidebar=new Sidebar(scroll,{update:async(settings,revision)=>await update({settings},revision),connections:async()=>await requestHelper("phone_connections") as ConnectionsInfo,css:text=>prefsChange({css:text}),applyCSS:text=>{appearanceEpoch++;preferences={...preferences,css:text};view?.applyCSS(text);}},preferences);
-  updateBusy();disposers.push(()=>{clearTimeout(toolbarTimer);sidebar?.destroy();},()=>tab.destroy());
+  sidebar=new Sidebar(scroll,{personal,update:async(settings,revision)=>await update({settings},revision),connections:async()=>await requestHelper("phone_connections") as ConnectionsInfo,css:text=>prefsChange({css:text}),applyCSS:text=>{appearanceEpoch++;preferences={...preferences,css:text};view?.applyCSS(text);}},preferences);
+  updateBusy();disposers.push(()=>{clearTimeout(toolbarTimer);for(const r of personalRequests.values()){clearTimeout(r.timer);r.reject(Error("Closed"));}personalRequests.clear();sidebar?.destroy();},()=>tab.destroy());
   disposers.push(tab.onActivate(() => { void ensureWidget(); }));
 
   async function ensureWidget(): Promise<void> {
@@ -200,6 +203,8 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     if (disposed || !isRecord(payload)) return;
     if(payload.type==="phone_helper_changed") { if(activeChat && payload.chatId===activeChat)sendSync();return; }
     if(typeof payload.requestId!=="string")return;
+    const pr=personalRequests.get(payload.requestId);
+    if(pr&&["phone_personal_result","phone_personal_error"].includes(String(payload.type))){clearTimeout(pr.timer);personalRequests.delete(payload.requestId);if(pr.epoch!==epoch||pr.chatId!==activeChat){pr.reject(Error("The chat changed."));return;}if(payload.type==="phone_personal_error"){pr.reject(Error("Could not save your choices."));return;}const result=payload as unknown as PersonalReply;if(result.snapshot&&result.snapshot.chatId===activeChat){current=result.snapshot;sidebar?.receive(current,chatName);view?.receive(current,reads);updateBusy();}pr.resolve(result);return;}
     const helperRequest=helperRequests.get(payload.requestId);
     if(helperRequest) {
       if(!["phone_connections_result","phone_helper_now_result","phone_helper_error"].includes(String(payload.type)))return;

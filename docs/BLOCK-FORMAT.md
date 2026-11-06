@@ -307,3 +307,11 @@ contain no pipes or line breaks. Phone display renders only the 28 embedded name
 unknown codes remain plain text. No conversion occurs before parsing, evidence
 checks, storage, drafts or macro output. Do not add anything to the preset for
 this step: phone_format and all macros are unchanged. See EMOJI.md.
+
+## Personal wording (0.14.0)
+
+The record/tag parser and format are unchanged. Custom wording substitutes
+`[[phone_syntax]]` with the generated reference for the current enabled apps and
+fields, with structural constraints protected. If omitted, that reference is appended.
+Helper safety stays locked. See [Presets and wording](PART-5.md); the preset still
+uses `{{phone_format}}` once. Custom prose does not relax parsing or player protections.

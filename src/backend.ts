@@ -1,3 +1,7 @@
+import { PersonalStore, emptyPersonal, builtInPresets, selectedWording } from "./personal-settings";
+import { defaultWordingTemplate, formatMacro } from "./phone-macros";
+import { helperInput } from "./helper";
+import { emptyDocument } from "./model";
 import {loadPortraitSources} from "./portrait-sources";
 import type { LlmMessageDTO, SpindleAPI } from "lumiverse-spindle-types";
 import { BUILD_STEP, EXTENSION_NAME, isRecord } from "./shared";
@@ -19,6 +23,8 @@ const preferences = new PreferenceStore({
   read: async userId => spindle.userStorage.getJson("appearance.json", { fallback: defaultPreferences(), userId }),
   write: async (userId, value) => spindle.userStorage.setJson("appearance.json", value, { userId }),
 });
+const personal=new PersonalStore({read: userId=>spindle.userStorage.getJson("personal-settings.json",{fallback:emptyPersonal(),userId}),write:(userId,value)=>spindle.userStorage.setJson("personal-settings.json",value,{userId}),warn});
+const mainWording=async(userId:string)=>selectedWording(await personal.read(userId),"main");
 const messageReads = new MessageReads({
   read: (userId, chatId) => spindle.userStorage.getJson(`message-reads/${chatPath(chatId)}`, { fallback: emptyReads(), userId }),
   write: (userId, chatId, value) => spindle.userStorage.setJson(`message-reads/${chatPath(chatId)}`, value, { userId }),
@@ -50,8 +56,9 @@ async function loadPhoneDocument(chatId: string, userId: string) {
   try{doc.personalReads=await messageReads.read(userId,chatId);}catch{doc.personalReads={seen:{},available:false};warn("Lumi Phone Tracker: unread status unavailable; email continuity omitted.");}
   return doc;
 }
-registerPhoneMacros(spindle,loadPhoneDocument);
+registerPhoneMacros(spindle,loadPhoneDocument,mainWording);
 const helper = new HelperAI(store, {
+  wording:async userId=>selectedWording(await personal.read(userId),"helper"),
   allowed: () => spindle.permissions.has("generation") && spindle.permissions.has("chats") && spindle.permissions.has("chat_mutation"),
   connections: async userId => (await spindle.connections.list(userId)).map(c => ({ id:c.id, name:c.name, model:c.model })),
   generate: async input => {
@@ -71,7 +78,7 @@ let macroTemplatesRegistered = false;
 let helperHooks: (()=>void)[] = [];
 function registerHooks(): void {
   if (!macroTemplatesRegistered && spindle.permissions.has("macro_interceptor")) {
-    registerPhoneMacroTemplates(spindle,loadPhoneDocument);
+    registerPhoneMacroTemplates(spindle,loadPhoneDocument,mainWording);
     macroTemplatesRegistered = true;
   }
   if(spindle.permissions.has("generation") && !helperHooks.length) {
@@ -128,6 +135,35 @@ spindle.onFrontendMessage((payload, userId) => {
     if(isRecord(payload)&&["phone_connections","phone_helper_now"].includes(String(payload.type)))warn("Lumi Phone Tracker: Helper AI: permission missing.");
     else warn("Lumi Phone Tracker: frontend user context unavailable; request ignored.");
     return; // Never turn a reply into an operator-wide broadcast.
+  }
+  if(isRecord(payload)&&payload.type==="phone_personal"&&typeof payload.requestId==="string"&&payload.requestId.length<=100) {
+    void(async()=>{
+      const chatId=typeof payload.chatId==="string"&&payload.chatId.length<=256?payload.chatId:null;
+      let doc=chatId?(requireReadPermissions(),await loadPhoneDocument(chatId,userId)):null;
+      let value=await personal.read(userId);let snapshot:unknown;
+      const change=payload.change;
+      if(isRecord(change)&&change.kind==="preset_apply") {
+        if(!doc||change.confirm!==true)throw Error("Confirm applying to this chat.");
+        const preset=[...builtInPresets(),...value.presets].find(p=>p.id===change.id);if(!preset)throw Error("Preset not found.");
+        snapshot=await store.update(userId,doc.chatId,Number(payload.chatRevision),{settings:preset.settings});helper.cancel(doc.chatId);
+        doc=snapshot as typeof doc;
+      } else if(change!==undefined&&(!isRecord(change)||change.kind!=="preview")) {
+        if(isRecord(change)&&change.kind==="preset_save"&&(!doc||doc.revision!==payload.chatRevision))throw Error("The chat changed. Reopen it first.");
+        value=await personal.update(userId,Number(payload.revision),change,doc?.settings);
+      }
+      let preview:unknown;
+      if(isRecord(change)&&change.kind==="preview") {
+        if(!doc)throw Error("Open a chat first.");
+        if(change.target!=="main"&&change.target!=="helper")throw Error("Choose an AI.");
+        let note="";const warning=(s:string)=>{warn(s);note=s.includes("missing syntax")?"Generated syntax appended: [[phone_syntax]] is missing.":s.includes("repeated")?"Extra syntax placeholders were removed.":"Invalid wording. Default is in use.";};
+        const text=change.text===undefined?selectedWording(value,change.target):change.text;
+        const custom=typeof text==="string"?text:undefined;
+        const output=change.target==="main"?formatMacro(doc,custom,warning):String(helperInput(await store.helperPreview(userId,doc.chatId),custom,warning).messages[0].content);
+        preview={text:output,characters:output.length,tokenEstimate:Math.ceil(output.length/4),warning:note};
+      }
+      const base=doc??emptyDocument("");
+      spindle.sendToFrontend({type:"phone_personal_result",requestId:payload.requestId,chatId,personal:value,templates:{main:defaultWordingTemplate(base),helper:defaultWordingTemplate(base,true)},snapshot,preview},userId);
+    })().catch(()=>spindle.sendToFrontend({type:"phone_personal_error",requestId:payload.requestId,message:"Could not save. Check the name, limits and current chat; then try again."},userId));return;
   }
   if(isRecord(payload)&&payload.type==="phone_portraits"&&typeof payload.chatId==="string"&&payload.chatId.length<=256&&typeof payload.requestId==="string"&&payload.requestId.length<=100){
     void(async()=>{requireReadPermissions();const doc=await store.preview(payload.chatId as string,userId);const sources=await loadPortraitSources(spindle,doc.chatId,userId,doc.currentPlayer);spindle.sendToFrontend({type:"phone_portraits_result",requestId:payload.requestId,chatId:doc.chatId,sources},userId);})().catch(()=>spindle.sendToFrontend({type:"phone_portraits_result",requestId:payload.requestId,chatId:payload.chatId,sources:{characters:[]}},userId));return;

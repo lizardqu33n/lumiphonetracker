@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.14.0 - Settings presets and editable prompt wording
+
+- Personal presets in the sidebar: read-only Default/Minimal, save, rename, delete
+  and confirmed apply to only the open chat. Story data and excluded settings stay.
+- Separate personal Main AI/Helper AI wording selections, with a protected generated
+  syntax placeholder, app-scoped prose, locked Helper safety and free exact Preview.
+- Limits: 20 presets; 10 custom wordings total; 40-character names; 4,000-character
+  wording. Trusted-user storage, safe fallback warnings and stale-chat guards.
+- Added scoped mock/browser checks and guides. No new permission or preset macro.
+
+
 ## 0.13.0 - Step E: emoji picker
 
 - Embed 28 lossless full-grid emoji cells in the supplied row order. Preserve original transparency, horns, halo and sparkles; apply the approved sleepy-Z spill correction with five transparent padding rows (three visible plus two faint edge rows). No background added.

@@ -212,6 +212,20 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     expect(await macros.get("phone_email")!({chatId:"shared",userId:"u"})).toBe("");expect(await macros.get("phone_email")!({chatId:"shared",userId:"v"})).toContain("Shared plan");
     failReceipts=true;expect(await macros.get("phone_email")!({chatId:"shared",userId:"v"})).toBe("");expect(await macros.get("phone_format")!({chatId:"shared",userId:"v"})).toContain("call:");expect(warnings.join()).not.toContain("PRIVATE receipt failure");failReceipts=false;
     expect(generations[0].type).toBe("raw");expect(generations[0].connection_id).toBe("small");expect(generations[0].userId).toBe("u");expect((generations[0].messages as unknown[]).length).toBe(2);
+    // Personal settings RPC uses transport identity, including real preview and apply paths.
+    const p0=await request({type:"phone_personal",chatId:"a"},"u");expect(p0.type).toBe("phone_personal_result");
+    const p1=await request({type:"phone_personal",chatId:"a",revision:0,change:{kind:"wording_save",target:"main",name:"U wording",text:"U CUSTOM [[phone_syntax]]"}},"u");expect(p1.type).toBe("phone_personal_result");
+    const pv=await request({type:"phone_personal",chatId:"a",change:{kind:"preview",target:"main"}},"u");expect((pv.preview as {text:string}).text).toBe(await nativePull("a","u"));expect((pv.preview as {text:string}).text).toContain("U CUSTOM");
+    expect(await nativePull("c","v")).not.toContain("U CUSTOM");
+    const noChat=await request({type:"phone_personal",chatId:null},"u");expect(noChat.type).toBe("phone_personal_result");expect(noChat.chatId).toBeNull();
+    const denied=await request({type:"phone_personal",chatId:"a"},"v");expect(denied.type).toBe("phone_personal_error");
+    const now=await request({type:"phone_sync",chatId:"a"},"u");const beforeApply=now.snapshot as ReturnType<typeof emptyDocument>;const paidBefore=generations.length;
+    const applied=await request({type:"phone_personal",chatId:"a",chatRevision:beforeApply.revision,change:{kind:"preset_apply",id:"minimal",confirm:true}},"u");expect(applied.type).toBe("phone_personal_result");const afterApply=applied.snapshot as ReturnType<typeof emptyDocument>;expect(afterApply.state).toEqual(beforeApply.state);expect(afterApply.settings.source).toBe(beforeApply.settings.source);expect(afterApply.settings.aiPlayerTexts).toBe(beforeApply.settings.aiPlayerTexts);expect(generations.length).toBe(paidBefore);
+    const ph=await request({type:"phone_personal",chatId:"c",revision:0,change:{kind:"wording_save",target:"helper",name:"V helper",text:"V HELPER [[phone_syntax]]"}},"v");expect(ph.type).toBe("phone_personal_result");
+    const helperPreview=await request({type:"phone_personal",chatId:"c",change:{kind:"preview",target:"helper"}},"v");const hpText=(helperPreview.preview as {text:string}).text;
+    await request({type:"phone_helper_now",chatId:"c"},"v");expect(String((generations.at(-1)!.messages as any[])[0].content)).toBe(hpText);expect(hpText).toContain("V HELPER");expect(hpText).toContain("Null means unknown");expect(generations.at(-1)!.userId).toBe("v");
+    const p2=await request({type:"phone_personal",chatId:"a",revision:1,change:{kind:"wording_save",target:"main",id:(p1.personal as any).wordings.main[0].id,name:"U wording",text:"U WORDING WITHOUT TOKEN"}},"u");expect(p2.type).toBe("phone_personal_result");expect(await nativePull("a","u")).toContain("<phone-text");expect(warnings.at(-1)).toContain("missing syntax");expect(warnings.at(-1)).not.toContain("U WORDING");
+    const callCount=calls.length;receive({type:"phone_personal",requestId:"spoof",userId:"u",chatId:"a"},undefined as never);await Bun.sleep(5);expect(calls.length).toBe(callCount);
   } finally { (globalThis as unknown as { spindle?: unknown }).spindle = prior; }
 });
 

@@ -579,3 +579,30 @@ Give it a desktop-window look and hide the decorative hardware:
 Ordinary rules, @media and @supports work. Imports, linked images, font downloads, CSS escape sequences and other at-rules are rejected. An unfinished rule leaves the last working style active and shows a short error. Browsers may silently ignore an unknown property. The protected sidebar Reset stays available if your rules hide the phone.
 
 The protected wrapper receives explicit measured placement bounds independently of the host root's height. Only those numeric bounds are emitted into an instance-scoped rule; appearance defaults stay in styles.css. The original speaker element remains hidden for compatibility. Existing recovery behavior and the zero-height-mount fix are retained. [Recovery details](docs/FIX-0.4.2.md).
+
+## 0.14.0: personal presets and prompt wording
+
+These controls are in `src/sidebar.css`, outside the phone's custom-CSS island.
+They reuse the documented `--lpt-side-*` defaults; no phone variable was added.
+Presets reuses the embedded Advanced icon. All new buttons retain visible focus
+and the sidebar's tap-target size. Long Preview text wraps and scrolls inside its box.
+
+| Stable class | What it styles |
+| --- | --- |
+| `lpt-side-presets` | Collapsed Presets section, alongside the existing sections. |
+| `lpt-personal-presets` | Personal preset dropdown and actions. |
+| `lpt-personal-row` | Wrapping action row for narrow sidebars. |
+| `lpt-personal-button` | Apply, save, rename, delete, copy, reset and Preview buttons. |
+| `lpt-personal-label` | Plain label above a name input. |
+| `lpt-personal-input` | Preset or wording name input. |
+| `lpt-personal-select` | Preset, AI target or wording dropdown. |
+| `lpt-preset-confirm` | Inline Apply confirmation, in normal flow. |
+| `lpt-personal-status` | Short saved/error result, plain text. |
+| `lpt-wording` | Nested collapsed Prompt wording section in Advanced. |
+| `lpt-wording-editor` | Plain-text wording editor, read-only for Default. |
+| `lpt-wording-warning` | Missing/extra syntax or fallback explanation. |
+| `lpt-wording-count` | Character count and labelled rough token estimate. |
+| `lpt-wording-preview` | Exact rendered prompt text; no HTML or emoji replacement. |
+
+Custom phone CSS cannot reach these controls or the protected toolbar Reset.
+The phone screens and all existing opaque surfaces are unchanged.

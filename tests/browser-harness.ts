@@ -1,3 +1,7 @@
+import {PersonalStore,emptyPersonal,builtInPresets,selectedWording} from "../src/personal-settings";
+import {defaultWordingTemplate,formatMacro} from "../src/phone-macros";
+import {emptyDocument} from "../src/model";
+import {helperInput} from "../src/helper";
 /** Isolated browser-test fixtures only. This file is never imported by the extension. */
 import { setup } from "../src/frontend";
 import { PhoneStore } from "../src/phone-store";
@@ -24,11 +28,20 @@ const store = new PhoneStore({ authorize: async (chat, user) => user === `owner-
 const preferenceStore = new PreferenceStore({ read: async () => prefs, write: async (_u, value) => { prefs = structuredClone(value); } });
 let helperProfiles=[{id:"small",name:"Saved small connection",model:"Small test model"}];let helperDelay=0;let helperOutput='{"weather":"Clear skies"}';const helperCalls:Parameters<HelperIO["generate"]>[0][]=[];
 const helper=new HelperAI(store,{allowed:()=>granted.includes("generation"),connections:async()=>helperProfiles,generate:async input=>{helperCalls.push(input);await new Promise(resolve=>setTimeout(resolve,helperDelay));return {content:helperOutput,finish_reason:"stop"};},changed:(_,chatId)=>onBackend({type:"phone_helper_changed",chatId}),warn:()=>{}});
+let personalData:unknown=emptyPersonal();const personalStore=new PersonalStore({read:async()=>structuredClone(personalData),write:async(_u,v)=>{personalData=structuredClone(v);},warn:()=>{}});
 const sendToBackend = (payload: unknown) => {
   if (!isRecord(payload)) return;
   const id = payload.requestId; const chat = payload.chatId===null?"":String(payload.chatId ?? activeChat ?? ""); const reply = onBackend;
   const run = async () => {
     try {
+      if(payload.type==="phone_personal") {
+        let personal=await personalStore.read("user");let snapshot;
+        const doc=chat?await store.preview(chat,`owner-${chat}`):null,change=payload.change;
+        if(isRecord(change)&&change.kind==="preset_apply") {if(!doc||change.confirm!==true)throw Error();const preset=[...builtInPresets(),...personal.presets].find(p=>p.id===change.id);if(!preset)throw Error();snapshot=await store.update(`owner-${chat}`,chat,Number(payload.chatRevision),{settings:preset.settings});}
+        else if(change!==undefined&&(!isRecord(change)||change.kind!=="preview"))personal=await personalStore.update("user",Number(payload.revision),change,doc?.settings);
+        let preview;if(isRecord(change)&&change.kind==="preview"){if(!doc)throw Error();const target=change.target==="helper"?"helper":"main",text=change.text===undefined?selectedWording(personal,target):String(change.text);let note="";const warn=()=>{note="Generated syntax appended or Default used.";};const output=target==="main"?formatMacro(doc,text,warn):String(helperInput(await store.helperPreview(`owner-${chat}`,chat),text,warn).messages[0].content);preview={text:output,characters:output.length,tokenEstimate:Math.ceil(output.length/4),warning:note};}
+        const base=doc??emptyDocument("");reply({type:"phone_personal_result",requestId:id,chatId:chat||null,personal,templates:{main:defaultWordingTemplate(base),helper:defaultWordingTemplate(base,true)},snapshot,preview});return;
+      }
       if(payload.type==="phone_portraits"){reply({type:"phone_portraits_result",requestId:payload.requestId,chatId:payload.chatId,sources:portraitSources});return;}
   if (payload.type === "phone_preferences" || payload.type === "phone_preferences_update") {
         if (payload.type === "phone_preferences_update" && failAppearanceSave) {
@@ -49,9 +62,9 @@ const sendToBackend = (payload: unknown) => {
       let snapshot = payload.type === "phone_update" ? await store.update(`owner-${chat}`, chat, Number(payload.revision), { edit: payload.edit, settings: payload.settings, dismissNotice: payload.dismissNotice,portrait:payload.portrait }) : await store.sync(`owner-${chat}`, chat);
       if(payload.type==="phone_update"){helper.cancel(chat);if(snapshot.settings.source==="helper"){await helper.connections(`owner-${chat}`,chat);snapshot=await store.sync(`owner-${chat}`,chat);}}
       reply({ type: "phone_snapshot", requestId: id, chatId: chat, chatName:chat==="a"?"Lantern story":"Other story", snapshot, reads: await readStore.read("user",chat),helperBusy:helper.busy(chat) });
-    } catch (e) { reply({ type: payload.type === "phone_mark_read" ? "phone_reads_error" : "phone_error", requestId: id, chatId:chat, message: e instanceof Error ? e.message : "Failed" }); }
+    } catch (e) { reply({ type: payload.type === "phone_personal" ? "phone_personal_error" : payload.type === "phone_mark_read" ? "phone_reads_error" : "phone_error", requestId: id, chatId:chat, message: e instanceof Error ? e.message : "Failed" }); }
   };
-  setTimeout(() => { void run(); }, payload.type === "phone_update" ? updateDelay : 0);
+  setTimeout(() => { void run(); }, payload.type === "phone_update"||(payload.type==="phone_personal"&&isRecord(payload.change)&&payload.change.kind==="preset_apply") ? updateDelay : 0);
 };
 const ctx = {
   components:{mountSwitch:(target:HTMLElement,options:{checked:boolean;disabled:boolean;ariaLabel:string;onChange:(v:boolean)=>void})=>{

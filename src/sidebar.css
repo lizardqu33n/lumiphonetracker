@@ -86,3 +86,18 @@
 
 @container (max-width:239px) {.lpt-toolbar-button:nth-child(2) .lpt-toolbar-tooltip {left:auto;right:0;transform:none;}.lpt-toolbar-button:last-child .lpt-toolbar-tooltip {left:0;right:auto;}}
 @container (max-width:219px) {.lpt-store-grid {grid-template-columns:1fr;}}
+
+/* Personal presets and prompt wording stay outside the phone CSS island. */
+.lpt-personal-row {display:flex;flex-wrap:wrap;align-items:center;gap:var(--lpt-side-gap);margin:var(--lpt-side-gap) 0;}
+.lpt-personal-button {min-height:var(--lpt-side-target);padding:var(--lpt-side-gap);border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);background:var(--lpt-side-btn-bg);color:var(--lpt-side-btn-text);cursor:pointer;font:inherit;}
+.lpt-personal-button:disabled {opacity:.55;cursor:default;}
+.lpt-personal-button:focus-visible,.lpt-personal-input:focus-visible,.lpt-personal-select:focus-visible,.lpt-wording-editor:focus-visible {outline:2px solid var(--lpt-side-outline);outline-offset:2px;}
+.lpt-personal-label {display:flex;flex-direction:column;gap:var(--lpt-side-gap);font-size:var(--lpt-side-font-size);}
+.lpt-personal-input,.lpt-personal-select,.lpt-wording-editor {box-sizing:border-box;width:100%;min-width:0;max-width:100%;min-height:var(--lpt-side-target);padding:var(--lpt-side-gap);border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);background:var(--lpt-side-bg);color:var(--lpt-side-text);font:inherit;}
+.lpt-wording-editor {min-height:180px;resize:vertical;}
+.lpt-wording-preview {white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;max-height:300px;overflow:auto;}
+.lpt-wording-count,.lpt-wording-warning,.lpt-personal-status {font-size:var(--lpt-side-font-size);overflow-wrap:anywhere;}
+.lpt-preset-confirm {border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);padding:var(--lpt-side-gap);}
+
+.lpt-wording > summary::before {content:"\25b8";margin-right:var(--lpt-side-gap);}
+.lpt-wording[open] > summary::before {content:"\25be";}

@@ -202,3 +202,12 @@ They are neither bundled nor modified.
 Only the requested simple categories carry forward. Numerical emotional meters,
 BPM, color registries, detailed dossiers, generated forecasts, and all regex
 display scripts are outside this extension's scope.
+
+### Part 5: personal controls
+
+`personal-settings.ts` owns per-user serialized, revision-checked presets and wording;
+`personal-controls.ts` renders the two sidebar additions. `wording.ts` inserts the
+protected generated reference and filters app sections. Macro pull/interceptor paths
+load the generating user's wording freshly; Helper IO loads its own target wording.
+Preview uses those same production renderers. Chat mutations use the existing
+revision-checked PhoneStore; no personal choice is written into the chat document.

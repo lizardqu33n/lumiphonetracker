@@ -1,3 +1,5 @@
+import {PersonalControls} from "./personal-controls";
+import type {PersonalReply} from "./personal-settings";
 import {UI_ICONS,type UIIconName} from "./ui-icons";
 import { ALL_APPS, APP_FIELDS, type Document, type Settings } from "./model";
 import { DESCRIPTIONS, appImage } from "./phone-view";
@@ -7,6 +9,7 @@ import { prepareCustomCSS } from "./custom-css";
 const node = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string) => { const n = document.createElement(tag); n.className = cls; if (text !== undefined)
     n.textContent = text; return n; };
 export interface SidebarActions {
+    personal?(change?:unknown,revision?:number):Promise<PersonalReply>;
     update(settings: unknown, revision: number): Promise<Document>;
     connections(): Promise<ConnectionsInfo>;
     css(text: string): Promise<Preferences>;
@@ -15,6 +18,7 @@ export interface SidebarActions {
 export class Sidebar {
     readonly root = node("div", "lpt-sidebar-settings");
     private doc: Document | null = null;
+    private personal:PersonalControls;
     private name = "";
     private prefs: Preferences;
     private epoch = 0;
@@ -26,12 +30,13 @@ export class Sidebar {
     private helperChoice = false;
     private status = node("p", "lpt-side-status");
     private cssText = "";
-    constructor(parent: HTMLElement, private actions: SidebarActions, prefs: Preferences) { this.prefs = prefs; this.cssText = prefs.css; parent.append(this.root); this.render(); }
+    constructor(parent: HTMLElement, private actions: SidebarActions, prefs: Preferences) { this.personal=new PersonalControls((change,revision)=>this.actions.personal?this.actions.personal(change,revision):Promise.reject(Error("Unavailable")));this.prefs = prefs; this.cssText = prefs.css; parent.append(this.root); this.personal.receive(null);this.render(); }
     receive(doc: Document | null, name: string): void {
         const changed = doc?.chatId !== this.doc?.chatId;
         if (this.doc?.settings.source === "helper" && doc?.settings.source === "main")
             this.helperChoice = false;
         this.doc = doc;
+        this.personal.receive(doc);
         this.name = name;
         if (changed) {
             this.epoch++;
@@ -120,7 +125,7 @@ export class Sidebar {
     }
     private render(): void {
         const origin=this.epoch;
-        const active=document.activeElement;const selection=active instanceof HTMLTextAreaElement&&this.root.contains(active)?{start:active.selectionStart,end:active.selectionEnd}:null;
+        const active=document.activeElement;const selection=active instanceof HTMLTextAreaElement&&active.classList.contains("lpt-sidebar-css")&&this.root.contains(active)?{start:active.selectionStart,end:active.selectionEnd}:null;
         this.root.replaceChildren();
         this.root.append(node("p", "lpt-side-chat", this.doc ? `Settings for this chat: ${this.name || "Unnamed chat"}` : "Open a chat to change tracker settings"));
         const apps = this.section("apps", "App Store", "This chat");
@@ -219,6 +224,7 @@ export class Sidebar {
         catch (e) {
             this.status.textContent = e instanceof Error ? e.message : "Check the CSS.";
         } });
+        const presets=this.section("presets","Presets","All my chats");presets.append(this.personal.presets);
         const advanced = this.section("advanced", "Advanced", "This chat");
         if (this.doc) {
             const numbers=node("div","lpt-side-numbers");advanced.append(numbers);
@@ -229,6 +235,7 @@ export class Sidebar {
             this.toggle(advanced, "aiPlayerTexts", "Let the AI write texts, calls and emails for my character", "Off by default. Your own established messages and calls still count.", this.doc.settings.aiPlayerTexts, on => ({ aiPlayerTexts: on }));
             this.toggle(advanced, "inferMissing", "Let the AI fill in missing details", "Off by default. New inferred contact values are marked.", this.doc.settings.inferMissing, on => ({ inferMissing: on }));
         }
+        advanced.append(this.personal.wording);
         this.status.setAttribute("role", "status");
         this.status.setAttribute("aria-live", "polite");
         this.root.append(this.status);

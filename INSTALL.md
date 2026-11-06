@@ -1,11 +1,11 @@
 # Install Lumi Phone Tracker
 
-Version 0.13.0 includes the built files. You do not need to build or upload anything yourself.
+Version 0.14.0 includes the built files. You do not need to build or upload anything yourself.
 
 ## Install or update
 
 1. Open Lumiverse > Extensions > Install.
-2. Paste this repository address: https://github.com/lizardqu33n/lumiphonetracker . For an existing install from this repository, use its update option to get version 0.10.0. Enable the extension.
+2. Paste this repository address: https://github.com/lizardqu33n/lumiphonetracker . For an existing install from this repository, use its update option to get version 0.14.0. Enable the extension.
 3. Allow chat access, message processing, prompt interception and floating panels (chats, chat_mutation, interceptor, ui_panels, macro_interceptor). The existing generation permission enables optional Helper AI: completed-reply tracking and calls through the connection you select. Main AI makes no extra model requests. If generation permission is declined, Main AI still works.
 4. Open a chat. Tap the floating phone, or use Open phone in the Phone sidebar tab.
 5. Add this exact single line to your active preset and save it:
@@ -169,3 +169,22 @@ you left the cursor, replacing selected text. **Add to draft** still only fills
 the main chat input for you to review; it never sends. Known codes display as
 pictures in the phone; unknown ones stay text. Editors/drafts keep literal codes.
 Keep the same preset line. No macro, permission or model connection changes.
+
+## Presets and prompt wording (0.14.0)
+
+In the sidebar's Phone tab, open **Presets**. Choose Default, Minimal or a saved
+preset, click Apply, then confirm. This changes only the current chat's switches
+and limits; hidden apps keep their story data. Save current as... stores your own
+named setup (up to 20). Presets never turn on paid requests or player writing.
+
+Under **Advanced > Prompt wording**, choose Main AI or Helper AI. Copy Default,
+name it and edit the copy; Save wording makes it your choice for that AI across your
+chats. Keep `[[phone_syntax]]` where the generated format should go. If missing, it
+is appended automatically with a warning. Keep app-specific prose under its app
+heading. Up to 10 custom wordings total, 4,000 characters each. Preview is free and
+shows exact current instructions, character count and an estimated token count.
+Reset to default restores the built-in wording. These choices are personal to you;
+chat tracking switches stay shared. No new permission or connection is needed.
+
+The line in your Lumiverse preset is unchanged: `{{phone_format}}` once.
+See [the short guide](docs/PART-5.md) for the saved/excluded fields and template details.

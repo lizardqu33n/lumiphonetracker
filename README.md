@@ -2,7 +2,9 @@
 
 A small phone for keeping track of story facts. Each chat has its own Scene, Weather, Locations, Notes, Contacts and Messages, plus optional Calls, Email and Bank. The existing Phone sidebar tab controls apps, tracking and appearance.
 
-**Version 0.13.0: all six build steps are delivered.** Source, manifest, built frontend/backend, tests and guides are included. The new Helper AI has been tested with mocks, not a real paid connection.
+**Version 0.14.0: all six build steps are delivered.** Source, manifest, built frontend/backend, tests and guides are included. The new Helper AI has been tested with mocks, not a real paid connection.
+
+Version 0.14.0 adds personal settings presets and editable Main AI/Helper AI prompt wording in the sidebar, with protected syntax and free Preview. See [Presets and wording](docs/PART-5.md).
 
 Version 0.13.0 adds a Messages emoji picker and safe display of 28 named shortcodes. The preset and macros are unchanged. See [Emoji guide](docs/EMOJI.md).
 
@@ -66,3 +68,6 @@ bun run package
 ```
 
 The browser test uses installed Microsoft Edge on Windows; change its executable path in scripts/test-ui.ts for another machine. Model responses, saved connections and user Send are mocked in tests. Test fixtures never enter production bundles. Earlier checkpoint archives are preserved.
+
+Personal settings presets and editable Main AI/Helper AI wording are in the sidebar.
+See [Presets and wording](docs/PART-5.md). Your preset still needs only `{{phone_format}}`.

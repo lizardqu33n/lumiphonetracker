@@ -191,6 +191,9 @@ export class PhoneStore {
       await this.io.write(chatId, JSON.stringify(doc)); return doc;
     });
   }
+  helperPreview(userId:string,chatId:string):Promise<HelperTicket> {
+    return this.serial(chatId,async()=>{if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");const {doc,rows}=await this.build(chatId,userId);return {doc,recent:[...rows].sort((a,b)=>a.index_in_chat-b.index_in_chat).filter(r=>r.role!=="system").slice(-doc.settings.helperMessages),history:""};});
+  }
   helperStart(userId: string, chatId: string, attempt: string, expected?: { id: string; content: string }): Promise<HelperTicket | null> {
     return this.serial(chatId, async () => {
       if (!userId || !(await this.io.authorize(chatId,userId))) throw new Error("Chat unavailable");
