@@ -298,3 +298,12 @@ merging from similar names or surrounding group roleplay. Only established Scene
 dates at each message's history position become thread date separators; no new
 AI date field, device date or guessed time conversion is added. Portrait bytes
 are UI data only and never enter this block, continuity macros or Helper input.
+
+## Emoji display (0.13.0)
+
+Emoji codes such as :smile: and :thumbs_up: are ordinary text values. The existing
+first-colon field split and space-pipe-space separators are unchanged; codes
+contain no pipes or line breaks. Phone display renders only the 28 embedded names;
+unknown codes remain plain text. No conversion occurs before parsing, evidence
+checks, storage, drafts or macro output. Do not add anything to the preset for
+this step: phone_format and all macros are unchanged. See EMOJI.md.

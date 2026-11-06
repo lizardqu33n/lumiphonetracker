@@ -1,6 +1,43 @@
-# Verification report - 0.12.0
+# Verification report - 0.13.0
 
 Checked November 5, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **No live Lumiverse session or real model connection was used. A local Lumiverse build and its user-docs were inspected; that is not live-host verification. No paid model request was made.**
+
+## 0.13.0: Step E emoji picker
+
+**188 code tests / 1493 assertions; 259 browser checks pass.** Type checking,
+reproducible build comparison and package checks pass. No live Lumiverse install,
+provider or paid request was used.
+
+- Asset generation cuts full row-major grid cells, with only the explicitly
+  approved sleepy-Z spill correction. PNG decode tests check exact RGBA hashes,
+  dimensions/order and every nonzero alpha count against the audited sources.
+  Backgrounds have real alpha-0 pixels; most painted pixels are alpha 253, not
+  fully opaque. The 362x367 sleepy output preserves its full original cell and
+  all five spill/fringe rows. No backdrop, face trimming or resizing was applied.
+- Pure code checks known/unknown shortcode splitting, literal HTML, ordinary
+  colons, cursor replacement and the reply length limit. Shorthand tests preserve
+  codes in weather, notes/contact values; forbidden pipe placement still rejects.
+  Escaped text tags keep literal colons/pipes; draft insertion makes no Send call.
+- Real browser checks cover display in Weather, Notes, message previews/bubbles,
+  unknown names/markup staying text, all 28 choices, opaque picker, 2x pixelated
+  scaling, cursor/selection insertion, keyboard focus/arrows/End/Enter/Escape,
+  name tooltips, no external image request and short viewport operation.
+- Incoming text updates preserve the insertion cursor. Detached old-chat picker
+  controls cannot affect the new chat. Outgoing emoji appears only after a sent
+  user tag. Existing protected Reset, unread/user isolation, portraits, top strip,
+  sidebar and opaque-screen checks still pass.
+- phone-macros.ts (including phone_format), shorthand.ts, schema.ts and messages.ts
+  were checked against the published prior version and are unchanged. Rendering
+  is DOM-only, with text nodes and whitelisted static img sources; no HTML parsing.
+
+**Not verified in a real install:** host CSP/data-URI behavior, native mobile/IME
+cursor events, real composer insertion and small-screen emoji legibility. Browser
+mocks and screenshots cannot establish those host-specific behaviors. No new
+Lumiverse API, permission, setting, preset instruction or macro was introduced.
+
+Image data added: 2,818,584 PNG bytes / 3,758,768 data-URI characters (~3.6 MiB).
+Exact source alpha statistics, cut bounds and output hashes are in
+[EMOJI-ASSETS.json](docs/EMOJI-ASSETS.json); see [EMOJI.md](docs/EMOJI.md).
 
 ## 0.12.0: story strip and compact sidebar
 

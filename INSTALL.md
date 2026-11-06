@@ -1,6 +1,6 @@
 # Install Lumi Phone Tracker
 
-Version 0.12.0 includes the built files. You do not need to build or upload anything yourself.
+Version 0.13.0 includes the built files. You do not need to build or upload anything yourself.
 
 ## Install or update
 
@@ -16,7 +16,7 @@ Version 0.12.0 includes the built files. You do not need to build or upload anyt
 
 Remove older manual tracker-writing instructions or duplicate phone macros if you pasted them. No preset rewrite is required. The format macro changes its instructions with the settings, so this line works in both modes.
 
-Version 0.12.0 retains the fix for preset entries that bypass the macro interceptor. Keep using just {{phone_format}}. The pull handler reads the identity supplied inside that preset evaluation's host environment. This patch needs no additional permission. The existing macro_interceptor permission still supports other evaluation paths. If the host truly supplies no user or chat, the macro stays empty, logs the reason and lets generation continue.
+Version 0.13.0 retains the fix for preset entries that bypass the macro interceptor. Keep using just {{phone_format}}. The pull handler reads the identity supplied inside that preset evaluation's host environment. This patch needs no additional permission. The existing macro_interceptor permission still supports other evaluation paths. If the host truly supplies no user or chat, the macro stays empty, logs the reason and lets generation continue.
 
 
 Part 1 now requests compact shorthand from Main AI and Helper AI. Old saved JSON blocks still rebuild; do not rewrite old messages. No new permission or preset edit is needed. New AI contacts need confirmed Present names; with Present off, new names without saved presence are not admitted. Part 2 adds Refresh tracker in both modes and named Helper failure reasons. No additional permission is required.
@@ -162,3 +162,10 @@ the same numbers in two columns and the visible hints under both safety switches
 Chat settings stay on the chat; appearance stays personal across your chats.
 No permission or setting was added in this update. Narrow/short drawers may
 still need scrolling, but the toolbar stays reachable.
+
+In a Messages thread, choose **Choose emoji**, then click an emoji or use arrows
+and Enter/Space. Escape closes just the picker. The choice inserts :name: where
+you left the cursor, replacing selected text. **Add to draft** still only fills
+the main chat input for you to review; it never sends. Known codes display as
+pictures in the phone; unknown ones stay text. Editors/drafts keep literal codes.
+Keep the same preset line. No macro, permission or model connection changes.

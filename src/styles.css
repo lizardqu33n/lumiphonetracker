@@ -1708,3 +1708,21 @@
 .lpt-header:has(.lpt-heading[hidden]) {justify-content:flex-end;}
 
 .lpt-header > .lpt-story-strip {flex:1;min-width:0;padding-block:0;}
+
+/* Step E: display-only emoji. The supplied PNG alpha is not composited or altered. */
+.lpt-root {--lpt-emoji-size:24px;--lpt-emoji-picker-size:32px;--lpt-emoji-picker-max:260px;--lpt-emoji-gap:4px;}
+.lpt-emoji {display:inline-block;width:var(--lpt-emoji-size);height:var(--lpt-emoji-size);object-fit:contain;image-rendering:pixelated;vertical-align:middle;background:none;border:0;}
+.lpt-thread {container-type:size;}
+.lpt-thread .lpt-reply {position:relative;grid-template-columns:minmax(0,1fr) auto auto;}
+.lpt-emoji-toggle {display:grid;place-items:center;min-width:var(--lpt-control-size);min-height:var(--lpt-control-size);padding:var(--lpt-emoji-gap);border:var(--lpt-border-size) solid var(--lpt-border);border-radius:var(--lpt-radius);background-color:var(--lpt-card-bg);color:var(--lpt-text);cursor:pointer;}
+.lpt-emoji-toggle:focus-visible,.lpt-emoji-option:focus-visible,.lpt-emoji-close:focus-visible {outline:var(--lpt-focus-size) solid var(--lpt-focus-color);outline-offset:calc(-1 * var(--lpt-focus-size));}
+.lpt-emoji-picker {position:absolute;z-index:3;left:0;right:0;bottom:100%;max-height:var(--lpt-emoji-picker-max);max-height:min(var(--lpt-emoji-picker-max),calc(100cqh - var(--lpt-control-size) * 2));overflow:auto;overscroll-behavior:contain;padding:var(--lpt-space);border:var(--lpt-border-size) solid var(--lpt-border);border-radius:var(--lpt-radius);background-color:var(--lpt-card-bg);color:var(--lpt-text);}
+.lpt-emoji-picker[hidden] {display:none;}
+.lpt-emoji-header {display:flex;align-items:center;justify-content:space-between;gap:var(--lpt-space);background-color:var(--lpt-card-bg);}
+.lpt-emoji-title {font-size:var(--lpt-font-size);}
+.lpt-emoji-close {min-height:var(--lpt-control-size);padding:var(--lpt-emoji-gap) var(--lpt-space);font:inherit;color:var(--lpt-text);background-color:var(--lpt-card-bg);border:0;border-radius:var(--lpt-radius);cursor:pointer;}
+.lpt-emoji-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(var(--lpt-control-size),1fr));gap:var(--lpt-emoji-gap);}
+.lpt-emoji-option {position:relative;display:grid;place-items:center;min-height:var(--lpt-control-size);min-width:var(--lpt-control-size);padding:var(--lpt-emoji-gap);border:0;border-radius:var(--lpt-radius);background:transparent;cursor:pointer;}
+.lpt-emoji-option .lpt-emoji {width:var(--lpt-emoji-picker-size);height:var(--lpt-emoji-picker-size);}
+.lpt-emoji-tooltip {display:block;visibility:hidden;min-width:0;padding:var(--lpt-emoji-gap);font-size:var(--lpt-small-font-size);color:var(--lpt-muted);overflow-wrap:anywhere;pointer-events:none;}
+.lpt-emoji-picker:has(.lpt-emoji-option:hover) .lpt-emoji-tooltip,.lpt-emoji-picker:has(.lpt-emoji-option:focus-visible) .lpt-emoji-tooltip {visibility:visible;}

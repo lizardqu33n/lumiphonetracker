@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.0 - Step E: emoji picker
+
+- Embed 28 lossless full-grid emoji cells in the supplied row order. Preserve original transparency, horns, halo and sparkles; apply the approved sleepy-Z spill correction with five transparent padding rows (three visible plus two faint edge rows). No background added.
+- Add a keyboard-accessible, opaque Messages emoji picker. Insert literal :name: at the cursor or over a selection; Add to draft still never sends. Preserve the cursor during incoming updates and reject detached old-chat actions.
+- Render known shortcodes as safe static images in phone display text, with sharp pixel scaling. Unknown names, editing values and stored data stay literal. No HTML injection or external images.
+- Keep phone_format, all macro code, shorthand parsing and permissions unchanged. Colons inside values remain data; existing pipe rules still apply.
+- Added emoji image data: 2,818,584 PNG bytes / 3,758,768 data-URI characters (about 3.6 MiB embedded). Add pixel/alpha integrity, parser and browser regressions; update the guides and built frontend.
+
 ## 0.12.0 - Story strip and compact sidebar
 
 - Replace Home's title with a slim read-only story Time/Date strip; show the same saved values on every app, honoring the existing Scene switches and membership. Unknown/disabled values stay blank; no device clock. Scene still edits the same fields.

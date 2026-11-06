@@ -1,3 +1,4 @@
+import {renderEmojiText,attachEmojiPicker} from "./emoji";
 import {preparePortrait,portraitBytes,portraitSource,portraitKey,initialTone,emptyPortraitSources,PORTRAIT_INPUT_LIMIT,type PortraitSources} from "./portraits";
 import type { Cell, Contact, Document as PhoneDocument, ManualEdit, Note, Section } from "./model";
 import { effectiveDocument, CONTACT_KEYS, SCENE_KEYS, SECTIONS, normalize } from "./model";
@@ -35,7 +36,7 @@ const CONTROL_PATHS: Record<string, string[]> = {
   Phone: ["M7 2h10v20H7Z", "M10 18h4"], Back: ["m14 5-7 7 7 7"], Close: ["m6 6 12 12M18 6 6 18"],
 };
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag); node.className = cls; if (text !== undefined) node.textContent = text; return node;
+  const node = document.createElement(tag); node.className = cls; if (text !== undefined) renderEmojiText(node,text); return node;
 }
 export function appImage(name:string):HTMLImageElement {const img=el("img","lpt-app-image");img.src=APP_IMAGES[name]??"";img.alt="";img.setAttribute("aria-hidden","true");img.draggable=false;return img;}
 export function icon(name: string): SVGSVGElement {
@@ -88,6 +89,7 @@ export class PhoneView {
   private reads = emptyReads();
   private pendingReads = new Set<string>();
   private chatEpoch = 0;
+  private replySelections=new Map<string,{start:number;end:number}>();
   private replyDrafts = new Map<string, string>();
   private manualDrafts = new Map<string, string>();
   private textNotice = el("p", "lpt-text-notice");
@@ -118,7 +120,7 @@ export class PhoneView {
     this.doc = doc;
     if(this.app!=="Home"&&!doc?.settings.apps[this.app])this.app="Home";
     if (changedChat) {
-      this.portraitEpoch++;this.portraitSources=emptyPortraitSources();this.chatEpoch++; this.pendingReads.clear(); this.reads = reads ?? emptyReads(); this.replyDrafts.clear(); this.manualDrafts.clear();
+      this.portraitEpoch++;this.portraitSources=emptyPortraitSources();this.chatEpoch++; this.pendingReads.clear(); this.reads = reads ?? emptyReads(); this.replyDrafts.clear();this.replySelections.clear(); this.manualDrafts.clear();
       this.clearTextNotice(); this.editing = false; this.app = "Home"; this.selectedText = null;
 
 
@@ -144,8 +146,8 @@ export class PhoneView {
     if(source)try{portraitBytes(source);const img=el("img","lpt-portrait-image");img.alt="";img.setAttribute("aria-hidden","true");img.draggable=false;img.addEventListener("load",()=>{initial.hidden=true;});img.addEventListener("error",()=>{img.remove();initial.hidden=false;});img.src=source;node.append(img);}catch{}
     return node;
   }
-  setError(message: string): void { this.error.textContent = message; }
-  setStatus(message: string): void { this.status.textContent = message; }
+  setError(message: string): void { renderEmojiText(this.error,message); }
+  setStatus(message: string): void { renderEmojiText(this.status,message); }
   fit(): void { this.measure(); }
   applyCSS(text: string): string {
     const css = prepareCustomCSS(text); this.customStyle.textContent = css;
@@ -176,6 +178,8 @@ export class PhoneView {
   private navigate(app: App | "Home"): void { this.app = app!=="Home"&&!this.doc?.settings.apps[app]?"Home":app; this.editing = false; this.render(); this.content.scrollTop = 0; this.markVisibleActivity(); }
   private render(): void {
     if(this.app==="Messages"&&this.selectedText!==null&&(!this.enabled("messages")||!this.doc||( !this.doc.state.messages.some(m=>threadKey(m)===this.selectedText)&&!this.doc.state.contacts.some(c=>normalize(c.name)===this.selectedText))))this.selectedText=null;
+    const previousReply=this.content.querySelector<HTMLTextAreaElement>(".lpt-reply-input"),previousThread=previousReply?.closest<HTMLElement>(".lpt-thread")?.dataset.conversation;
+    if(previousReply&&previousThread!==undefined&&this.app==="Messages")this.replySelections.set(previousThread,{start:previousReply.selectionStart,end:previousReply.selectionEnd});
     const focused = this.mount instanceof ShadowRoot ? this.mount.activeElement : document.activeElement;
     const replyFocus = focused instanceof HTMLTextAreaElement && focused.classList.contains("lpt-reply-input") ? {
       key: focused.closest<HTMLElement>(".lpt-thread")?.dataset.conversation, start: focused.selectionStart, end: focused.selectionEnd,
@@ -186,7 +190,7 @@ export class PhoneView {
     this.heading.textContent = this.app === "Home" ? "" : this.app;
     this.heading.hidden=this.app==="Home";
     const scene=this.doc?.state.scene;const clock=[this.enabled("scene.time")?valueText(scene?.time):"",this.enabled("scene.date")?valueText(scene?.date):""].filter(Boolean);
-    this.storyStrip.textContent=clock.join(" \u00b7 ");this.storyStrip.hidden=!clock.length;
+    renderEmojiText(this.storyStrip,clock.join(" \u00b7 "));this.storyStrip.hidden=!clock.length;
     const header=this.frame.querySelector<HTMLElement>(".lpt-header")!;
     if(this.app==="Home")header.prepend(this.storyStrip);else this.frame.insertBefore(this.storyStrip,header);
     this.back.hidden = this.app === "Home" || (this.app==="Messages"&&this.selectedText!==null);
@@ -482,10 +486,10 @@ export class PhoneView {
     if(!thread.messages.length)this.empty("No texts sent here yet. Your reply appears after you send it from the chat input.",list);card.append(list);
     if(thread.key){
       if(!this.prefs.dismissed.includes("Draft hint")){const hint=el("div","lpt-draft-hint"),hide=button("×","lpt-dismiss",()=>{void this.actions.preferences({dismiss:"Draft hint"}).then(p=>{this.receivePreferences(p);hint.remove();}).catch(()=>this.setError("Could not hide the explanation."));});hide.setAttribute("aria-label","Hide draft explanation");hint.append(el("small","lpt-help","Adds to the chat input for you to review. It does not send."),hide);card.append(hint);}
-      const form=el("form","lpt-reply"),label=el("label","lpt-reply-label",`Reply to ${thread.name}`),input=el("textarea","lpt-textarea lpt-reply-input");input.rows=1;input.maxLength=3000;input.required=true;input.placeholder="Write a reply";input.value=this.replyDrafts.get(thread.key)??"";label.append(input);
+      const form=el("form","lpt-reply"),label=el("label","lpt-reply-label",`Reply to ${thread.name}`),input=el("textarea","lpt-textarea lpt-reply-input");input.rows=1;input.maxLength=3000;input.required=true;input.placeholder="Write a reply";input.value=this.replyDrafts.get(thread.key)??"";label.append(input);const selection=this.replySelections.get(thread.key);if(selection)input.setSelectionRange(selection.start,selection.end);input.addEventListener("select",()=>{if(epoch===this.chatEpoch&&input.isConnected)this.replySelections.set(thread.key,{start:input.selectionStart,end:input.selectionEnd});});
       const grow=()=>{const bottom=list.scrollHeight-list.clientHeight-list.scrollTop<30;input.rows=1;const css=getComputedStyle(input),height=input.scrollHeight-parseFloat(css.paddingTop)-parseFloat(css.paddingBottom);input.rows=Math.min(4,Math.max(1,Math.ceil(height/parseFloat(css.lineHeight))));if(bottom)list.scrollTop=list.scrollHeight;};input.addEventListener("input",()=>{if(epoch!==this.chatEpoch)return;this.replyDrafts.set(thread.key,input.value);grow();});requestAnimationFrame(grow);
-      const add=el("button","lpt-button lpt-add-draft","Add to draft");add.type="submit";const status=el("p","lpt-reply-status lpt-help");status.setAttribute("aria-live","polite");const fallback=el("textarea","lpt-textarea lpt-manual-tag");fallback.readOnly=true;fallback.setAttribute("aria-label","Text tag to copy into the chat input");fallback.value=this.manualDrafts.get(thread.key)??"";fallback.hidden=!fallback.value;form.append(label,add,status,fallback);
-      form.addEventListener("submit",event=>{event.preventDefault();if(epoch!==this.chatEpoch||this.doc?.chatId!==chatId||!form.isConnected)return;try{const result=this.actions.draft(chatId,thread.name,input.value,thread.group?thread.name:undefined);if(result.manual){this.manualDrafts.set(thread.key,result.tag);fallback.value=result.tag;fallback.hidden=false;status.textContent="Copy this tag into the chat input, then review and send it yourself.";fallback.select();}else{this.replyDrafts.delete(thread.key);this.manualDrafts.delete(thread.key);input.value="";grow();fallback.value="";fallback.hidden=true;status.textContent="Added to the chat draft. Review it there.";}}catch(error){status.textContent=error instanceof Error?error.message:"Could not add to draft. Your reply is still here.";}});card.append(form);
+      const add=el("button","lpt-button lpt-add-draft","Add to draft");add.type="submit";const status=el("p","lpt-reply-status lpt-help");status.setAttribute("aria-live","polite");const fallback=el("textarea","lpt-textarea lpt-manual-tag");fallback.readOnly=true;fallback.setAttribute("aria-label","Text tag to copy into the chat input");fallback.value=this.manualDrafts.get(thread.key)??"";fallback.hidden=!fallback.value;form.append(label,add,status,fallback);const emoji=attachEmojiPicker(form,input,status,()=>epoch===this.chatEpoch&&this.doc?.chatId===chatId&&form.isConnected);form.insertBefore(emoji,add);
+      form.addEventListener("submit",event=>{event.preventDefault();if(epoch!==this.chatEpoch||this.doc?.chatId!==chatId||!form.isConnected)return;try{const result=this.actions.draft(chatId,thread.name,input.value,thread.group?thread.name:undefined);if(result.manual){this.manualDrafts.set(thread.key,result.tag);fallback.value=result.tag;fallback.hidden=false;status.textContent="Copy this tag into the chat input, then review and send it yourself.";fallback.select();}else{this.replyDrafts.delete(thread.key);this.replySelections.delete(thread.key);this.manualDrafts.delete(thread.key);input.value="";grow();fallback.value="";fallback.hidden=true;status.textContent="Added to the chat draft. Review it there.";}}catch(error){status.textContent=error instanceof Error?error.message:"Could not add to draft. Your reply is still here.";}});card.append(form);
     }
     parent.append(card);
   }
@@ -545,7 +549,7 @@ export class PhoneView {
   }
   private clearTextNotice(): void { clearTimeout(this.noticeTimer); this.textNotice.textContent = ""; this.textNotice.hidden = true; this.root.dataset.notice = "false"; }
   private showTextNotice(text: string): void {
-    this.clearTextNotice(); this.textNotice.textContent = text; this.textNotice.hidden = false; this.root.dataset.notice = "true";
+    this.clearTextNotice(); renderEmojiText(this.textNotice,text); this.textNotice.hidden = false; this.root.dataset.notice = "true";
     this.noticeTimer = setTimeout(() => { this.clearTextNotice(); this.measure(); }, 5000); requestAnimationFrame(() => this.measure());
   }
 }

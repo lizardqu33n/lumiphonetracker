@@ -506,6 +506,36 @@ below 220px, so narrow drawers may scroll. The protected Reset never scrolls awa
 Phone custom CSS cannot recolor these sidebar elements; change src/sidebar.css
 to change the bundled sidebar defaults. No extra appearance settings are added.
 
+## Emoji (0.13.0)
+
+The original PNG cells retain their RGBA transparency. Only the picker surface
+gets a solid existing card background. Inline images use nearest-neighbor pixel
+scaling; no external image, background or inline style is introduced. Unknown
+shortcodes stay text. Editors/CSS input remain literal, not image-rendered.
+
+| Variable on .lpt-root | Default | What it changes |
+| --- | --- | --- |
+| `--lpt-emoji-size` | `24px` | Inline emoji display size. |
+| `--lpt-emoji-picker-size` | `32px` | Emoji image size inside picker choices. |
+| `--lpt-emoji-picker-max` | `260px` | Picker scroll-window maximum height, also bounded by thread space. |
+| `--lpt-emoji-gap` | `4px` | Picker/control padding and grid gaps. |
+
+| Class | What it is |
+| --- | --- |
+| `.lpt-emoji` | Safe static PNG substituted for a known shortcode; transparent, pixelated scaling. |
+| `.lpt-emoji-toggle` | Choose emoji button next to Add to draft. |
+| `.lpt-emoji-picker` | Opaque nonmodal, scrollable picker above the composer. |
+| `.lpt-emoji-header` | Picker title, current name tooltip and Close. |
+| `.lpt-emoji-title` | Plain Emoji heading. |
+| `.lpt-emoji-close` | Close picker control. |
+| `.lpt-emoji-grid` | Responsive grid of minimum 44px choices. |
+| `.lpt-emoji-option` | One named emoji button, with data-emoji set to the exact name. |
+| `.lpt-emoji-tooltip` | Current hovered/focused name in the picker header; never clipped at cell edges. |
+
+The composer now has input, Emoji and Add to draft columns. The thread is a size
+container so the picker can be bounded without inline styles. Its surface uses
+--lpt-card-bg and existing border/focus tokens; protected sidebar Reset is unchanged.
+
 ## Copy-paste examples
 
 Change the main accent and the Messages Home tint:
