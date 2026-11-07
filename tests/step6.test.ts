@@ -69,7 +69,7 @@ describe("Step 6 Helper AI",()=>{
     const later=f.helper.updateNow("owner-a","a");for(let i=0;i<50&&f.calls.length<2;i++)await Bun.sleep(1);
     const doc=await f.store.sync("owner-a","a");await f.store.update("owner-a","a",doc.revision,{edit:{target:"weather",value:"Snow"}});
     finish({content:'{"weather":"Old rain"}',finish_reason:"stop"});await later;expect((await f.store.preview("a", "owner-a")).state.weather?.value).toBe("Snow");expect(f.calls.length).toBe(2);
-    expect((await f.store.preview("a", "owner-a")).state.notices).toContain("Tracker update failed: Validation rejected");
+    expect((await f.store.preview("a", "owner-a")).state.notices).not.toContain("Tracker update failed: Validation rejected");
   });
   test("new history during a request and switching Main AI discard late results without retries",async()=>{
     const f=fixture();await f.enable();let finish!:(value:{content:string;finish_reason:string})=>void;f.respond(()=>new Promise(resolve=>{finish=resolve;}));
@@ -82,7 +82,7 @@ describe("Step 6 Helper AI",()=>{
   test("invalid JSON, forbidden texts, schema failures and provider errors keep old values and log safely",async()=>{
     for(const output of ['not-json private-secret','{"messages":["private-secret"]}','{"weather":123}','```json\n{bad}\n```']){
       const f=fixture();f.rows.set("a",[row(0,'<phone-state>weather="Clear"</phone-state>')]);await f.enable();f.output(output);
-      await f.helper.updateNow("owner-a","a");expect((await f.store.preview("a", "owner-a")).state.weather?.value).toBe("Clear");expect((await f.store.preview("a", "owner-a")).state.notices.some(n=>n.startsWith("Tracker update failed:"))).toBe(true);
+      await f.helper.updateNow("owner-a","a");expect((await f.store.preview("a", "owner-a")).state.weather?.value).toBe("Clear");expect((await f.store.preview("a", "owner-a")).state.notices.some(n=>n.startsWith("Tracker update failed:"))).toBe(false);
       expect(f.calls.length).toBe(1);expect(f.logs.join()).not.toContain("private-secret");expect(f.logs.join()).not.toContain("Clear");
     }
     const f=fixture();await f.enable();f.respond(async()=>{throw new Error("Private provider secret");});await f.helper.updateNow("owner-a","a");expect(f.calls.length).toBe(1);expect(f.logs.join()).not.toContain("Private provider secret");
@@ -123,19 +123,21 @@ describe("Part 2 safe refresh and Helper failures",()=>{
     expect((await f.helper.connections("owner-a","a")).available).toBe(true);expect(users).toEqual(["owner-a"]);
     expect((await f.helper.refresh("","a")).category).toBe("permission missing");expect(f.logs.join()).not.toContain("PRIVATE");
   });
-  test("all seven failure categories are returned, logged without exception details and keep data",async()=>{
+  test("failure categories return safely without saving a failed model reply",async()=>{
     for(const category of HELPER_FAILURES){
       const f=fixture();f.rows.set("a",[row(0,"<phone-state>weather: Clear</phone-state>")]);await f.enable();
       if(category==="permission missing")f.allow(false);
       else if(category==="no connection")f.profiles([]);
       else if(category==="empty reply")f.output(" ");
       else if(category==="invalid output")f.output("PRIVATE prose");
+      else if(category==="invalid JSON")f.output("{bad}");
+      else if(category==="stopped")f.respond(async()=>({content:"weather: Rain",finish_reason:"length"}));
       else if(category==="validation rejected")f.output("weather: unknown");
       else f.respond(async()=>{throw category==="timeout"?new HelperFailure("timeout"):Error("PRIVATE provider key model field");});
-      expect(await f.helper.refresh("owner-a","a")).toEqual({ok:false,category});
+      const before=f.saved.get("a");const result=await f.helper.refresh("owner-a","a");expect(result).toMatchObject({ok:false,category});
       expect(f.logs).toEqual([`Lumi Phone Tracker: Helper AI: ${category}.`]);
       const doc=await f.store.preview("a","owner-a");expect(doc.state.weather?.value).toBe("Clear");
-      expect(doc.state.notices.join()).toContain(category[0].toUpperCase()+category.slice(1));
+      if(f.calls.length){expect(result.message).toContain("Nothing was saved");expect(f.saved.get("a")).toBe(before);}else expect(doc.state.notices.join()).toContain(category[0].toUpperCase()+category.slice(1));
       expect(f.calls.length).toBeLessThanOrEqual(1);
     }
   });
@@ -150,7 +152,7 @@ describe("Part 2 safe refresh and Helper failures",()=>{
   test("provider ignoring cancellation still times out once; late content cannot land",async()=>{
     const f=fixture(5);await f.enable();let finish!:(value:{content:string;finish_reason:string})=>void;
     f.respond(()=>new Promise(resolve=>{finish=resolve;}));
-    expect(await f.helper.refresh("owner-a","a")).toEqual({ok:false,category:"timeout"});expect(f.calls.length).toBe(1);expect(f.calls[0].signal?.aborted).toBe(true);
+    expect(await f.helper.refresh("owner-a","a")).toMatchObject({ok:false,category:"timeout"});expect(f.calls.length).toBe(1);expect(f.calls[0].signal?.aborted).toBe(true);
     finish({content:"weather: PRIVATE late",finish_reason:"stop"});await Bun.sleep(5);
     expect((await f.store.preview("a","owner-a")).state.weather).toBeUndefined();expect(f.calls.length).toBe(1);
   });

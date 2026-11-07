@@ -1,3 +1,4 @@
+import {SetupChoiceStore} from "../src/setup-choices";
 import {SetupWizard,SetupError} from "../src/setup-wizard";
 import {PersonalStore,emptyPersonal,builtInPresets,selectedWording} from "../src/personal-settings";
 import {defaultWordingTemplate,formatMacro} from "../src/phone-macros";
@@ -28,17 +29,20 @@ const store = new PhoneStore({ authorize: async (chat, user) => user === `owner-
   history: async chat => structuredClone(histories.get(chat) ?? []), player: async () => "Player" });
 const preferenceStore = new PreferenceStore({ read: async () => prefs, write: async (_u, value) => { prefs = structuredClone(value); } });
 let helperProfiles=[{id:"small",name:"Saved small connection",model:"Small test model",is_default:true}];let helperDelay=0;let helperOutput='{"weather":"Clear skies"}';const helperCalls:Parameters<HelperIO["generate"]>[0][]=[];
-const helper=new HelperAI(store,{allowed:()=>granted.includes("generation"),connections:async()=>helperProfiles,generate:async input=>{helperCalls.push(input);await new Promise(resolve=>setTimeout(resolve,helperDelay));return {content:helperOutput,finish_reason:"stop"};},changed:(_,chatId)=>onBackend({type:"phone_helper_changed",chatId}),warn:()=>{}});
+const helper=new HelperAI(store,{allowed:()=>granted.includes("generation"),connections:async()=>helperProfiles,generate:async input=>{helperCalls.push(input);await new Promise(resolve=>setTimeout(resolve,helperDelay));if(helperFailure)throw Error(helperFailure);return {content:helperOutput,finish_reason:"stop"};},modelFailure:(_,chatId,message)=>onBackend({type:"phone_model_failure",chatId,message}),changed:(_,chatId)=>onBackend({type:"phone_helper_changed",chatId}),warn:()=>{}});
 let personalData:unknown=emptyPersonal();const personalStore=new PersonalStore({read:async()=>structuredClone(personalData),write:async(_u,v)=>{personalData=structuredClone(v);},warn:()=>{}});
-let setupCalls=0;let setupOutput:string|null=null;
+let setupCalls=0;let setupOutput:string|null=null;let setupFinish="stop";let setupFailure="";let helperFailure="";
 let setupFact="Zoe is a guide. Her phone is 555666.";
-const setupApi={permissions:{has:(p:string)=>granted.includes(p)},chats:{get:async(id:string,_u:string)=>({id,character_id:"card"})},characters:{get:async()=>({name:"Ada",description:setupFact,personality:"",scenario:"",world_book_ids:[]})},personas:{getActive:async()=>({name:"Player",description:"Player is a traveler.",attached_world_book_id:null})},world_books:{getGlobal:async()=>[],entries:{list:async()=>({data:[],total:0})}},connections:{list:async()=>helperProfiles},tokens:{countMessages:async()=>({total_tokens:123,approximate:true})},generate:{raw:async(input:any)=>{if(!input.userId||!input.model)throw Error("Provider rejected request: model is required");setupCalls++;return {content:setupOutput??JSON.stringify({contacts:[{name:"Zoe",phone:"555666",roles:["guide"],quote:setupFact}]})};}}} as any;
+const setupApi={permissions:{has:(p:string)=>granted.includes(p)},chats:{get:async(id:string,_u:string)=>({id,character_id:"card"})},characters:{get:async()=>({name:"Ada",description:setupFact,personality:"",scenario:"",world_book_ids:[]})},personas:{getActive:async()=>({name:"Player",description:"Player is a traveler.",attached_world_book_id:null})},world_books:{getGlobal:async()=>[],entries:{list:async()=>({data:[],total:0})}},connections:{list:async()=>helperProfiles},tokens:{countMessages:async()=>({total_tokens:123,approximate:true})},generate:{raw:async(input:any)=>{if(!input.userId||!input.model)throw Error("Provider rejected request: model is required");setupCalls++;if(setupFailure)throw Error(setupFailure);return {finish_reason:setupFinish,content:setupOutput??JSON.stringify({contacts:[{name:"Zoe",phone:"555666",roles:["guide"],quote:setupFact}]})};}}} as any;
 const setupWizard=new SetupWizard(setupApi,store);
+const wizardChoices=new Map<string,unknown>();
+const choiceStore=new SetupChoiceStore({authorize:async(u,c)=>u===`owner-${c}`,read:async(u,c)=>wizardChoices.get(`${u}/${c}`)??[],write:async(u,c,v)=>{wizardChoices.set(`${u}/${c}`,v);}});
 const sendToBackend = (payload: unknown) => {
   if (!isRecord(payload)) return;
   const id = payload.requestId; const chat = payload.chatId===null?"":String(payload.chatId ?? activeChat ?? ""); const reply = onBackend;
   const run = async () => {
     try {
+      if(payload.type==="phone_setup_choices"||payload.type==="phone_setup_choices_save"){const choices=await choiceStore.access(`owner-${chat}`,chat,payload.type==="phone_setup_choices_save",payload.choices);reply({type:"phone_setup_result",requestId:id,chatId:chat,result:{choices}});return;}
       if(["phone_setup_prepare","phone_setup_run","phone_setup_save"].includes(String(payload.type))){let result;if(payload.type==="phone_setup_prepare")result=await setupWizard.prepare(`owner-${chat}`,chat,payload.choices);else if(payload.type==="phone_setup_run")result=await setupWizard.run(`owner-${chat}`,chat,String(payload.id));else{if(payload.confirm!==true)throw Error("Confirm first");result={snapshot:await setupWizard.save(`owner-${chat}`,chat,String(payload.id),payload.decisions)};}reply({type:"phone_setup_result",requestId:id,chatId:chat,result});return;}
       if(payload.type==="phone_personal") {
         let personal=await personalStore.read("user");let snapshot;
@@ -132,7 +136,7 @@ function start() { cleanup = setup(ctx as never); }
 const api = {
   async seed(kind: "empty" | "story" = "story") {
     cleanup?.(); helper.cancelAll(); docs.clear(); histories.clear(); events.clear(); readFiles.clear(); prefs = defaultPreferences(); activeChat = "a"; granted = ["chats", "chat_mutation", "interceptor", "ui_panels","generation"]; updateDelay = 0;
-    setupCalls=0;setupOutput=null;setupFact="Zoe is a guide. Her phone is 555666.";helperCalls.length=0;helperDelay=0;helperOutput='{"weather":"Clear skies"}';helperProfiles=[{id:"small",name:"Saved small connection",model:"Small test model",is_default:true}];
+    wizardChoices.clear();setupCalls=0;setupOutput=null;setupFinish="stop";setupFailure="";helperFailure="";setupFact="Zoe is a guide. Her phone is 555666.";helperCalls.length=0;helperDelay=0;helperOutput='{"weather":"Clear skies"}';helperProfiles=[{id:"small",name:"Saved small connection",model:"Small test model",is_default:true}];
     composerState = { mounted:true, chatId:"a", text:"" }; focusCount = 0; sendCalls = 0; ctx.host.capabilities["composer-v1"] = 1;
     failAppearanceSave = false; failWidget = false;
     if (new URL(location.href).searchParams.has("stale-appearance")) prefs = { ...defaultPreferences(), css: ".lpt-root { display: none !important; }" };
@@ -157,6 +161,9 @@ const api = {
   generationEvent(name:string,id:string){for(const fn of events.get(name)??[])fn({chatId:activeChat,generationId:id});},
   setupScenario(fact:string,output:string){setupFact=fact;setupOutput=output;},
   async addContact(name:string){let d=await store.sync(`owner-${activeChat}`,activeChat!);await store.update(`owner-${activeChat}`,activeChat!,d.revision,{edit:{target:"contact",name,value:{}}});onBackend({type:"phone_helper_changed",chatId:activeChat});},
+  setupFinish(value:string){setupFinish=value;},
+  setupFailure(value:string){setupFailure=value;},
+  helperFailure(value:string){helperFailure=value;},
   setupCalls:()=>setupCalls,
   setupAllow(value:boolean){for(const p of ["characters","personas","world_books"])if(value&&!granted.includes(p))granted.push(p);else if(!value)granted=granted.filter(x=>x!==p);},
   helperCalls:()=>helperCalls.length,

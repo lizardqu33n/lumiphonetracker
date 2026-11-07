@@ -1,6 +1,40 @@
-# Verification report - 0.17.0
+# Verification report - 0.17.1
 
 Checked November 6, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **No live Lumiverse session or real model connection was used. A local Lumiverse build and its user-docs were inspected; that is not live-host verification. No paid model request was made.**
+
+## 0.17.1 - Model request failures and wizard choices
+
+261 code tests and 337 browser checks passed. Type checking, reproducible builds
+and package validation passed.
+
+- Checked the [Lumiverse generation API](https://docs.lumiverse.chat/backend-api/generation/)
+  and the local Lumiverse 1.2.5 worker and provider code. The raw reply documents
+  `finish_reason`. The worker forwards generation exceptions as text rather than
+  a documented HTTP status field. The host rejects non-OK requests before returning
+  a reply. Provider exception text can carry a status such as `failed (429)`.
+- The old code collapsed 429 into the generic provider category. It did not inspect
+  the status or rate-limit phrase, and the UI discarded the provider explanation.
+  The new classifier tests all requested statuses, text-only rate limits, network
+  errors and safe unknown-message fallback. Structured error bodies contribute only
+  their message. Credential and header echoes are withheld from display and Copy.
+- Tests reject content-filtered, truncated, abnormal and missing finish reasons
+  before checking the reply body. Even valid-looking partial JSON is rejected.
+  Empty replies and malformed JSON after successful completion have separate messages.
+- Setup and both manual and automatic Custom connection extraction use the same
+  checked reply path. Failed model output and error detail are never committed to
+  tracker storage. Failed manual model requests are tested with unchanged saved
+  data. Automatic generation IDs still have an attempt marker before dispatch to
+  prevent a duplicate host event from rerunning the request after restart.
+- Browser checks cover safe Copy for wizard and Refresh errors, section selection
+  shortcuts, chat switches and reload. Scoped backend tests verify that wizard
+  choices cannot cross users or chats, including a spoofed user ID.
+- The existing ` - ` label separator is still covered. The earlier `Â·` came from
+  an already mis-encoded middle dot in the extension's label builder.
+
+Live provider errors, real server grants and clipboard behavior in a native
+Lumiverse install remain unverified. Native chat generation belongs to Lumiverse.
+Its documented `GENERATION_ENDED` event has an error message but no finish reason.
+The extension checks finish reasons on its own raw calls.
 
 ## 0.17.0: wizard review and field protection
 

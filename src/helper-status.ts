@@ -1,6 +1,7 @@
-export const HELPER_FAILURES = ["permission missing","no connection","provider error","timeout","empty reply","invalid output","validation rejected"] as const;
+import { ModelCallError, safeModelMessage } from "./model-errors";
+export const HELPER_FAILURES = ["permission missing","no connection","provider error","timeout","empty reply","invalid output","validation rejected", "invalid JSON", "stopped"] as const;
 export type HelperFailureCategory = typeof HELPER_FAILURES[number];
-export interface RefreshResult { ok:boolean; category?:HelperFailureCategory }
+export interface RefreshResult { ok:boolean; category?:HelperFailureCategory; message?:string }
 export class HelperFailure extends Error {
   constructor(readonly category:HelperFailureCategory) { super(category);this.name="HelperFailure"; }
 }
@@ -9,7 +10,7 @@ export const helperNoticeText=(category:HelperFailureCategory)=>
   (category==="no connection"?"Connection not found. ":"")+`Tracker update failed: ${failureLabel(category)}`;
 export const isHelperNotice=(text:string)=>text==="Connection not found"||text.startsWith("Connection not found. ")||text.startsWith("Tracker update failed");
 export function failureCategory(error:unknown,fallback:HelperFailureCategory="provider error"):HelperFailureCategory {
-  if(error instanceof HelperFailure)return error.category;
+  if(error instanceof HelperFailure||error instanceof ModelCallError)return error.category;
   // Inspect only to classify; never forward provider/host exception details.
   const e=error as {name?:unknown;message?:unknown;code?:unknown}|null;
   const message=[e?.message,e?.code].filter(v=>typeof v==="string").join(" ");
@@ -21,7 +22,7 @@ export function readRefreshResult(value:unknown):RefreshResult {
   if(value&&typeof value==="object"&&"ok" in value) {
     const r=value as RefreshResult;
     if(r.ok===true)return {ok:true};
-    if(r.ok===false&&HELPER_FAILURES.includes(r.category as HelperFailureCategory))return {ok:false,category:r.category};
+    if(r.ok===false&&HELPER_FAILURES.includes(r.category as HelperFailureCategory))return {ok:false,category:r.category,...(typeof r.message==="string"&&safeModelMessage(r.message)?{message:safeModelMessage(r.message)}:{})};
   }
   return {ok:false,category:"invalid output"};
 }

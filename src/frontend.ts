@@ -1,3 +1,5 @@
+import {showCopyableError} from "./copy-error";
+import {safeModelMessage} from "./model-errors";
 import {prepareSidebarCSS} from "./custom-css";
 import type {PersonalReply} from "./personal-settings";
 import {UI_ICONS,type UIIconName} from "./ui-icons";
@@ -37,7 +39,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   let openRequested = false;
   let appearanceEpoch = 0;
   const setupRequests=new Map<string,{chat:string;epoch:number;resolve:(v:Record<string,unknown>)=>void;reject:(e:Error)=>void;timer:ReturnType<typeof setTimeout>}>();
-  const setup:import("./setup-view").SetupRequest=(action,data)=>{if(!activeChat||!current||disposed)return Promise.reject(Error("Open a chat first."));if(busy())return Promise.reject(Error("Wait for the current reply to finish."));const chat=activeChat,requestId=crypto.randomUUID();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{setupRequests.delete(requestId);reject(Error("Setup took too long. Check the tracker before trying again."));},action==="run"?105000:20000);setupRequests.set(requestId,{chat,epoch,resolve,reject,timer});ctx.sendToBackend({type:`phone_setup_${action}`,chatId:chat,requestId,...data});});};
+  const setup:import("./setup-view").SetupRequest=(action,data)=>{if(!activeChat||!current||disposed)return Promise.reject(Error("Open a chat first."));if(busy()&&action!=="choices"&&action!=="choices_save")return Promise.reject(Error("Wait for the current reply to finish."));const chat=activeChat,requestId=crypto.randomUUID();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{setupRequests.delete(requestId);reject(Error("Setup took too long. Check the tracker before trying again."));},action==="run"?105000:20000);setupRequests.set(requestId,{chat,epoch,resolve,reject,timer});ctx.sendToBackend({type:`phone_setup_${action}`,chatId:chat,requestId,...data});});};
   const personalRequests=new Map<string,{chatId:string|null;epoch:number;resolve:(r:PersonalReply)=>void;reject:(e:Error)=>void;timer:ReturnType<typeof setTimeout>}>();
   const personal=(change?:unknown,revision?:number):Promise<PersonalReply>=>{const chatId=activeChat,requestId=crypto.randomUUID();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{personalRequests.delete(requestId);reject(Error("Saving took too long."));},15000);personalRequests.set(requestId,{chatId,epoch,resolve,reject,timer});ctx.sendToBackend({type:"phone_personal",requestId,chatId,chatRevision:current?.revision,revision,change});});};
   const updates = new Map<string, { chatId: string; epoch: number; resolve: (doc: PhoneDocument) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
@@ -127,10 +129,36 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   let toolbarTimer:ReturnType<typeof setTimeout>|undefined;
   const statuses=[openStatus,refreshStatus,recoveryStatus];
   const toolbarResult=(status:HTMLElement,text:string)=>{clearTimeout(toolbarTimer);statuses.forEach(n=>{n.textContent="";});status.textContent=text;if(text)toolbarTimer=setTimeout(()=>{status.textContent="";},5000);};
+  let modelError="";
+  const showModelError=(message:string)=>{
+    const hadError=!!modelError;
+    modelError=message;
+    view?.setModelError(message);
+    if(!message){if(hadError)refreshStatus.textContent="";return;}
+    clearTimeout(toolbarTimer);
+    statuses.forEach(n=>{n.textContent="";});
+    showCopyableError(refreshStatus,message);
+  };
   const decorate=(button:HTMLButtonElement,name:UIIconName,label:string,short:string)=>{button.classList.add("lpt-toolbar-button");button.setAttribute("aria-label",label);button.replaceChildren();const image=document.createElement("img");image.className="lpt-toolbar-icon";image.src=UI_ICONS[name];image.alt="";image.setAttribute("aria-hidden","true");image.draggable=false;const caption=document.createElement("span");caption.className="lpt-toolbar-label";caption.textContent=short;const tooltip=document.createElement("span");tooltip.className="lpt-toolbar-tooltip";tooltip.id=`lpt-tip-${crypto.randomUUID()}`;tooltip.setAttribute("role","tooltip");tooltip.textContent=label;button.setAttribute("aria-describedby",tooltip.id);button.append(image,caption,tooltip);return tooltip;};
   decorate(open,"open-phone","Open phone","Open");const refreshTooltip=decorate(refreshButton,"refresh","Refresh tracker","Refresh");decorate(resetButton,"reset","Reset appearance","Reset");
   const updateBusy=()=>{refreshButton.disabled=!activeChat||!current||busy()||refreshPending;refreshTooltip.textContent=current?.settings.source==="helper"?"Refresh tracker. Requests may cost money depending on the model chosen.":"Refresh tracker. Main AI makes no model request.";};
-  refreshButton.addEventListener("click",()=>{const origin=epoch;portraitChat=null;refreshPending=true;refreshStatus.textContent="";updateBusy();void requestHelper("phone_helper_now").then(value=>{if(origin!==epoch)return;const result=readRefreshResult(value);toolbarResult(refreshStatus,result.ok?"Refreshed":failureLabel(result.category??"invalid output"));sendSync();}).catch(error=>{if(origin===epoch)toolbarResult(refreshStatus,failureLabel(failureCategory(error,"validation rejected")));}).finally(()=>{if(origin===epoch){refreshPending=false;updateBusy();}});});
+  refreshButton.addEventListener("click",()=>{
+    const origin=epoch;
+    portraitChat=null;
+    refreshPending=true;
+    refreshStatus.textContent="";
+    showModelError("");
+    updateBusy();
+    void requestHelper("phone_helper_now").then(value=>{
+      if(origin!==epoch)return;
+      const result=readRefreshResult(value);
+      if(result.ok)toolbarResult(refreshStatus,"Refreshed");
+      else showModelError(result.message??failureLabel(result.category??"invalid output"));
+      sendSync();
+    }).catch(error=>{
+      if(origin===epoch){const category=failureCategory(error,"validation rejected");showModelError(category==="timeout"?"The request timed out. Try again.":failureLabel(category));}
+    }).finally(()=>{if(origin===epoch){refreshPending=false;updateBusy();}});
+  });
   recoveryActions.setAttribute("role","toolbar");recoveryActions.setAttribute("aria-label","Phone actions");recoveryActions.append(open,refreshButton,resetButton);
   const results=document.createElement("div");results.className="lpt-toolbar-results";results.append(...statuses);
   const scroll=document.createElement("div");scroll.className="lpt-sidebar-scroll lpt-sidebar-style-boundary";scroll.append(help);panel.append(recoveryActions,results,scroll);tab.root.append(panel);
@@ -188,7 +216,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
           const pos = widget.getPosition(); widget.moveTo(Math.max(12, Math.min(pos.x, vw - w - 12)), Math.max(12, Math.min(pos.y, vh - h - 12)));
         }
       } });
-      view.receivePreferences(preferences); view.receive(current, reads);
+      view.receivePreferences(preferences); view.receive(current, reads);view.setModelError(modelError);
       try { view.applyCSS(preferences.css); } catch { help.textContent = "Saved custom CSS could not be applied. The default appearance is in use; Reset clears it."; }
       widgetWasConnected = widget.root.isConnected;
       widgetResize?.disconnect(); widgetResize = new ResizeObserver(() => {
@@ -208,6 +236,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     if(isRecord(payload)&&payload.type==="phone_portraits_result") {if(payload.requestId===portraitRequest&&payload.chatId===activeChat)void view?.receivePortraitSources(payload.sources);return;}
 
     if (disposed || !isRecord(payload)) return;
+    if(payload.type==="phone_model_failure"){if(activeChat&&payload.chatId===activeChat)showModelError(typeof payload.message==="string"?safeModelMessage(payload.message):"");return;}
     if(payload.type==="phone_helper_changed") { if(activeChat && payload.chatId===activeChat)sendSync();return; }
     if(typeof payload.requestId!=="string")return;
     const sr=setupRequests.get(payload.requestId);if(sr&&["phone_setup_result","phone_setup_error"].includes(String(payload.type))){clearTimeout(sr.timer);setupRequests.delete(payload.requestId);if(sr.epoch!==epoch||sr.chat!==activeChat||payload.chatId!==activeChat){sr.reject(Error("The chat changed. Reopen setup in the original chat."));return;}if(payload.type==="phone_setup_error"){sr.reject(Error(typeof payload.message==="string"?payload.message:"Setup failed. Nothing was saved."));return;}if(!isRecord(payload.result)){sr.reject(Error("Invalid setup response."));return;}if(isRecord(payload.result.snapshot)&&payload.result.snapshot.chatId===activeChat){current=payload.result.snapshot as unknown as PhoneDocument;sidebar?.receive(current,chatName);view?.receive(current,reads);}sr.resolve(payload.result);return;}
@@ -269,7 +298,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     backendBusy=payload.helperBusy===true;updateBusy();
   }));
   const switchChat = (chatId: string | null) => {
-    clearTimeout(toolbarTimer);statuses.forEach(n=>{n.textContent="";});portraitChat=null;portraitRequest="";epoch++; refreshPending=false;refreshStatus.textContent="";openStatus.textContent="";backendBusy=false;pendingSync = ""; activeChat = chatId; current = null; reads = emptyReads(); view?.receive(null, reads);chatName="";sidebar?.receive(null,"");updateBusy();
+    modelError="";clearTimeout(toolbarTimer);statuses.forEach(n=>{n.textContent="";});portraitChat=null;portraitRequest="";epoch++; refreshPending=false;refreshStatus.textContent="";openStatus.textContent="";backendBusy=false;pendingSync = ""; activeChat = chatId; current = null; reads = emptyReads(); view?.receive(null, reads);chatName="";sidebar?.receive(null,"");updateBusy();
     for (const [id, p] of readRequests) { clearTimeout(p.timer); p.reject(new Error("The chat changed.")); readRequests.delete(id); }
     for (const [id, p] of updates) { clearTimeout(p.timer); p.reject(new Error("The chat changed. Your original chat keeps its saved changes.")); updates.delete(id); }
     for(const [id,p]of helperRequests){clearTimeout(p.timer);p.reject(new Error("The chat changed."));helperRequests.delete(id);}

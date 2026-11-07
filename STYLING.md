@@ -833,3 +833,14 @@ These additions inherit the established font, focus, tap-target and button style
 The `.lpt-setup-checkbox` field IDs remain unchanged; new switches use stable
 `data-setting="fakeAddresses"` and `data-setting="allowAIUserEdits"` attributes.
 The original phone frame, launcher and app class names remain unchanged.
+
+## 0.17.1 model errors and wizard choices
+
+| Class | Purpose |
+| --- | --- |
+| `.lpt-setup-group-actions` | Select all and Clear all buttons for one wizard section. |
+| `.lpt-model-error` | Model request error notice on the phone. |
+| `.lpt-model-error-message` | Selectable plain error text on the phone or sidebar. |
+| `.lpt-copy-error` | Copies the displayed error message. |
+
+The sidebar error uses the existing `.lpt-refresh-result` area beneath the toolbar.

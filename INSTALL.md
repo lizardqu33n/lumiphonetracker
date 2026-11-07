@@ -1,11 +1,11 @@
 # Install Lumi Phone Tracker
 
-Version 0.17.0 includes the built files. You do not need to build or upload anything yourself.
+Version 0.17.1 includes the built files. You do not need to build or upload anything yourself.
 
 ## Install or update
 
 1. Open Lumiverse > Extensions > Install.
-2. Paste this repository address: https://github.com/lizardqu33n/lumiphonetracker . For an existing install from this repository, use its update option to get version 0.17.0. Enable the extension.
+2. Paste this repository address: https://github.com/lizardqu33n/lumiphonetracker . For an existing install from this repository, use its update option to get version 0.17.1. Enable the extension.
 3. Allow chat access, message processing, prompt interception and floating panels (chats, chat_mutation, interceptor, ui_panels, macro_interceptor). The existing generation permission enables optional Custom connection: completed-reply tracking and calls through the connection you select. Main AI makes no extra model requests. If generation permission is declined, Main AI still works.
 4. Open a chat. Tap the floating phone, or use Open phone in the Phone sidebar tab.
 5. Add this exact single line to your active preset and save it:
@@ -207,7 +207,7 @@ Connections and Settings profiles are new labels for the same existing controls.
 Your saved choices, profiles and wording survive; the preset line is still
 `{{phone_format}}` once. No permission has been added.
 
-## Contacts and setup (0.17.0)
+## Contacts and setup (0.17.1)
 
 Tap a contact for its full page. Edit has addresses, relationship, role labels,
 custom details, portraits and confirmed Delete. Main/NPC is a label you can change.
@@ -215,7 +215,8 @@ Merge contacts is on the contact page: choose which contact to keep and confirm.
 It keeps that card's values, fills empty fields and retains old matching aliases.
 
 Setup wizard is in the sidebar Phone tab. Add the needed apps in App Store, choose
-individual fields, then Review input. It shows source characters, request messages
+individual fields, or use Select all and Clear all in each section. Your choices
+are remembered for each chat. Then choose Review input. It shows source characters, request messages
 and one model request. Run setup, inspect the preview, then Save these additions.
 First/full-name matches need Merge or Keep both; an identical full name needs a
 new name for the separate contact. Existing edited values are never overwritten.
@@ -247,3 +248,7 @@ Keep {{phone_format}} once in your preset. Tag syntax is unchanged; compact safe
 wording now follows the edit switch and marks protected continuity fields.
 See [the wizard guide](docs/WIZARD-FIX-2.md) for merging, restoration and migration
 limits, and [Contacts and setup](docs/PART-6.md) for source access details.
+
+For a failed setup or refresh request, read the message and use Copy if you need
+to share it. The displayed message can include the provider's explanation after
+credential and header filtering. A stopped or cut-off reply saves no tracker data.

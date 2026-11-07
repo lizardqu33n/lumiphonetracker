@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.17.1 - Clear model errors and remembered wizard choices
+
+- Setup and Custom connection tracking check request failures and finish reasons
+  before parsing. Rate limits, billing, credentials, timeouts, network failures
+  and other provider errors get distinct plain messages.
+- Show the safe provider explanation where available. Copy uses the displayed
+  message. Credentials and private headers are filtered before frontend delivery.
+- Content filters, cut-off replies, other abnormal stops and empty replies keep
+  existing tracker data. No automatic retry.
+- Select all and Clear all work within each wizard section. Selections are saved
+  per user and chat.
+- Confirmed that connection labels already use the ASCII separator ` - `.
+
+
 ## 0.17.0 - Wizard duplicate review and edit controls
 
 - Wizard review now shows known source-character, message and request counts only;

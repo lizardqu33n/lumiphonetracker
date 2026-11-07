@@ -1,3 +1,4 @@
+import { SetupChoiceStore } from "./setup-choices";
 import {SetupWizard,SetupError} from "./setup-wizard";
 import {cardNames} from "./card-access";
 import { PersonalStore, emptyPersonal, builtInPresets, selectedWording } from "./personal-settings";
@@ -16,7 +17,7 @@ import { PreferenceStore, defaultPreferences } from "./preferences";
 import { MessageReads, emptyReads } from "./message-reads";
 import { chatPath } from "./store";
 import { HelperAI } from "./helper";
-import { HelperFailure, failureCategory } from "./helper-status";
+import { failureCategory } from "./helper-status";
 
 declare const spindle: SpindleAPI;
 const warn = (text: string): void => { try { spindle.log.warn(text); } catch { /* Logging cannot block generation. */ } };
@@ -64,15 +65,17 @@ const helper = new HelperAI(store, {
   wording:async userId=>selectedWording(await personal.read(userId),"helper"),
   allowed: () => spindle.permissions.has("generation") && spindle.permissions.has("chats") && spindle.permissions.has("chat_mutation"),
   connections: async userId => (await spindle.connections.list(userId)).map(c => ({ id:c.id, name:c.name, model:c.model })),
-  generate: async input => {
-    const result=await spindle.generate.raw({type:"raw",...input});
-    if(!isRecord(result)||typeof result.content!=="string")throw new HelperFailure("invalid output");
-    return {content:result.content,finish_reason:typeof result.finish_reason==="string"?result.finish_reason:""};
-  },
+  generate: input => spindle.generate.raw({type:"raw",...input}),
+  modelFailure: (userId,chatId,message) => spindle.sendToFrontend({type:"phone_model_failure",chatId,message},userId),
   changed: (userId,chatId) => spindle.sendToFrontend({type:"phone_helper_changed",chatId},userId),
   warn: text => warn(text),
 });
 const setupWizard=new SetupWizard(spindle,store);
+const setupChoices=new SetupChoiceStore({
+  authorize:async(user,chat)=>(await spindle.chats.get(chat,user))?.id===chat,
+  read:(user,chat)=>spindle.userStorage.getJson(`setup-choices/${chatPath(chat)}`,{userId:user,fallback:[]}),
+  write:(user,chat,choices)=>spindle.userStorage.setJson(`setup-choices/${chatPath(chat)}`,choices,{userId:user}),
+});
 if (spindle.frontendCapabilities?.declare) spindle.frontendCapabilities.declare("message_tag_interceptor");
 else warn("Lumi Phone Tracker: host lacks documented cold-load tag hiding; update Lumiverse.");
 
@@ -140,8 +143,8 @@ spindle.onFrontendMessage((payload, userId) => {
     else warn("Lumi Phone Tracker: frontend user context unavailable; request ignored.");
     return; // Never turn a reply into an operator-wide broadcast.
   }
-  if(isRecord(payload)&&["phone_setup_prepare","phone_setup_run","phone_setup_save"].includes(String(payload.type))&&typeof payload.requestId==="string"&&payload.requestId.length<=100&&typeof payload.chatId==="string"&&payload.chatId.length<=256){
-    void(async()=>{requireReadPermissions();const chat=payload.chatId as string;let result:unknown;if(payload.type==="phone_setup_prepare")result=await setupWizard.prepare(userId,chat,payload.choices);else{if(typeof payload.id!=="string"||payload.id.length>100)throw new SetupError("Review setup first.");if(payload.type==="phone_setup_run")result=await setupWizard.run(userId,chat,payload.id);else{if(payload.confirm!==true)throw new SetupError("Confirm the setup preview before saving.");result={snapshot:await setupWizard.save(userId,chat,payload.id,payload.decisions)};helper.cancel(chat);}}spindle.sendToFrontend({type:"phone_setup_result",requestId:payload.requestId,chatId:chat,result},userId);})().catch(error=>{warn(error instanceof SetupError&&error.category?`Lumi Phone Tracker: setup failed: ${error.category}.`:"Lumi Phone Tracker: setup request failed; check saved state.");spindle.sendToFrontend({type:"phone_setup_error",requestId:payload.requestId,chatId:payload.chatId,message:error instanceof SetupError?error.message:"Setup could not finish. Check access and the tracker before trying again."},userId);});return;
+  if(isRecord(payload)&&["phone_setup_prepare","phone_setup_run","phone_setup_save","phone_setup_choices","phone_setup_choices_save"].includes(String(payload.type))&&typeof payload.requestId==="string"&&payload.requestId.length<=100&&typeof payload.chatId==="string"&&payload.chatId.length<=256){
+    void(async()=>{requireReadPermissions();const chat=payload.chatId as string;let result:unknown;if(payload.type==="phone_setup_choices"||payload.type==="phone_setup_choices_save")result={choices:await setupChoices.access(userId,chat,payload.type==="phone_setup_choices_save",payload.choices)};else if(payload.type==="phone_setup_prepare")result=await setupWizard.prepare(userId,chat,payload.choices);else{if(typeof payload.id!=="string"||payload.id.length>100)throw new SetupError("Review setup first.");if(payload.type==="phone_setup_run")result=await setupWizard.run(userId,chat,payload.id);else{if(payload.confirm!==true)throw new SetupError("Confirm the setup preview before saving.");result={snapshot:await setupWizard.save(userId,chat,payload.id,payload.decisions)};helper.cancel(chat);}}spindle.sendToFrontend({type:"phone_setup_result",requestId:payload.requestId,chatId:chat,result},userId);})().catch(error=>{warn(error instanceof SetupError&&error.category?`Lumi Phone Tracker: setup failed: ${error.category}.`:"Lumi Phone Tracker: setup request failed; check saved state.");spindle.sendToFrontend({type:"phone_setup_error",requestId:payload.requestId,chatId:payload.chatId,message:error instanceof SetupError?error.message:"Setup could not finish. Check access and the tracker before trying again."},userId);});return;
   }
   if(isRecord(payload)&&payload.type==="phone_personal"&&typeof payload.requestId==="string"&&payload.requestId.length<=100) {
     void(async()=>{
@@ -178,7 +181,7 @@ spindle.onFrontendMessage((payload, userId) => {
   if(isRecord(payload) && ["phone_connections","phone_helper_now"].includes(String(payload.type)) && typeof payload.requestId==="string" && payload.requestId.length<=100 && typeof payload.chatId==="string" && payload.chatId.length<=256) {
     void(async()=>{
       requireReadPermissions();
-      await store.sync(userId,payload.chatId as string); // Authorization before connection selection or a request.
+      await store.preview(payload.chatId as string,userId); // Authorize without writing on a failed refresh.
       if(payload.type==="phone_connections") {
         const info=await helper.connections(userId,payload.chatId as string);
         spindle.sendToFrontend({type:"phone_connections_result",requestId:payload.requestId,chatId:payload.chatId,info},userId);

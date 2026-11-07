@@ -236,9 +236,11 @@ export class PhoneStore {
       if (!recent.length) return null;
       const raw = await this.io.read(chatId); const revision = raw ? readDocument(raw,chatId).revision : 0;
       doc.revision = revision;
-      if (JSON.stringify(doc) !== raw) doc.revision++;
-      doc.helperAttempts.push(attempt); // Durable before dispatch; failures do not retry on a repeated event.
-      await this.io.write(chatId,JSON.stringify(doc));
+      if (expected) {
+        if (JSON.stringify(doc) !== raw) doc.revision++;
+        doc.helperAttempts.push(attempt); // Automatic events stay deduplicated across restarts.
+        await this.io.write(chatId,JSON.stringify(doc));
+      }
       return { doc, recent, history: JSON.stringify(rows.map(rowSignature)) };
     });
   }

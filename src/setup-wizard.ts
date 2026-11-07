@@ -1,3 +1,4 @@
+import { checkedModelReply, ModelCallError } from "./model-errors";
 import {setupReview,resolveSetup,withFakeAddresses} from "./setup-review";
 import {fieldKey} from "./field-protection";
 import {failureCategory,failureLabel,type HelperFailureCategory} from "./helper-status";
@@ -27,7 +28,7 @@ const keys=(o:Record<string,unknown>,allowed:string[])=>{if(Object.keys(o).some(
 export function validateSetup(content:string,source:string,fields:readonly SetupField[],retainNames=false):SetupData {
   let raw:unknown;
   try {raw=JSON.parse(content.trim().replace(/^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/i,"$1"));}
-  catch {throw new SetupError("Setup returned invalid JSON. Nothing was saved.");}
+  catch {throw new SetupError("Setup returned invalid JSON. Nothing was saved.","invalid JSON");}
   if(!isRecord(raw)||content.length>64000)throw new SetupError("Setup returned invalid output. Nothing was saved.");
   keys(raw,["contacts","notes","locations"]);const out=emptySetup();const selected=new Set<string>(fields);
   const array=(key:string):Record<string,unknown>[]=>{const v=raw[key];if(v===undefined||v===null)return [];if(!Array.isArray(v)||v.length>30||v.some(x=>!isRecord(x)))throw new SetupError("Setup returned invalid records.");return v as Record<string,unknown>[];};
@@ -111,14 +112,13 @@ export class SetupWizard {
   const request={type:"raw" as const,connection_id:p.connection,model:p.model,userId:user,messages:p.messages,parameters:{max_tokens:2000},signal:controller.signal};
   let stage:"request"|"state"|"validation"="request";
   try{
-   const response=await Promise.race([this.api.generate.raw(request),new Promise<never>((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new SetupError("Setup failed: Timeout. Nothing was saved.","timeout"));},90000);})]);
-   if(!isRecord(response)||typeof response.content!=="string")throw new SetupError("Setup failed: Invalid output. Nothing was saved.","invalid output");
-   if(!response.content.trim())throw new SetupError("Setup failed: Empty reply. Nothing was saved.","empty reply");
+   const content=await Promise.race([checkedModelReply(()=>this.api.generate.raw(request)),new Promise<never>((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new SetupError("The request timed out. Try again. Nothing was saved.","timeout"));},90000);})]);
    stage="state";const doc=await this.current(p);stage="validation";
-   const data=validateSetup(response.content,p.source,p.fields,doc.settings.fakeAddresses);
+   const data=validateSetup(content,p.source,p.fields,doc.settings.fakeAddresses);
    for(const c of data.contacts)if(normalize(c.name)===normalize(p.names[1]??"")){delete c.roles;delete c.mood;delete c.thoughts;}
    const filtered=setupCandidates(doc,{...data,contacts:[]});p.data=withFakeAddresses(doc,{...filtered,contacts:setupReview(doc,data.contacts)},p.fields);return {id,data:p.data};
   }catch(error){
+   if(error instanceof ModelCallError)throw new SetupError(`${error.message} Nothing was saved.`,error.category);
    if(error instanceof SetupError){if(!error.category)throw new SetupError(error.message,error.message.startsWith("Setup returned invalid")?"invalid output":"validation rejected");throw error;}
    if(stage==="state")throw new SetupError("Setup failed: Chat could not be rechecked. Nothing was saved.","state unavailable");
    const category=failureCategory(error,stage==="validation"?"validation rejected":"provider error");

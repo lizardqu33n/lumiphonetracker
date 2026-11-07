@@ -1,3 +1,79 @@
+// src/copy-error.ts
+function showCopyableError(parent, text) {
+  const message = document.createElement("span");
+  message.className = "lpt-model-error-message";
+  message.textContent = text;
+  const copy = document.createElement("button");
+  copy.type = "button";
+  copy.className = "lpt-button lpt-copy-error";
+  copy.textContent = "Copy";
+  copy.setAttribute("aria-label", "Copy error message");
+  copy.addEventListener("click", async () => {
+    if (!copy.isConnected)
+      return;
+    try {
+      await navigator.clipboard.writeText(text);
+      copy.textContent = "Copied";
+    } catch {
+      const range = document.createRange();
+      range.selectNodeContents(message);
+      const selection = document.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      copy.textContent = "Selected. Copy manually";
+    }
+  });
+  parent.replaceChildren(message, copy);
+}
+
+// src/shared.ts
+var EXTENSION_NAME = "Lumi Phone Tracker";
+var TRACKER_TAG = "phone-state";
+var TEXT_TAG = "phone-text";
+var DEFAULT_ITEMS = Object.freeze({
+  location: true,
+  time: true,
+  present: true,
+  details: true,
+  weather: true,
+  notes: true,
+  messages: true
+});
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+// src/model-errors.ts
+class ModelCallError extends Error {
+  category;
+  constructor(category, message) {
+    super(message);
+    this.category = category;
+  }
+}
+function safeModelMessage(input) {
+  let message = input.trim();
+  if (!message || message.length > 4000)
+    return "";
+  const jsonStart = message.indexOf("{");
+  if (jsonStart >= 0) {
+    try {
+      const body = JSON.parse(message.slice(jsonStart));
+      if (!isRecord(body))
+        return "";
+      const detail = isRecord(body.error) ? body.error.message : body.message ?? body.error;
+      if (typeof detail !== "string" || detail.includes("{"))
+        return "";
+      message = message.slice(0, jsonStart) + detail;
+    } catch {
+      return "";
+    }
+  }
+  if (/\b(?:authorization|proxy[-_ ]authorization|cookie|set[-_ ]cookie|headers?|x-[\w-]+)\s*["']?\s*[:=]/i.test(message) || /\b(?:bearer|basic)\s+\S{4,}/i.test(message) || /\b(?:api[-_ ]?key|access[-_ ]?token|secret|password|credential)(?:\s+(?:provided|value))?\s*["']?\s*[:=]/i.test(message) || /\b(?:key|token|secret|password|credential)\s+(?:["'`]|(?:is|was)\s+["'`])/i.test(message) || /\b(?:sk[-_]|AIza|gh[pousr]_)[\w-]{5,}/.test(message) || /[a-z\d_+/=-]{24,}/i.test(message) || /https?:\/\/\S+/i.test(message) || /[\r\n\u0000-\u001f\u007f]|<[^>]*>/.test(message))
+    return "";
+  return message.slice(0, 600);
+}
+
 // src/style-files.ts
 var STYLE_FILE_LIMIT = 256 * 1024;
 async function readStyleFile(file) {
@@ -123,23 +199,6 @@ var UI_ICONS = {
   look: "data:image/png;base64,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",
   advanced: "data:image/png;base64,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"
 };
-
-// src/shared.ts
-var EXTENSION_NAME = "Lumi Phone Tracker";
-var TRACKER_TAG = "phone-state";
-var TEXT_TAG = "phone-text";
-var DEFAULT_ITEMS = Object.freeze({
-  location: true,
-  time: true,
-  present: true,
-  details: true,
-  weather: true,
-  notes: true,
-  messages: true
-});
-function isRecord(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
 
 // src/model.ts
 var SCENE_KEYS = ["location", "time", "date", "present"];
@@ -1030,6 +1089,7 @@ class PhoneView {
   storyStrip = el("div", "lpt-story-strip");
   heading = el("h1", "lpt-heading");
   back = button("", "lpt-back", () => this.navigate("Home"));
+  modelError = "";
   error = el("p", "lpt-error");
   status = el("p", "lpt-status");
   doc = null;
@@ -1107,6 +1167,7 @@ class PhoneView {
     if (this.app !== "Home" && !doc?.settings.apps[this.app])
       this.app = "Home";
     if (changedChat) {
+      this.modelError = "";
       this.selectedContact = null;
       this.contactOrigin = "Contacts";
       this.contactScroll = 0;
@@ -1210,6 +1271,12 @@ class PhoneView {
         node.append(img);
       } catch {}
     return node;
+  }
+  setModelError(message) {
+    if (this.modelError !== message) {
+      this.modelError = message;
+      this.render();
+    }
   }
   setError(message) {
     renderEmojiText(this.error, message);
@@ -1367,6 +1434,12 @@ class PhoneView {
         this.messages();
       else if (["Calls", "Email", "Bank"].includes(this.app))
         this.activities(this.app);
+    }
+    if (this.modelError) {
+      const notice = el("div", "lpt-notice lpt-model-error");
+      notice.setAttribute("role", "status");
+      showCopyableError(notice, this.modelError);
+      this.content.append(notice);
     }
     if (this.doc)
       for (const text of this.doc.state.notices) {
@@ -4186,6 +4259,9 @@ var styles_default = `/* =======================================================
 
 .lpt-field-unit {min-width:0;display:flex;flex-direction:column;}
 .lpt-field-unit > .lpt-field {width:100%;}
+
+.lpt-model-error {flex-wrap:wrap;}
+.lpt-model-error-message {overflow-wrap:anywhere;user-select:text;}
 `;
 
 // src/message-reads.ts
@@ -4230,6 +4306,8 @@ class SetupView {
   epoch = 0;
   busy = false;
   chosen = new Set;
+  loadingChoices = false;
+  error = false;
   plan = null;
   preview = null;
   message = "";
@@ -4249,8 +4327,50 @@ class SetupView {
       this.decisions.clear();
       this.busy = false;
       this.message = "";
+      this.error = false;
+      this.loadingChoices = !!doc;
+      if (doc)
+        this.loadChoices(this.epoch);
     }
     this.render();
+  }
+  async loadChoices(epoch) {
+    try {
+      const result = await this.request("choices", {});
+      if (epoch === this.epoch && Array.isArray(result.choices))
+        this.chosen = new Set(result.choices.filter((field) => SETUP_FIELD_IDS.includes(field)));
+    } catch {
+      if (epoch === this.epoch) {
+        this.error = true;
+        this.message = "Could not read saved setup choices.";
+      }
+    } finally {
+      if (epoch === this.epoch) {
+        this.loadingChoices = false;
+        this.render();
+      }
+    }
+  }
+  persistChoices() {
+    const epoch = this.epoch;
+    this.request("choices_save", { choices: [...this.chosen] }).catch(() => {
+      if (epoch === this.epoch) {
+        this.error = true;
+        this.message = "Could not save setup choices.";
+        this.render();
+      }
+    });
+  }
+  setGroup(fields, on) {
+    for (const [field] of fields)
+      if (on)
+        this.chosen.add(field);
+      else
+        this.chosen.delete(field);
+    this.root.querySelectorAll(".lpt-setup-checkbox").forEach((input) => {
+      input.checked = !input.disabled && this.chosen.has(input.dataset.field);
+    });
+    this.persistChoices();
   }
   button(parent, label, fn, cls = "") {
     const b = el2("button", `lpt-button lpt-setup-button ${cls}`, label);
@@ -4264,14 +4384,15 @@ class SetupView {
     return b;
   }
   async act(action) {
-    if (this.busy || !this.doc)
+    if (this.busy || this.loadingChoices || !this.doc)
       return;
     const epoch = this.epoch;
     this.busy = true;
+    this.error = false;
     this.message = "";
     this.render();
     try {
-      const result = await this.request(action, action === "prepare" ? { choices: [...this.chosen] } : { id: this.plan?.id, ...action === "save" ? { confirm: true, decisions: [...this.decisions.values()] } : {} });
+      const result = await this.request(action, action === "prepare" ? { choices: SETUP_GROUPS.flatMap((g) => this.doc?.settings.apps[g.app] ? g.fields.map(([f]) => f).filter((f) => this.chosen.has(f)) : []) } : { id: this.plan?.id, ...action === "save" ? { confirm: true, decisions: [...this.decisions.values()] } : {} });
       if (epoch !== this.epoch)
         return;
       if (action === "prepare")
@@ -4287,6 +4408,7 @@ class SetupView {
       }
     } catch (error) {
       if (epoch === this.epoch) {
+        this.error = true;
         this.message = error instanceof Error ? error.message : "Setup failed. Nothing was saved.";
         if (action === "run") {
           this.plan = null;
@@ -4316,13 +4438,20 @@ class SetupView {
       for (const group of SETUP_GROUPS) {
         const fields = el2("fieldset", "lpt-side-group lpt-setup-fields");
         fields.append(el2("legend", "lpt-side-legend", group.app));
+        const actions = el2("div", "lpt-setup-group-actions");
+        for (const [label, on] of [["Select all", true], ["Clear all", false]]) {
+          const button = this.button(actions, label, () => this.setGroup(group.fields, on));
+          button.setAttribute("aria-label", `${label} ${group.app} fields`);
+          button.disabled = this.busy || this.loadingChoices || !this.doc.settings.apps[group.app];
+        }
+        fields.append(actions);
         for (const [field, title] of group.fields) {
           const label = el2("label", "lpt-toggle-chip lpt-setup-choice"), input = el2("input", "lpt-side-checkbox lpt-setup-checkbox");
           input.type = "checkbox";
           input.setAttribute("role", "switch");
           input.dataset.field = field;
           input.checked = this.chosen.has(field) && !!this.doc.settings.apps[group.app];
-          input.disabled = this.busy || !this.doc.settings.apps[group.app];
+          input.disabled = this.busy || this.loadingChoices || !this.doc.settings.apps[group.app];
           input.setAttribute("aria-label", title);
           input.addEventListener("change", () => {
             if (!input.isConnected || this.busy)
@@ -4331,10 +4460,9 @@ class SetupView {
               this.chosen.add(field);
             else
               this.chosen.delete(field);
+            this.persistChoices();
           });
           label.append(input, el2("span", "lpt-setup-choice-label", title));
-          if (!this.doc.settings.apps[group.app])
-            this.chosen.delete(field);
           fields.append(label);
         }
         if (!this.doc.settings.apps[group.app])
@@ -4342,7 +4470,7 @@ class SetupView {
         this.root.append(fields);
       }
       this.root.append(el2("p", "lpt-setup-source", this.doc.settings.source === "main" ? "Uses Main AI: your Lumiverse default connection." : "Uses your selected Custom connection."), el2("p", "lpt-setup-hint", "Reads the card, your persona and attached/global lorebooks. Scene is excluded. These import choices do not change tracking switches."));
-      this.button(this.root, "Review input", () => void this.act("prepare"));
+      this.button(this.root, "Review input", () => void this.act("prepare")).disabled = this.busy || this.loadingChoices;
     } else if (!this.preview) {
       this.root.append(el2("p", "lpt-setup-cost", `${this.plan.charactersRead} source characters read. ${this.plan.messagesRead} request messages. Model requests: ${this.plan.requests}.`), el2("p", "lpt-setup-hint", "Nothing is saved until you confirm the preview."));
       this.button(this.root, "Run setup", () => void this.act("run"));
@@ -4434,6 +4562,8 @@ class SetupView {
     }
     const status = el2("p", "lpt-setup-status", this.busy ? "Working..." : this.message);
     status.setAttribute("role", "status");
+    if (this.error && !this.busy && this.message)
+      showCopyableError(status, this.message);
     this.root.append(status);
   }
 }
@@ -5273,10 +5403,15 @@ var sidebar_default = `/* Sidebar only: protected from the phone Shadow DOM/cust
 .lpt-setup-merge-target,.lpt-setup-keep-name,.lpt-fake-domain {width:100%;max-width:100%;min-width:0;min-height:var(--lpt-side-target);background:var(--lpt-side-bg);color:var(--lpt-side-text);border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);}
 .lpt-setup-button[aria-pressed="true"] {font-weight:bold;text-decoration:underline;}
 .lpt-setup-match,.lpt-edit-warning {font-weight:bold;}
+
+.lpt-setup-group-actions {display:flex;flex-basis:100%;gap:var(--lpt-side-gap);flex-wrap:wrap;}
+.lpt-copy-error {margin-inline-start:var(--lpt-side-gap,6px);}
+.lpt-model-error-message {overflow-wrap:anywhere;user-select:text;}
+.lpt-refresh-result {max-height:min(30dvh,14rem);overflow:auto;}
 `;
 
 // src/helper-status.ts
-var HELPER_FAILURES = ["permission missing", "no connection", "provider error", "timeout", "empty reply", "invalid output", "validation rejected"];
+var HELPER_FAILURES = ["permission missing", "no connection", "provider error", "timeout", "empty reply", "invalid output", "validation rejected", "invalid JSON", "stopped"];
 
 class HelperFailure extends Error {
   category;
@@ -5288,7 +5423,7 @@ class HelperFailure extends Error {
 }
 var failureLabel = (category) => category[0].toUpperCase() + category.slice(1);
 function failureCategory(error, fallback = "provider error") {
-  if (error instanceof HelperFailure)
+  if (error instanceof HelperFailure || error instanceof ModelCallError)
     return error.category;
   const e = error;
   const message = [e?.message, e?.code].filter((v) => typeof v === "string").join(" ");
@@ -5304,7 +5439,7 @@ function readRefreshResult(value) {
     if (r.ok === true)
       return { ok: true };
     if (r.ok === false && HELPER_FAILURES.includes(r.category))
-      return { ok: false, category: r.category };
+      return { ok: false, category: r.category, ...typeof r.message === "string" && safeModelMessage(r.message) ? { message: safeModelMessage(r.message) } : {} };
   }
   return { ok: false, category: "invalid output" };
 }
@@ -5335,7 +5470,7 @@ function setup(ctx) {
   const setup = (action, data) => {
     if (!activeChat || !current || disposed)
       return Promise.reject(Error("Open a chat first."));
-    if (busy())
+    if (busy() && action !== "choices" && action !== "choices_save")
       return Promise.reject(Error("Wait for the current reply to finish."));
     const chat = activeChat, requestId = crypto.randomUUID();
     return new Promise((resolve, reject) => {
@@ -5525,6 +5660,22 @@ function setup(ctx) {
         status.textContent = "";
       }, 5000);
   };
+  let modelError = "";
+  const showModelError = (message) => {
+    const hadError = !!modelError;
+    modelError = message;
+    view?.setModelError(message);
+    if (!message) {
+      if (hadError)
+        refreshStatus.textContent = "";
+      return;
+    }
+    clearTimeout(toolbarTimer);
+    statuses.forEach((n) => {
+      n.textContent = "";
+    });
+    showCopyableError(refreshStatus, message);
+  };
   const decorate = (button, name, label, short) => {
     button.classList.add("lpt-toolbar-button");
     button.setAttribute("aria-label", label);
@@ -5559,16 +5710,22 @@ function setup(ctx) {
     portraitChat = null;
     refreshPending = true;
     refreshStatus.textContent = "";
+    showModelError("");
     updateBusy();
     requestHelper("phone_helper_now").then((value) => {
       if (origin !== epoch)
         return;
       const result = readRefreshResult(value);
-      toolbarResult(refreshStatus, result.ok ? "Refreshed" : failureLabel(result.category ?? "invalid output"));
+      if (result.ok)
+        toolbarResult(refreshStatus, "Refreshed");
+      else
+        showModelError(result.message ?? failureLabel(result.category ?? "invalid output"));
       sendSync();
     }).catch((error) => {
-      if (origin === epoch)
-        toolbarResult(refreshStatus, failureLabel(failureCategory(error, "validation rejected")));
+      if (origin === epoch) {
+        const category = failureCategory(error, "validation rejected");
+        showModelError(category === "timeout" ? "The request timed out. Try again." : failureLabel(category));
+      }
     }).finally(() => {
       if (origin === epoch) {
         refreshPending = false;
@@ -5698,6 +5855,7 @@ function setup(ctx) {
       });
       view.receivePreferences(preferences);
       view.receive(current, reads);
+      view.setModelError(modelError);
       try {
         view.applyCSS(preferences.css);
       } catch {
@@ -5737,6 +5895,11 @@ function setup(ctx) {
     }
     if (disposed || !isRecord(payload))
       return;
+    if (payload.type === "phone_model_failure") {
+      if (activeChat && payload.chatId === activeChat)
+        showModelError(typeof payload.message === "string" ? safeModelMessage(payload.message) : "");
+      return;
+    }
     if (payload.type === "phone_helper_changed") {
       if (activeChat && payload.chatId === activeChat)
         sendSync();
@@ -5919,6 +6082,7 @@ function setup(ctx) {
     updateBusy();
   }));
   const switchChat = (chatId) => {
+    modelError = "";
     clearTimeout(toolbarTimer);
     statuses.forEach((n) => {
       n.textContent = "";

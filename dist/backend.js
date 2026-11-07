@@ -1,4 +1,55 @@
 // @bun
+// src/setup-fields.ts
+var SETUP_GROUPS = [
+  { app: "Contacts", fields: [
+    ["contacts.phone", "Phone"],
+    ["contacts.email", "Email"],
+    ["contacts.relationship", "Relationship type"],
+    ["contacts.roles", "Roles"],
+    ["contacts.physical", "Physical status"],
+    ["contacts.mood", "Mood"],
+    ["contacts.position", "Position"],
+    ["contacts.attire", "Attire"],
+    ["contacts.thoughts", "Inner thoughts"]
+  ] },
+  { app: "Notes", fields: [["notes.people", "People"], ["notes.items", "Key items"], ["notes.rules", "Rules"], ["notes.plots", "Plots"], ["notes.misc", "Misc"]] },
+  { app: "Locations", fields: [["locations", "Locations"]] }
+];
+var SETUP_FIELD_IDS = SETUP_GROUPS.flatMap((group) => group.fields.map((field) => field[0]));
+
+// src/setup-choices.ts
+class SetupChoiceStore {
+  io;
+  pending = new Map;
+  constructor(io) {
+    this.io = io;
+  }
+  access(user, chat, save, value) {
+    const key = JSON.stringify([user, chat]);
+    const task = (this.pending.get(key) ?? Promise.resolve()).catch(() => {}).then(async () => {
+      if (!user || !chat || !await this.io.authorize(user, chat))
+        throw Error("Chat unavailable.");
+      const raw = save ? value : await this.io.read(user, chat);
+      if (!Array.isArray(raw) || raw.length > SETUP_FIELD_IDS.length || raw.some((field) => !SETUP_FIELD_IDS.includes(field))) {
+        if (save)
+          throw Error("Invalid setup choices.");
+        return [];
+      }
+      const choices = [...new Set(raw)];
+      if (save)
+        await this.io.write(user, chat, choices);
+      return choices;
+    });
+    this.pending.set(key, task);
+    const clear = () => {
+      if (this.pending.get(key) === task)
+        this.pending.delete(key);
+    };
+    task.then(clear, clear);
+    return task;
+  }
+}
+
 // src/shared.ts
 var EXTENSION_NAME = "Lumi Phone Tracker";
 var BUILD_STEP = 6;
@@ -16,6 +67,122 @@ var DEFAULT_ITEMS = Object.freeze({
 });
 function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+// src/model-errors.ts
+class ModelCallError extends Error {
+  category;
+  constructor(category, message) {
+    super(message);
+    this.category = category;
+  }
+}
+var statusMessages = {
+  400: "Request rejected. Check the connection settings.",
+  401: "The API key is missing or wrong.",
+  402: "The connection is out of credits or has a billing problem.",
+  403: "Access forbidden. The key may lack access to this model, or the provider blocked the request.",
+  404: "Model not found. Check the model in the connection settings.",
+  408: "The request timed out. Try again.",
+  429: "Rate-limited by the provider. Wait, then try again.",
+  500: "The provider has a problem. Try again later.",
+  502: "The provider has a problem. Try again later.",
+  503: "The provider has a problem. Try again later.",
+  504: "The request timed out. Try again."
+};
+function safeModelMessage(input) {
+  let message = input.trim();
+  if (!message || message.length > 4000)
+    return "";
+  const jsonStart = message.indexOf("{");
+  if (jsonStart >= 0) {
+    try {
+      const body = JSON.parse(message.slice(jsonStart));
+      if (!isRecord(body))
+        return "";
+      const detail = isRecord(body.error) ? body.error.message : body.message ?? body.error;
+      if (typeof detail !== "string" || detail.includes("{"))
+        return "";
+      message = message.slice(0, jsonStart) + detail;
+    } catch {
+      return "";
+    }
+  }
+  if (/\b(?:authorization|proxy[-_ ]authorization|cookie|set[-_ ]cookie|headers?|x-[\w-]+)\s*["']?\s*[:=]/i.test(message) || /\b(?:bearer|basic)\s+\S{4,}/i.test(message) || /\b(?:api[-_ ]?key|access[-_ ]?token|secret|password|credential)(?:\s+(?:provided|value))?\s*["']?\s*[:=]/i.test(message) || /\b(?:key|token|secret|password|credential)\s+(?:["'`]|(?:is|was)\s+["'`])/i.test(message) || /\b(?:sk[-_]|AIza|gh[pousr]_)[\w-]{5,}/.test(message) || /[a-z\d_+/=-]{24,}/i.test(message) || /https?:\/\/\S+/i.test(message) || /[\r\n\u0000-\u001f\u007f]|<[^>]*>/.test(message))
+    return "";
+  return message.slice(0, 600);
+}
+function statusIn(text) {
+  const explicit = /(?:\b(?:http(?:\/\d(?:\.\d)?)?|status(?:[-_ ]*code)?|error(?:\s+code)?|code|failed(?:\s+with)?)\s*["':= (]*|^\s*|\()(4\d\d|5\d\d)(?=\D|$)/i.exec(text);
+  if (explicit)
+    return Number(explicit[1]);
+  const phrases = [
+    [429, /rate[-_ ]?limit|too many requests|resource[_ ]exhausted/i],
+    [402, /out of credits|insufficient[_ ](?:credits|quota)|billing/i],
+    [401, /unauthori[sz]ed|invalid[_ ]api[_ ]key|incorrect api key|no api key|api key.*(?:missing|wrong|invalid|none could be read)/i],
+    [403, /forbidden|model access denied/i],
+    [404, /model[_ ]not[_ ]found|model.*does not exist/i],
+    [400, /bad request|invalid_request_error/i],
+    [503, /service unavailable|provider overloaded/i],
+    [502, /bad gateway/i],
+    [500, /internal server error/i]
+  ];
+  return phrases.find(([, pattern]) => pattern.test(text))?.[0];
+}
+function modelRequestError(error) {
+  if (error instanceof ModelCallError)
+    return error;
+  const raw = typeof error === "string" ? error : error instanceof Error ? error.message : "";
+  const status = statusIn(raw);
+  const detail = safeModelMessage(raw);
+  if (status && statusMessages[status]) {
+    const category = status === 408 || status === 504 ? "timeout" : "provider error";
+    return new ModelCallError(category, [statusMessages[status], detail].filter(Boolean).join(" "));
+  }
+  if (/generation permission not granted|permission denied.*generation|userId is required/i.test(raw)) {
+    return new ModelCallError("permission missing", "Allow generation access in Lumiverse Extensions.");
+  }
+  if (error instanceof Error && error.name === "TimeoutError" || /timed?\s*out|timeout/i.test(raw)) {
+    return new ModelCallError("timeout", ["The request timed out. Try again.", detail].filter(Boolean).join(" "));
+  }
+  if (error instanceof Error && error.name === "AbortError") {
+    return new ModelCallError("stopped", "The model request was stopped.");
+  }
+  if (/failed to fetch|fetch failed|network|connection refused|econnreset|econnrefused|enotfound|eai_again|unable to connect|failed to connect|connection reset|socket hang up/i.test(raw)) {
+    return new ModelCallError("provider error", ["No reply from the provider. Check the internet connection or server address.", detail].filter(Boolean).join(" "));
+  }
+  return new ModelCallError("provider error", detail || "The provider request failed. Check the connection settings.");
+}
+function readModelReply(response) {
+  if (!isRecord(response))
+    throw new ModelCallError("invalid output", "The provider returned an unsupported reply.");
+  const finish = typeof response.finish_reason === "string" ? response.finish_reason.trim() : "";
+  const reason = finish.toLowerCase();
+  if (["content_filter", "safety", "blocked", "recitation"].includes(reason)) {
+    throw new ModelCallError("stopped", "The provider's content filter blocked this reply. Try again or use another connection.");
+  }
+  if (["length", "max_tokens", "max_output_tokens"].includes(reason)) {
+    throw new ModelCallError("stopped", "The reply was cut off. Try fewer fields at once.");
+  }
+  if (!["stop", "end_turn", "stop_sequence", "completed"].includes(reason) || Array.isArray(response.tool_calls) && response.tool_calls.length) {
+    const safeReason = /^[a-z][a-z0-9_-]{0,35}$/i.test(finish) ? safeModelMessage(finish) : "";
+    throw new ModelCallError("stopped", safeReason ? `The reply stopped early (${safeReason}).` : "The provider did not confirm the reply finished.");
+  }
+  if (response.content === undefined || response.content === null || typeof response.content === "string" && !response.content.trim()) {
+    throw new ModelCallError("empty reply", "The provider returned an empty reply.");
+  }
+  if (typeof response.content !== "string")
+    throw new ModelCallError("invalid output", "The provider returned an unsupported reply.");
+  return response.content;
+}
+async function checkedModelReply(request) {
+  let response;
+  try {
+    response = await request();
+  } catch (error) {
+    throw modelRequestError(error);
+  }
+  return readModelReply(response);
 }
 
 // src/model.ts
@@ -530,7 +697,7 @@ var failureLabel = (category) => category[0].toUpperCase() + category.slice(1);
 var helperNoticeText = (category) => (category === "no connection" ? "Connection not found. " : "") + `Tracker update failed: ${failureLabel(category)}`;
 var isHelperNotice = (text) => text === "Connection not found" || text.startsWith("Connection not found. ") || text.startsWith("Tracker update failed");
 function failureCategory(error, fallback = "provider error") {
-  if (error instanceof HelperFailure)
+  if (error instanceof HelperFailure || error instanceof ModelCallError)
     return error.category;
   const e = error;
   const message = [e?.message, e?.code].filter((v) => typeof v === "string").join(" ");
@@ -540,24 +707,6 @@ function failureCategory(error, fallback = "provider error") {
     return "timeout";
   return fallback;
 }
-
-// src/setup-fields.ts
-var SETUP_GROUPS = [
-  { app: "Contacts", fields: [
-    ["contacts.phone", "Phone"],
-    ["contacts.email", "Email"],
-    ["contacts.relationship", "Relationship type"],
-    ["contacts.roles", "Roles"],
-    ["contacts.physical", "Physical status"],
-    ["contacts.mood", "Mood"],
-    ["contacts.position", "Position"],
-    ["contacts.attire", "Attire"],
-    ["contacts.thoughts", "Inner thoughts"]
-  ] },
-  { app: "Notes", fields: [["notes.people", "People"], ["notes.items", "Key items"], ["notes.rules", "Rules"], ["notes.plots", "Plots"], ["notes.misc", "Misc"]] },
-  { app: "Locations", fields: [["locations", "Locations"]] }
-];
-var SETUP_FIELD_IDS = SETUP_GROUPS.flatMap((group) => group.fields.map((field) => field[0]));
 
 // src/card-access.ts
 async function cardSources(api, chatId, userId) {
@@ -654,7 +803,7 @@ function validateSetup(content, source, fields, retainNames = false) {
   try {
     raw = JSON.parse(content.trim().replace(/^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/i, "$1"));
   } catch {
-    throw new SetupError("Setup returned invalid JSON. Nothing was saved.");
+    throw new SetupError("Setup returned invalid JSON. Nothing was saved.", "invalid JSON");
   }
   if (!isRecord(raw) || content.length > 64000)
     throw new SetupError("Setup returned invalid output. Nothing was saved.");
@@ -878,20 +1027,16 @@ class SetupWizard {
     const request = { type: "raw", connection_id: p.connection, model: p.model, userId: user, messages: p.messages, parameters: { max_tokens: 2000 }, signal: controller.signal };
     let stage = "request";
     try {
-      const response = await Promise.race([this.api.generate.raw(request), new Promise((_, reject) => {
+      const content = await Promise.race([checkedModelReply(() => this.api.generate.raw(request)), new Promise((_, reject) => {
         timer = setTimeout(() => {
           controller.abort();
-          reject(new SetupError("Setup failed: Timeout. Nothing was saved.", "timeout"));
+          reject(new SetupError("The request timed out. Try again. Nothing was saved.", "timeout"));
         }, 90000);
       })]);
-      if (!isRecord(response) || typeof response.content !== "string")
-        throw new SetupError("Setup failed: Invalid output. Nothing was saved.", "invalid output");
-      if (!response.content.trim())
-        throw new SetupError("Setup failed: Empty reply. Nothing was saved.", "empty reply");
       stage = "state";
       const doc = await this.current(p);
       stage = "validation";
-      const data = validateSetup(response.content, p.source, p.fields, doc.settings.fakeAddresses);
+      const data = validateSetup(content, p.source, p.fields, doc.settings.fakeAddresses);
       for (const c of data.contacts)
         if (normalize(c.name) === normalize(p.names[1] ?? "")) {
           delete c.roles;
@@ -902,6 +1047,8 @@ class SetupWizard {
       p.data = withFakeAddresses(doc, { ...filtered, contacts: setupReview(doc, data.contacts) }, p.fields);
       return { id, data: p.data };
     } catch (error) {
+      if (error instanceof ModelCallError)
+        throw new SetupError(`${error.message} Nothing was saved.`, error.category);
       if (error instanceof SetupError) {
         if (!error.category)
           throw new SetupError(error.message, error.message.startsWith("Setup returned invalid") ? "invalid output" : "validation rejected");
@@ -2330,6 +2477,7 @@ function helperValues(content, doc, rows = []) {
   if (content.length > 64000)
     throw new HelperFailure("invalid output");
   let clean = content.trim();
+  const jsonFence = /^```json(?:[ \t]|\r?\n)/i.test(clean);
   const fence = clean.match(/^```(?:json|text|plaintext|phone-state)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/i);
   if (fence)
     clean = fence[1].trim();
@@ -2340,12 +2488,12 @@ function helperValues(content, doc, rows = []) {
   if (/<\/?phone-(?:text|email)\b/i.test(clean))
     throw new HelperFailure("validation rejected");
   let input;
-  if (clean.startsWith("{")) {
+  if (jsonFence || clean.startsWith("{")) {
     let json;
     try {
       json = JSON.parse(clean);
     } catch {
-      throw new HelperFailure("invalid output");
+      throw new ModelCallError("invalid JSON", "The reply was invalid JSON.");
     }
     if (!isRecord(json))
       throw new HelperFailure("validation rejected");
@@ -2498,15 +2646,20 @@ class HelperAI {
       this.io.changed(userId, chatId);
     } catch {}
   }
-  async failure(userId, chatId, category, fallback = false) {
+  async failure(userId, chatId, category, fallback = false, message) {
     try {
       this.io.warn(`Lumi Phone Tracker: Helper AI: ${category}.`);
     } catch {}
-    if (userId && chatId)
+    if (userId && chatId && message) {
+      try {
+        this.io.modelFailure?.(userId, chatId, message);
+      } catch {}
+    }
+    if (userId && chatId && !message)
       await this.store.helperNotice(userId, chatId, helperNoticeText(category), fallback).catch(() => {});
     if (userId && chatId)
       this.notify(userId, chatId);
-    return { ok: false, category };
+    return { ok: false, category, ...message ? { message } : {} };
   }
   async profiles(userId) {
     let timer;
@@ -2547,10 +2700,11 @@ class HelperAI {
         throw new HelperFailure("permission missing");
       if (this.busy(chatId))
         throw new HelperFailure("validation rejected");
-      const doc = await this.store.sync(userId, chatId);
+      const doc = await this.store.preview(chatId, userId);
       if (this.active.get(chatId)?.size)
         throw new HelperFailure("validation rejected");
       if (doc.settings.source === "main") {
+        await this.store.sync(userId, chatId);
         await this.store.helperNotice(userId, chatId, null);
         this.notify(userId, chatId);
         return { ok: true };
@@ -2643,13 +2797,14 @@ class HelperAI {
     let timer;
     let timedOut = false;
     let abortHandler;
+    let modelStarted = false;
     if (this.running.has(chatId) || this.active.get(chatId)?.size)
       return { ok: false, category: "validation rejected" };
     this.running.set(chatId, controller);
     try {
       if (!userId)
         throw new HelperFailure("permission missing");
-      const initial = await this.store.sync(userId, chatId);
+      const initial = await this.store.preview(chatId, userId);
       if (initial.settings.source !== "helper")
         return { ok: true };
       if (initial.helperOwner !== userId)
@@ -2686,19 +2841,24 @@ class HelperAI {
         abortHandler = () => reject(new HelperFailure(timedOut ? "timeout" : "validation rejected"));
         controller.signal.addEventListener("abort", abortHandler, { once: true });
       });
-      const result = await Promise.race([this.io.generate({ model: connection.model, messages: input.messages, connection_id: ticket.doc.settings.connection_id, userId, parameters: { max_tokens: 2400 }, signal: controller.signal }), aborted]);
+      modelStarted = true;
+      const content = await Promise.race([checkedModelReply(() => this.io.generate({ model: connection.model, messages: input.messages, connection_id: connection.id, userId, parameters: { max_tokens: 2400 }, signal: controller.signal })), aborted]);
       if (controller.signal.aborted || this.active.get(chatId)?.size)
         throw new HelperFailure(timedOut ? "timeout" : "validation rejected");
-      if (!result || typeof result.content !== "string")
-        throw new HelperFailure("invalid output");
-      const values = helperValues(result.content, ticket.doc, ticket.recent);
+      const values = helperValues(content, ticket.doc, ticket.recent);
       if (!await this.store.helperFinish(userId, ticket, values, input.prose))
         throw new HelperFailure("validation rejected");
-      await this.store.helperNotice(userId, chatId, null);
+      await this.store.helperNotice(userId, chatId, null).catch(() => {});
+      try {
+        this.io.modelFailure?.(userId, chatId, null);
+      } catch {}
       this.notify(userId, chatId);
       return { ok: true };
     } catch (error) {
-      return await this.failure(userId, chatId, failureCategory(error));
+      const category = failureCategory(error);
+      const messages = { timeout: "The request timed out. Try again.", "empty reply": "The provider returned an empty reply.", "invalid output": "The reply could not be read as tracker data.", "validation rejected": "The reply could not be applied to this chat." };
+      const detail = error instanceof ModelCallError ? error.message : messages[category] ?? "The tracker request failed.";
+      return await this.failure(userId, chatId, category, false, modelStarted ? `${detail} Nothing was saved.` : undefined);
     } finally {
       if (timer)
         clearTimeout(timer);
@@ -4016,10 +4176,12 @@ class PhoneStore {
       const raw = await this.io.read(chatId);
       const revision = raw ? readDocument(raw, chatId).revision : 0;
       doc.revision = revision;
-      if (JSON.stringify(doc) !== raw)
-        doc.revision++;
-      doc.helperAttempts.push(attempt);
-      await this.io.write(chatId, JSON.stringify(doc));
+      if (expected) {
+        if (JSON.stringify(doc) !== raw)
+          doc.revision++;
+        doc.helperAttempts.push(attempt);
+        await this.io.write(chatId, JSON.stringify(doc));
+      }
       return { doc, recent, history: JSON.stringify(rows.map(rowSignature)) };
     });
   }
@@ -4298,16 +4460,17 @@ var helper = new HelperAI(store, {
   wording: async (userId) => selectedWording(await personal.read(userId), "helper"),
   allowed: () => spindle.permissions.has("generation") && spindle.permissions.has("chats") && spindle.permissions.has("chat_mutation"),
   connections: async (userId) => (await spindle.connections.list(userId)).map((c) => ({ id: c.id, name: c.name, model: c.model })),
-  generate: async (input) => {
-    const result = await spindle.generate.raw({ type: "raw", ...input });
-    if (!isRecord(result) || typeof result.content !== "string")
-      throw new HelperFailure("invalid output");
-    return { content: result.content, finish_reason: typeof result.finish_reason === "string" ? result.finish_reason : "" };
-  },
+  generate: (input) => spindle.generate.raw({ type: "raw", ...input }),
+  modelFailure: (userId, chatId, message) => spindle.sendToFrontend({ type: "phone_model_failure", chatId, message }, userId),
   changed: (userId, chatId) => spindle.sendToFrontend({ type: "phone_helper_changed", chatId }, userId),
   warn: (text) => warn(text)
 });
 var setupWizard = new SetupWizard(spindle, store);
+var setupChoices = new SetupChoiceStore({
+  authorize: async (user, chat) => (await spindle.chats.get(chat, user))?.id === chat,
+  read: (user, chat) => spindle.userStorage.getJson(`setup-choices/${chatPath(chat)}`, { userId: user, fallback: [] }),
+  write: (user, chat, choices) => spindle.userStorage.setJson(`setup-choices/${chatPath(chat)}`, choices, { userId: user })
+});
 if (spindle.frontendCapabilities?.declare)
   spindle.frontendCapabilities.declare("message_tag_interceptor");
 else
@@ -4387,12 +4550,14 @@ spindle.onFrontendMessage((payload, userId) => {
       warn("Lumi Phone Tracker: frontend user context unavailable; request ignored.");
     return;
   }
-  if (isRecord(payload) && ["phone_setup_prepare", "phone_setup_run", "phone_setup_save"].includes(String(payload.type)) && typeof payload.requestId === "string" && payload.requestId.length <= 100 && typeof payload.chatId === "string" && payload.chatId.length <= 256) {
+  if (isRecord(payload) && ["phone_setup_prepare", "phone_setup_run", "phone_setup_save", "phone_setup_choices", "phone_setup_choices_save"].includes(String(payload.type)) && typeof payload.requestId === "string" && payload.requestId.length <= 100 && typeof payload.chatId === "string" && payload.chatId.length <= 256) {
     (async () => {
       requireReadPermissions();
       const chat = payload.chatId;
       let result;
-      if (payload.type === "phone_setup_prepare")
+      if (payload.type === "phone_setup_choices" || payload.type === "phone_setup_choices_save")
+        result = { choices: await setupChoices.access(userId, chat, payload.type === "phone_setup_choices_save", payload.choices) };
+      else if (payload.type === "phone_setup_prepare")
         result = await setupWizard.prepare(userId, chat, payload.choices);
       else {
         if (typeof payload.id !== "string" || payload.id.length > 100)
@@ -4467,7 +4632,7 @@ spindle.onFrontendMessage((payload, userId) => {
   if (isRecord(payload) && ["phone_connections", "phone_helper_now"].includes(String(payload.type)) && typeof payload.requestId === "string" && payload.requestId.length <= 100 && typeof payload.chatId === "string" && payload.chatId.length <= 256) {
     (async () => {
       requireReadPermissions();
-      await store.sync(userId, payload.chatId);
+      await store.preview(payload.chatId, userId);
       if (payload.type === "phone_connections") {
         const info = await helper.connections(userId, payload.chatId);
         spindle.sendToFrontend({ type: "phone_connections_result", requestId: payload.requestId, chatId: payload.chatId, info }, userId);

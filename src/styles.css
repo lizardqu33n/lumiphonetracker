@@ -1759,3 +1759,6 @@
 
 .lpt-field-unit {min-width:0;display:flex;flex-direction:column;}
 .lpt-field-unit > .lpt-field {width:100%;}
+
+.lpt-model-error {flex-wrap:wrap;}
+.lpt-model-error-message {overflow-wrap:anywhere;user-select:text;}

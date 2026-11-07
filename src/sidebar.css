@@ -122,3 +122,8 @@
 .lpt-setup-merge-target,.lpt-setup-keep-name,.lpt-fake-domain {width:100%;max-width:100%;min-width:0;min-height:var(--lpt-side-target);background:var(--lpt-side-bg);color:var(--lpt-side-text);border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);}
 .lpt-setup-button[aria-pressed="true"] {font-weight:bold;text-decoration:underline;}
 .lpt-setup-match,.lpt-edit-warning {font-weight:bold;}
+
+.lpt-setup-group-actions {display:flex;flex-basis:100%;gap:var(--lpt-side-gap);flex-wrap:wrap;}
+.lpt-copy-error {margin-inline-start:var(--lpt-side-gap,6px);}
+.lpt-model-error-message {overflow-wrap:anywhere;user-select:text;}
+.lpt-refresh-result {max-height:min(30dvh,14rem);overflow:auto;}

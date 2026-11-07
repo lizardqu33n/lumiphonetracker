@@ -1,3 +1,4 @@
+import {showCopyableError} from "./copy-error";
 import {fieldKey,restorable,fieldValue,type FieldRef} from "./field-protection";
 import {CONTACT_ICONS} from "./contact-icons";
 import {emptyContactInfo,contactDuplicates,contactMatch} from "./contact-info";
@@ -74,6 +75,7 @@ export class PhoneView {
   private storyStrip=el("div","lpt-story-strip");
   private heading = el("h1", "lpt-heading");
   private back = button("", "lpt-back", () => this.navigate("Home"));
+  private modelError="";
   private error = el("p", "lpt-error");
   private status = el("p", "lpt-status");
   private doc: PhoneDocument | null = null;
@@ -126,6 +128,7 @@ export class PhoneView {
     this.doc = doc;
     if(this.app!=="Home"&&!doc?.settings.apps[this.app])this.app="Home";
     if (changedChat) {
+      this.modelError="";
       this.selectedContact=null;this.contactOrigin="Contacts";this.contactScroll=0;this.portraitEpoch++;this.portraitSources=emptyPortraitSources();this.chatEpoch++; this.pendingReads.clear(); this.reads = reads ?? emptyReads(); this.replyDrafts.clear();this.replySelections.clear(); this.manualDrafts.clear();
       this.clearTextNotice(); this.editing = false; this.app = "Home"; this.selectedText = null;
 
@@ -152,6 +155,7 @@ export class PhoneView {
     if(source)try{portraitBytes(source);const img=el("img","lpt-portrait-image");img.alt="";img.setAttribute("aria-hidden","true");img.draggable=false;img.addEventListener("load",()=>{initial.hidden=true;});img.addEventListener("error",()=>{img.remove();initial.hidden=false;});img.src=source;node.append(img);}catch{}
     return node;
   }
+  setModelError(message:string):void {if(this.modelError!==message){this.modelError=message;this.render();}}
   setError(message: string): void { renderEmojiText(this.error,message); }
   setStatus(message: string): void { renderEmojiText(this.status,message); }
   fit(): void { this.measure(); }
@@ -228,6 +232,7 @@ export class PhoneView {
       else if(["Calls","Email","Bank"].includes(this.app))this.activities(this.app as "Calls"|"Email"|"Bank");
 
     }
+    if(this.modelError){const notice=el("div","lpt-notice lpt-model-error");notice.setAttribute("role","status");showCopyableError(notice,this.modelError);this.content.append(notice);}
     if (this.doc) for (const text of this.doc.state.notices) {
       const notice = el("div", "lpt-notice");
       notice.append(el("span", "lpt-notice-text", text), button("Dismiss", "lpt-dismiss", () => { void this.change({ dismissNotice: text }); }));

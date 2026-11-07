@@ -1,6 +1,7 @@
+import { checkedModelReply, ModelCallError } from "./model-errors";
 import {composeWording} from "./wording";
 import {helperCallSource} from "./calls";
-import type { GenerationRequestDTO, GenerationResponseDTO } from "lumiverse-spindle-types";
+import type { GenerationRequestDTO } from "lumiverse-spindle-types";
 import { PhoneStore, type HelperTicket } from "./phone-store";
 import { effectiveDocument, CONTACT_KEYS, SCENE_KEYS, SECTIONS, normalize, type Document, type Cell, type CallData } from "./model";
 import { change, validateExpanded, parseExpanded, parseExpandedReply } from "./schema";
@@ -16,7 +17,8 @@ export interface HelperIO {
   wording?(userId:string):Promise<string|undefined>;
   allowed(): boolean;
   connections(userId: string): Promise<{ id: string; name: string; model: string }[]>;
-  generate(input: Omit<GenerationRequestDTO,"type"> & {model:string}): Promise<GenerationResponseDTO>;
+  generate(input: Omit<GenerationRequestDTO,"type"> & {model:string}): Promise<unknown>;
+  modelFailure?(userId:string,chatId:string,message:string|null):void;
   changed(userId: string, chatId: string): void;
   warn(text: string): void;
 }
@@ -26,14 +28,15 @@ export function helperValues(content: string, doc: Document, rows:StoryRow[]=[])
   if(content.length>64000)throw new HelperFailure("invalid output");
   let clean=content.trim();
   // One complete outer code fence is presentation, not data repair.
+  const jsonFence=/^```json(?:[ \t]|\r?\n)/i.test(clean);
   const fence=clean.match(/^```(?:json|text|plaintext|phone-state)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/i);
   if(fence)clean=fence[1].trim();
   else if(clean.includes("```"))throw new HelperFailure("invalid output");
   if(!clean)throw new HelperFailure("empty reply");
   if(/<\/?phone-(?:text|email)\b/i.test(clean))throw new HelperFailure("validation rejected");
   let input:unknown;
-  if(clean.startsWith("{")) {
-    let json:unknown;try{json=JSON.parse(clean);}catch{throw new HelperFailure("invalid output");}
+  if(jsonFence||clean.startsWith("{")) {
+    let json:unknown;try{json=JSON.parse(clean);}catch{throw new ModelCallError("invalid JSON","The reply was invalid JSON.");}
     if(!isRecord(json))throw new HelperFailure("validation rejected");
     const allowed=[...SCENE_KEYS,"weather","contacts","locations","calls","bank","transactions",...SECTIONS.filter(k=>k!=="misc")];
     if(Object.keys(json).some(k=>!allowed.includes(k)))throw new HelperFailure("validation rejected");
@@ -126,11 +129,12 @@ export class HelperAI {
   private notify(userId:string,chatId:string):void {
     try{this.io.changed(userId,chatId);}catch{/* Frontend delivery cannot fail tracking. */}
   }
-  private async failure(userId:string,chatId:string,category:HelperFailureCategory,fallback=false):Promise<RefreshResult> {
+  private async failure(userId:string,chatId:string,category:HelperFailureCategory,fallback=false,message?:string):Promise<RefreshResult> {
     try{this.io.warn(`Lumi Phone Tracker: Helper AI: ${category}.`);}catch{/* Never expose exceptions. */}
-    if(userId&&chatId)await this.store.helperNotice(userId,chatId,helperNoticeText(category),fallback).catch(()=>{});
+    if(userId&&chatId&&message){try{this.io.modelFailure?.(userId,chatId,message);}catch{/* Delivery is optional. */}}
+    if(userId&&chatId&&!message)await this.store.helperNotice(userId,chatId,helperNoticeText(category),fallback).catch(()=>{});
     if(userId&&chatId)this.notify(userId,chatId);
-    return {ok:false,category};
+    return {ok:false,category,...(message?{message}:{})};
   }
   private async profiles(userId:string):Promise<{id:string;name:string;model:string}[]> {
     let timer:ReturnType<typeof setTimeout>|undefined;
@@ -160,9 +164,10 @@ export class HelperAI {
     try {
       if(!userId)throw new HelperFailure("permission missing");
       if(this.busy(chatId))throw new HelperFailure("validation rejected");
-      const doc=await this.store.sync(userId,chatId);
+      const doc=await this.store.preview(chatId,userId);
       if(this.active.get(chatId)?.size)throw new HelperFailure("validation rejected");
       if(doc.settings.source==="main") {
+        await this.store.sync(userId,chatId);
         await this.store.helperNotice(userId,chatId,null);this.notify(userId,chatId);return {ok:true};
       }
       if(doc.helperOwner!==userId)throw new HelperFailure("permission missing");
@@ -209,12 +214,13 @@ export class HelperAI {
     const {userId,chatId}=job;let ticket:HelperTicket|null=null;
     const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;let timedOut=false;
     let abortHandler:(()=>void)|undefined;
+    let modelStarted=false;
     if(this.running.has(chatId)||this.active.get(chatId)?.size)return {ok:false,category:"validation rejected"};
     this.running.set(chatId,controller);
     try {
       if(!userId)throw new HelperFailure("permission missing");
       // Sync first, so Main AI never makes a provider call or a generation-permission failure.
-      const initial=await this.store.sync(userId,chatId);
+      const initial=await this.store.preview(chatId,userId);
       if(initial.settings.source!=="helper")return {ok:true};
       if(initial.helperOwner!==userId)throw new HelperFailure("permission missing");
       if(!this.io.allowed())throw new HelperFailure("permission missing");
@@ -236,13 +242,20 @@ export class HelperAI {
         controller.signal.addEventListener("abort",abortHandler,{once:true});
       });
       // Passing signal is documented. Racing it also bounds providers that ignore cancellation.
-      const result=await Promise.race([this.io.generate({model:connection.model,messages:input.messages,connection_id:ticket.doc.settings.connection_id!,userId,parameters:{max_tokens:2400},signal:controller.signal}),aborted]);
+      modelStarted=true;
+      const content=await Promise.race([checkedModelReply(()=>this.io.generate({model:connection.model,messages:input.messages,connection_id:connection.id,userId,parameters:{max_tokens:2400},signal:controller.signal})),aborted]);
       if(controller.signal.aborted||this.active.get(chatId)?.size)throw new HelperFailure(timedOut?"timeout":"validation rejected");
-      if(!result||typeof result.content!=="string")throw new HelperFailure("invalid output");
-      const values=helperValues(result.content,ticket.doc,ticket.recent);
+      const values=helperValues(content,ticket.doc,ticket.recent);
       if(!await this.store.helperFinish(userId,ticket,values,input.prose))throw new HelperFailure("validation rejected");
-      await this.store.helperNotice(userId,chatId,null);this.notify(userId,chatId);return {ok:true};
-    } catch(error) {return await this.failure(userId,chatId,failureCategory(error));}
+      await this.store.helperNotice(userId,chatId,null).catch(()=>{});
+      try{this.io.modelFailure?.(userId,chatId,null);}catch{/* Delivery is optional. */}
+      this.notify(userId,chatId);return {ok:true};
+    } catch(error) {
+      const category=failureCategory(error);
+      const messages:Partial<Record<HelperFailureCategory,string>>={"timeout":"The request timed out. Try again.","empty reply":"The provider returned an empty reply.","invalid output":"The reply could not be read as tracker data.","validation rejected":"The reply could not be applied to this chat."};
+      const detail=error instanceof ModelCallError?error.message:messages[category]??"The tracker request failed.";
+      return await this.failure(userId,chatId,category,false,modelStarted?`${detail} Nothing was saved.`:undefined);
+    }
     finally {
       if(timer)clearTimeout(timer);if(abortHandler)controller.signal.removeEventListener("abort",abortHandler);
       if(this.running.get(chatId)===controller)this.running.delete(chatId);
