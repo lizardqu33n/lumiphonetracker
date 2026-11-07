@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.18.1 - Field action icons
+
+- Lock, Unlock and Restore my version now use embedded 32 px pixel-art icons with their original accessible names.
+
 ## 0.18.0 - Weather app rework
 
 - Weather shows a large condition sprite and the stated temperature, with an optional description and chips for alerts and Scene values.

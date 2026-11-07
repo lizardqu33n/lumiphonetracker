@@ -1,4 +1,6 @@
-# Verification report - 0.18.0
+# Verification report - 0.18.1
+
+267 code tests and 349 browser checks passed. The browser verified three distinct embedded icons at 32 px, 44 px tap targets, accessible names, and Lock, Unlock and Restore behavior. Type checking, reproducible builds and package validation passed. Live Lumiverse was not used.
 
 Checked November 7, 2026 (America/Chicago), using Bun, TypeScript and headless Microsoft Edge through Playwright. No live Lumiverse session or real model connection was used.
 

@@ -366,7 +366,7 @@ try {
   check(await ui(page).locator(".lpt-form").count() === 1 && (await ui(page).locator(".lpt-error").innerText()).length > 0, "Invalid note stays in its form without replacing saved data");
   await ui(page).locator('.lpt-form [name="detail"]').fill('&lt;img src=x onerror="window.injected=true"&gt;');
   await save(page);
-  check(await ui(page).locator(".lpt-note img").count() === 0 && !(await page.evaluate(() => (window as any).injected)), "Generated text never becomes HTML");
+  check(await ui(page).locator(".lpt-note-line img").count() === 0 && !(await page.evaluate(() => (window as any).injected)), "Generated text never becomes HTML");
   await ui(page).locator('[data-section="misc"] > summary').click();
   check((await ui(page).locator(".lpt-note-line").last().innerText()).includes("&lt;img"), "Entity-like text is displayed literally");
   await seed(page, "empty"); await open(page, "Contacts");
@@ -636,8 +636,31 @@ try {
   await home(fixPage);await open(fixPage,"Scene");await fixPage.getByRole("button",{name:"Edit Time",exact:true}).click();await fixPage.locator('.lpt-form [name="value"]').fill("My noon");await save(fixPage);await section(fixPage,"advanced");await fixPage.getByRole("switch",{name:"Let the AI change fields I edited",exact:true}).check();await fixPage.waitForTimeout(120);
   check(await fixPage.locator(".lpt-edit-warning").isVisible(),"Enabling the AI-edit exception displays its warning");await fixPage.evaluate(()=>(window as any).harness.activityStory('It is now Dusk.<phone-state>time: Dusk ~ "It is now Dusk."</phone-state>'));await fixPage.waitForTimeout(120);
   check((await fixPage.getByRole("button",{name:"Edit Time",exact:true}).innerText()).includes("Dusk")&&await fixPage.getByRole("button",{name:"Restore my version of Time",exact:true}).isVisible(),"A quoted newer fact can replace the edit while Restore my version stays available");
+  const timeActions = fixPage.locator(".lpt-field-unit").filter({has:fixPage.getByRole("button",{name:"Edit Time",exact:true})});
+  const actionArtwork = async () => timeActions.locator(".lpt-field-action-icon").evaluateAll(async images => {
+    await Promise.all(images.map(image => (image as HTMLImageElement).decode()));
+    return images.map(node => {
+      const image = node as HTMLImageElement;
+      const control = image.closest("button")!;
+      const bounds = control.getBoundingClientRect();
+      const style = getComputedStyle(image);
+      return {src:image.src, valid:image.alt==="" && image.src.startsWith("data:image/png;base64,") &&
+        style.width==="32px" && style.height==="32px" && style.imageRendering==="pixelated" &&
+        bounds.width>=44 && bounds.height>=44 && control.title===control.getAttribute("aria-label")};
+    });
+  });
+  const unlockedArtwork = await actionArtwork();
+  check(unlockedArtwork.length===2 && unlockedArtwork.every(icon=>icon.valid) && unlockedArtwork[0].src!==unlockedArtwork[1].src,
+    "Lock and Restore show distinct embedded 32 px art with 44 px targets and matching tooltips");
   await fixPage.getByRole("button",{name:"Restore my version of Time",exact:true}).click();await fixPage.waitForTimeout(100);check((await fixPage.getByRole("button",{name:"Edit Time",exact:true}).innerText()).includes("My noon"),"Restore my version restores the saved user field");
   await fixPage.getByRole("button",{name:"Lock Time",exact:true}).click();await fixPage.waitForTimeout(100);await fixPage.evaluate(()=>(window as any).harness.activityStory('It is now Midnight.<phone-state>time: Midnight ~ "It is now Midnight."</phone-state>'));await fixPage.waitForTimeout(120);check((await fixPage.getByRole("button",{name:"Edit Time",exact:true}).innerText()).includes("My noon")&&await fixPage.getByRole("button",{name:"Unlock Time",exact:true}).isVisible(),"An explicit per-field lock blocks even a quoted AI update with the exception on");
+  const unlock = fixPage.getByRole("button",{name:"Unlock Time",exact:true});
+  const lockedArtwork = await actionArtwork();
+  check(lockedArtwork.length===1 && lockedArtwork[0].valid && unlockedArtwork.every(icon=>icon.src!==lockedArtwork[0].src) &&
+    await unlock.getAttribute("aria-pressed")==="true", "Unlock has its own embedded 32 px icon and remains marked pressed");
+  await unlock.click();
+  await fixPage.getByRole("button",{name:"Lock Time",exact:true}).waitFor();
+  check((await actionArtwork())[0].src===unlockedArtwork[0].src,"Unlock restores the lock button and its original artwork");
   await fixPage.locator(".harness-widget").screenshot({path:".test-artifacts/wizard-fix2-fields.png"});await fixPage.close();
   const weatherPage=await browser.newPage({viewport:{width:1100,height:850}});await weatherPage.goto(`http://127.0.0.1:${server.port}`);await seed(weatherPage);await open(weatherPage,"Weather");
   const weatherCard=weatherPage.locator(".lpt-weather-card");check(await weatherCard.evaluate(n=>n.classList.contains("is-other"))&&(await weatherCard.innerText()).includes("Soft rain"),"Legacy free-text weather displays unchanged as Other");

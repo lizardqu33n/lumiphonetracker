@@ -2,6 +2,7 @@ import { WEATHER_CONDITIONS, WEATHER_SWITCHES, WEATHER_ALERT_ENDED, displayCondi
 import { WEATHER_ICONS } from "./weather-icons";
 import {showCopyableError} from "./copy-error";
 import {fieldKey,restorable,fieldValue,type FieldRef} from "./field-protection";
+import { FIELD_ICONS } from "./field-icons";
 import {CONTACT_ICONS} from "./contact-icons";
 import {emptyContactInfo,contactDuplicates,contactMatch} from "./contact-info";
 import {renderEmojiText,attachEmojiPicker} from "./emoji";
@@ -59,6 +60,17 @@ export function icon(name: string): SVGSVGElement {
 }
 function button(label: string, cls: string, fn: () => void): HTMLButtonElement {
   const b = el("button", cls, label); b.type = "button"; b.addEventListener("click", fn); return b;
+}
+function fieldActionButton(action: keyof typeof FIELD_ICONS, label: string, onClick: () => void): HTMLButtonElement {
+  const control = button("", `lpt-button lpt-field-${action === "restore" ? "restore" : "lock"}`, onClick);
+  control.setAttribute("aria-label", label);
+  control.title = label;
+  const image = el("img", "lpt-field-action-icon");
+  image.src = FIELD_ICONS[action];
+  image.alt = "";
+  image.draggable = false;
+  control.append(image);
+  return control;
 }
 const lines = (text: string) => text.split("\n").map(s => s.trim()).filter(Boolean);
 const valueText = (cell?: Cell): string => {
@@ -332,8 +344,19 @@ export class PhoneView {
   }
   private fieldControls(parent:HTMLElement,ref:FieldRef,label:string):void {
     const row=el("div","lpt-field-controls"),locked=this.doc?.fieldLocks?.[fieldKey(ref)]===true,epoch=this.chatEpoch;
-    const control=button(locked?"Unlock":"Lock","lpt-button lpt-field-lock",()=>{if(epoch===this.chatEpoch&&row.isConnected)void this.change({fieldControl:{...ref,action:locked?"unlock":"lock"}});});control.setAttribute("aria-label",`${locked?"Unlock":"Lock"} ${label}`);control.setAttribute("aria-pressed",String(locked));row.classList.toggle("is-locked",locked);row.append(control);
-    if(restorable(this.doc!,ref)){const restore=button("Restore my version","lpt-button lpt-field-restore",()=>{if(epoch===this.chatEpoch&&row.isConnected)void this.change({fieldControl:{...ref,action:"restore"}});});restore.setAttribute("aria-label",`Restore my version of ${label}`);row.append(restore);}parent.append(row);
+    const action = locked ? "unlock" : "lock";
+    const control = fieldActionButton(action, `${locked ? "Unlock" : "Lock"} ${label}`, () => {
+      if (epoch === this.chatEpoch && row.isConnected) void this.change({fieldControl:{...ref, action}});
+    });
+    control.setAttribute("aria-pressed", String(locked));
+    row.classList.toggle("is-locked", locked);
+    row.append(control);
+    if (restorable(this.doc!, ref)) {
+      row.append(fieldActionButton("restore", `Restore my version of ${label}`, () => {
+        if (epoch === this.chatEpoch && row.isConnected) void this.change({fieldControl:{...ref, action:"restore"}});
+      }));
+    }
+    parent.append(row);
   }
   private mergeContactUI(parent:HTMLElement,c:Contact):void {
     if(this.doc!.state.contacts.length<2)return;const epoch=this.chatEpoch,open=button("Merge contacts","lpt-button lpt-merge-open",()=>{
