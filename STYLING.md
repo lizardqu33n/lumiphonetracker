@@ -844,3 +844,50 @@ The original phone frame, launcher and app class names remain unchanged.
 | `.lpt-copy-error` | Copies the displayed error message. |
 
 The sidebar error uses the existing `.lpt-refresh-result` area beneath the toolbar.
+
+## Weather screen
+
+The Weather card uses the Contact page colors and spacing by default. Define these variables on `.lpt-root`. Keep the screen, card and chip colors opaque.
+
+| Variable | What it changes |
+| --- | --- |
+| `--lpt-weather-bg` | App screen background. |
+| `--lpt-weather-card-bg` | Main card background. |
+| `--lpt-weather-chip-bg` | Chip background. |
+| `--lpt-weather-text` | Primary text. |
+| `--lpt-weather-muted` | Secondary text. |
+| `--lpt-weather-alert-color` | Active alert text and border. |
+| `--lpt-weather-gap` | Space between rows and chips. |
+| `--lpt-weather-padding` | Card padding. |
+| `--lpt-weather-radius` | Card corner radius. |
+| `--lpt-weather-chip-radius` | Chip corner radius. |
+| `--lpt-weather-border` | Card and chip border color. |
+| `--lpt-weather-border-width` | Border width. |
+| `--lpt-weather-icon-size` | Condition icon width, 108px by default. |
+| `--lpt-weather-temperature-size` | Large temperature text size. |
+| `--lpt-weather-condition-size` | Condition label text size. |
+| `--lpt-weather-small-size` | Description, chip and controls text size. |
+| `--lpt-weather-font` | Weather font family. |
+| `--lpt-weather-target` | Minimum height of editable values. |
+
+| Class | Part of the screen |
+| --- | --- |
+| `.lpt-weather` | Weather app screen. |
+| `.lpt-weather-card` | Condition, temperature and extras card. |
+| `.lpt-weather-hero` | Centered condition, temperature and description group. |
+| `.lpt-weather-condition` | Editable condition control. |
+| `.lpt-weather-icon` | Embedded pixel art sprite. |
+| `.lpt-weather-condition-label` | Written condition below the sprite. |
+| `.lpt-weather-temperature` | Editable temperature control. |
+| `.lpt-weather-description` | Editable one-line description. |
+| `.lpt-weather-chips` | Wrapping row for optional details. |
+| `.lpt-weather-chip` | Scene detail chip. |
+| `.lpt-weather-time`, `.lpt-weather-date`, `.lpt-weather-season` | Individual Scene detail chips. |
+| `.lpt-weather-alert` | Editable alert chip or Add alert control. |
+| `.lpt-weather-controls` | Collapsible field locks and saved versions. |
+| `.lpt-weather-controls-title` | Locks and restore heading. |
+| `.lpt-weather-control-row` | A field's protection controls. |
+| `.lpt-weather-control-label` | Field name next to its controls. |
+| `.lpt-weather-unit-label`, `.lpt-weather-unit` | Unit picker label and select in the sidebar stylesheet. |
+
+Condition states on the card are `.is-sunny`, `.is-clear-night`, `.is-partly-cloudy`, `.is-cloudy`, `.is-rain`, `.is-storm`, `.is-snow`, `.is-fog`, `.is-windy` and `.is-other`. The card or an editable control uses `.is-empty` when it has no value. The card and alert chip use `.is-alert` while an alert is active. The unit picker lives outside phone custom CSS.

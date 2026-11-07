@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.18.0 - Weather app rework
+
+- Weather shows a large condition sprite and the stated temperature, with an optional description and chips for alerts and Scene values.
+- Condition and Temperature start on. Extras start off. F and C change the displayed label only.
+- Old weather text stays saved. The new tracker fields support edits, locks and confirmed alert clearing.
+- The preset still uses `{{phone_format}}`. Weather writing lines reflect the enabled fields and reuse Scene for time, date and season.
+
 ## 0.17.1 - Clear model errors and remembered wizard choices
 
 - Setup and Custom connection tracking check request failures and finish reasons

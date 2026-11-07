@@ -1762,3 +1762,40 @@
 
 .lpt-model-error {flex-wrap:wrap;}
 .lpt-model-error-message {overflow-wrap:anywhere;user-select:text;}
+
+/* Weather card and chips use the Contacts surfaces. */
+.lpt-root {
+  --lpt-weather-bg:var(--lpt-screen-bg,#19171f);
+  --lpt-weather-card-bg:var(--lpt-contact-surface,#24212d);
+  --lpt-weather-chip-bg:var(--lpt-weather-bg);
+  --lpt-weather-text:var(--lpt-contact-text);
+  --lpt-weather-muted:var(--lpt-contact-muted);
+  --lpt-weather-alert-color:var(--lpt-accent,var(--lpt-weather-text));
+  --lpt-weather-gap:var(--lpt-contact-gap);
+  --lpt-weather-padding:var(--lpt-contact-padding);
+  --lpt-weather-radius:var(--lpt-contact-radius);
+  --lpt-weather-chip-radius:var(--lpt-contact-chip-radius);
+  --lpt-weather-border:var(--lpt-contact-border);
+  --lpt-weather-border-width:var(--lpt-contact-line-width);
+  --lpt-weather-icon-size:108px;
+  --lpt-weather-temperature-size:2.5rem;
+  --lpt-weather-condition-size:1rem;
+  --lpt-weather-small-size:var(--lpt-contact-font-size);
+  --lpt-weather-font:var(--lpt-contact-font);
+  --lpt-weather-target:var(--lpt-contact-target);
+}
+.lpt-weather {background-color:var(--lpt-weather-bg);}
+.lpt-weather-card {display:grid;gap:var(--lpt-weather-gap);min-width:0;padding:var(--lpt-weather-padding);border:var(--lpt-weather-border-width) solid var(--lpt-weather-border);border-radius:var(--lpt-weather-radius);background-color:var(--lpt-weather-card-bg);color:var(--lpt-weather-text);font-family:var(--lpt-weather-font);}
+.lpt-weather-hero {display:grid;gap:var(--lpt-weather-gap);text-align:center;min-width:0;}
+.lpt-weather .lpt-weather-condition,.lpt-weather .lpt-weather-temperature,.lpt-weather .lpt-weather-description,.lpt-weather .lpt-weather-alert {min-width:0;min-height:var(--lpt-weather-target);border:0;background-color:var(--lpt-weather-card-bg);color:var(--lpt-weather-text);font:inherit;cursor:pointer;}
+.lpt-weather-condition {display:grid;place-items:center;gap:var(--lpt-weather-gap);}
+.lpt-weather-icon {width:min(100%,var(--lpt-weather-icon-size));height:auto;aspect-ratio:1;object-fit:contain;image-rendering:pixelated;}
+.lpt-weather-condition-label {font-size:var(--lpt-weather-condition-size);overflow-wrap:anywhere;}
+.lpt-weather .lpt-weather-temperature {font-size:var(--lpt-weather-temperature-size);line-height:1.05;}
+.lpt-weather .lpt-weather-temperature.is-empty,.lpt-weather .lpt-weather-description,.lpt-weather .lpt-weather-controls {font-size:var(--lpt-weather-small-size);color:var(--lpt-weather-muted);}
+.lpt-weather-description {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lpt-weather-chips {display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:var(--lpt-weather-gap);}
+.lpt-weather .lpt-weather-chip,.lpt-weather .lpt-weather-alert {padding:var(--lpt-weather-gap);font-size:var(--lpt-weather-small-size);background-color:var(--lpt-weather-chip-bg);border:var(--lpt-weather-border-width) solid var(--lpt-weather-border);border-radius:var(--lpt-weather-chip-radius);overflow-wrap:anywhere;}
+.lpt-weather-alert.is-alert {color:var(--lpt-weather-alert-color);border-color:currentColor;}
+.lpt-weather-controls-title {cursor:pointer;}
+.lpt-weather-control-row {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--lpt-weather-gap);}

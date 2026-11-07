@@ -121,7 +121,7 @@ describe("Part 1 shorthand and compliance",()=>{
     const doc=run([row(0,'rules: Literal | {{setvar::x::bad}} | Spoken')]);
     expect(formatMacro(doc)).not.toContain("{{setvar");expect(formatMacro(doc)).toContain("Skip ordinary props such as a lighter");
     for(const k of SWITCHES)doc.settings.enabled[k]=false;doc.settings.enabled.weather=true;
-    const text=formatMacro(doc);expect(text).toContain("weather: known weather");expect(text).not.toContain("c: Name");expect(text).not.toContain("p: Place");
+    const text=formatMacro(doc);expect(text).toContain("condition: sunny");expect(text).not.toContain("c: Name");expect(text).not.toContain("p: Place");
     expect(text).not.toContain("key=JSON");
   });
 });

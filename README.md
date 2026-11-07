@@ -53,7 +53,7 @@ Optional Helper AI uses one of your saved connections. It reads only the last 1-
 
 Texts actually sent in the story appear in Messages, grouped by sender. Read badges are per user/chat. Add to draft appends an escaped reply to your normal input without sending or replacing existing prose; it is filed only after the saved user message is sent. AI player texts are OFF by default.
 
-Tap Scene/Weather fields to correct them. Contacts, Locations and all five Notes sections support adding, editing and deleting. User edits are confirmed and protected by newer-story quote checks. The player card excludes private mood/thoughts/roles.
+Tap Scene or Weather fields to correct them. Weather shows the stated condition and temperature. Optional description, alerts and Scene time, date and season can be turned on in the Phone tab. Contacts, Locations and all five Notes sections support adding, editing and deleting. User edits are confirmed and protected by newer-story quote checks. The player card excludes private mood/thoughts/roles.
 
 The phone has solid theme-based backgrounds and embedded user-provided PNG icons for added apps. [STYLING.md](STYLING.md) documents all CSS variables/classes. Custom CSS stays in the phone's Shadow DOM. The single protected Reset appearance button stays with Open phone and Refresh tracker at the top of the sidebar and works independently of floating placement.
 

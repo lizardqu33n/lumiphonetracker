@@ -1,3 +1,4 @@
+import { WEATHER_DETAILS, WEATHER_KEYS, WEATHER_ALERT_ENDED, alertEndedIn, statedTemperature, type WeatherDetail } from "./weather-fields";
 import {canonicalContact,projectMerges} from "./contact-merge";
 import {captureUserVersion,fieldAllows} from "./field-protection";
 import {projectContacts,contactMatch} from "./contact-info";
@@ -143,7 +144,8 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
         }
         else if (SCENE_KEYS.includes(key as never)) patch.scene[key as typeof SCENE_KEYS[number]] = prior.patch.scene[key as typeof SCENE_KEYS[number]];
         else if (["calls","bank","transactions"].includes(key)) {const k=key as "calls";patch[k]=prior.patch[k];}
-        else if (key === "weather") patch.weather = prior.patch.weather;
+        else if (key === "weather" || key === "condition") patch.weather = prior.patch.weather;
+        else if (WEATHER_DETAILS.includes(key as WeatherDetail) && prior.patch.weatherDetails?.[key as WeatherDetail]) (patch.weatherDetails??={})[key as WeatherDetail]=prior.patch.weatherDetails[key as WeatherDetail];
         else if (key === "contacts") patch.contacts = prior.patch.contacts;
         else if (key === "locations") patch.locations = prior.patch.locations;
         else if (SECTIONS.includes(key as never)) patch.notes[key as Section] = prior.patch.notes[key as Section];
@@ -217,6 +219,15 @@ function applyAI(doc: Document, patch: Patch, at: Origin, prose: string, players
   const state = doc.state;
   for (const key of SCENE_KEYS){const c=patch.scene[key];if(c&&fieldAllows(doc,{target:"scene",field:key},c.value,at,prose,c.evidence,c.inferred))state.scene[key]=setCell(state.scene[key],c,at,prose,false);}
   if(patch.weather&&fieldAllows(doc,{target:"weather",field:"weather"},patch.weather.value,at,prose,patch.weather.evidence))state.weather=setCell(state.weather,patch.weather,at,prose,false);
+  for (const field of WEATHER_DETAILS) {
+    const update=patch.weatherDetails?.[field];
+    if (!update) continue;
+    if (field==="temperature" && (typeof update.value!=="string"||!statedTemperature(update.value,prose))) continue;
+    if (field==="weather_alert" && update.value===WEATHER_ALERT_ENDED && (!evidenceValid(update.evidence,prose)||!alertEndedIn(update.evidence!))) continue;
+    if (fieldAllows(doc,{target:"weather",field},update.value,at,prose,update.evidence,update.inferred)) {
+      (state.weatherDetails??={})[field]=setCell(state.weatherDetails?.[field],update,at,prose,false);
+    }
+  }
   if(Array.isArray(state.scene.present?.value))state.scene.present!.value=[...new Set(state.scene.present!.value.map(n=>canonicalContact(doc,n,at.index)))];
   for(const rawContact of patch.contacts){const update={...rawContact,name:canonicalContact(doc,rawContact.name,at.index)};
     const rejectedKey = JSON.stringify([at.id, at.variant, "contacts", update]);
@@ -296,11 +307,13 @@ function applyManualValue(state: State, edit: ManualEdit, players: Set<string>, 
   if(applyActivityEdit(state,edit,tombstones,players,allowPlayer||edit.playerWritingAllowed===true))return;
   const at = { id: `edit:${edit.id}`, index: edit.index, variant: "user" };
   if (edit.target === "scene" || edit.target === "weather") {
-    const field = edit.target === "weather" ? "weather" : edit.field;
-    if (!field || (field !== "weather" && !SCENE_KEYS.includes(field as never))) throw new Error("Invalid editable field");
+    const field = edit.target === "weather" ? edit.field??"weather" : edit.field;
+    if (!field || (edit.target==="weather"?!WEATHER_KEYS.includes(field as never):!SCENE_KEYS.includes(field as never))) throw new Error("Invalid editable field");
     const value = change(field, edit.value); if (!value) throw new Error("An edit needs a value");
     const cell: Cell = { value: value.value, by: edit.source?"ai":"user", at, inferred: false };
-    if (field === "weather") state.weather = cell; else state.scene[field as typeof SCENE_KEYS[number]] = cell;
+    if (field === "weather") state.weather = cell;
+    else if(edit.target==="weather")(state.weatherDetails??={})[field as WeatherDetail]=cell;
+    else state.scene[field as typeof SCENE_KEYS[number]] = cell;
     return;
   }
   if (!short(edit.name, 100) || !edit.name.trim()) throw new Error("Missing name");

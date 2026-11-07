@@ -1,3 +1,4 @@
+import { WEATHER_EXTRAS } from "./weather-fields";
 import { ALL_APPS, SWITCHES, defaults, readSettings, type Settings } from "./model";
 import { isRecord } from "./shared";
 export const SYNTAX_TOKEN = "[[phone_syntax]]";
@@ -11,7 +12,7 @@ export const presetSnapshot=(s:Settings):PresetSettings=>({apps:{...s.apps},enab
 export function validatePreset(value:unknown):PresetSettings {
  if(!isRecord(value)||Object.keys(value).sort().join()!==["apps","enabled","notesPerSection","logLines","keepTrackers","keepTexts"].sort().join())throw Error("Invalid preset");
  const apps=value.apps,enabled=value.enabled;
- if(!isRecord(apps)||ALL_APPS.some(k=>typeof apps[k]!=="boolean")||!isRecord(enabled)||SWITCHES.some(k=>typeof enabled[k]!=="boolean"))throw Error("Invalid preset");
+ if(!isRecord(apps)||ALL_APPS.some(k=>typeof apps[k]!=="boolean")||!isRecord(enabled)||SWITCHES.some(k=>typeof enabled[k]!=="boolean"&&!(enabled[k]===undefined&&([...WEATHER_EXTRAS,"weather.temperature"] as readonly string[]).includes(k))))throw Error("Invalid preset");
  return presetSnapshot(readSettings(value));
 }
 export function builtInPresets():SettingsPreset[] {

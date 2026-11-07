@@ -1,3 +1,4 @@
+import { WEATHER_DETAILS, temperatureParts, validateCondition, validWeatherText } from "./weather-fields";
 import { validateActivity, validateEmail } from "./activity";
 import { parseShorthand, usablePatch } from "./shorthand";
 import { isRecord } from "./shared";
@@ -35,6 +36,17 @@ export function change(key: string, raw: unknown): Change | undefined {
     if (!isRecord(value)) throw new Error("Invalid attire");
     keys(value, ["worn", "removed"]);
     if (!list(value.worn) || !list(value.removed)) throw new Error("Attire needs complete worn/removed lists");
+  } else if (key === "condition") {
+    if (!short(value, 110)) throw Error("Invalid condition");
+    value = validateCondition(value);
+  } else if (key === "temperature") {
+    const parts = typeof value === "string" || typeof value === "number" ? temperatureParts(String(value)) : undefined;
+    if (!parts) throw Error("Temperature needs one stated number");
+    value = parts.unit ? `${parts.number} ${parts.unit}` : parts.number;
+  } else if (key === "season" || key === "weather_description" || key === "weather_alert") {
+    if (typeof value !== "string" || !validWeatherText(value, key === "season" ? 40 : 160)) throw Error("Invalid weather text");
+    value = value.trim();
+    if (key === "weather_alert" && String(value).toLowerCase() === "ended") value = "ended";
   } else if (!short(value)) throw new Error("Invalid value");
   return { value: value as Value, ...(evidence ? { evidence } : {}), ...(inferred ? { inferred } : {}) };
 }
@@ -51,11 +63,17 @@ export function validateNote(raw: unknown, user = false): NotePatch {
 /** JSON used by the main block and later Helper AI follows exactly the same schema. */
 export function validateExpanded(input: unknown): Patch {
   if (!isRecord(input)) throw new Error("Invalid tracker");
-  keys(input, [...SCENE_KEYS, "weather","calls","bank","transactions", "contacts", "locations", ...SECTIONS.filter(k => k !== "misc")]);
+  keys(input, [...SCENE_KEYS, "weather", "condition", ...WEATHER_DETAILS,"calls","bank","transactions", "contacts", "locations", ...SECTIONS.filter(k => k !== "misc")]);
   const patch = emptyPatch();
   for(const key of ["calls","bank","transactions"] as const)if(input[key]!==undefined&&input[key]!==null){if(!Array.isArray(input[key]))throw Error("Invalid entries");(patch as unknown as Record<string,unknown>)[key]=(input[key] as unknown[]).map(v=>validateActivity(key,v));}
   for (const key of SCENE_KEYS) if (input[key] !== undefined) patch.scene[key] = change(key, input[key]);
+  if (input.weather !== undefined && input.condition !== undefined) throw Error("Conflicting weather conditions");
   if (input.weather !== undefined) patch.weather = change("weather", input.weather);
+  if (input.condition !== undefined) patch.weather = change("condition", input.condition);
+  for (const key of WEATHER_DETAILS) if (input[key] !== undefined) {
+    const value = change(key, input[key]);
+    if (value) (patch.weatherDetails ??= {})[key] = value;
+  }
   for (const [key, allowed] of [["contacts", ["name", ...CONTACT_KEYS]], ["locations", ["name", "description", "relation", "evidence"]]] as const) {
     const entries = input[key]; if (entries === undefined || entries === null) continue;
     if (!Array.isArray(entries)) throw new Error("Invalid entries");
@@ -98,9 +116,9 @@ export function parseExpanded(body: string): Patch | null {
 /** Independent top-level lines; nested objects/arrays remain atomic. */
 function parseLines(body: string): { patch: Patch | null; invalidFields: string[]; issues: ParseIssue[] } {
   if (body.length > 64000) return { patch: null, invalidFields: [], issues: [{ line: null, field: "block", reason: "block too large" }] };
-  if (/^\s*(?:loc|time|date|weather|present|c|p|people|items|rules|plots|done|call|bank|tx):/m.test(body)) return parseShorthand(decodeEntities(body), validateExpanded);
+  if (/^\s*(?:loc|time|date|season|weather|condition|temperature|weather_description|weather_alert|present|c|p|people|items|rules|plots|done|call|bank|tx):/m.test(body)) return parseShorthand(decodeEntities(body), validateExpanded);
   const groups = new Map<string, { value: string; line: number }[]>();
-  const allowed = [...SCENE_KEYS, "weather","calls","bank","transactions", "contacts", "locations", ...SECTIONS.filter(k => k !== "misc")];
+  const allowed = [...SCENE_KEYS, "weather", "condition", ...WEATHER_DETAILS,"calls","bank","transactions", "contacts", "locations", ...SECTIONS.filter(k => k !== "misc")];
   const invalidFields = new Set<string>();
   const issues: ParseIssue[] = [];
   const lines = body.split("\n").map((s, i) => ({ text: s.trim(), number: i + 1 })).filter(s => s.text);
@@ -130,6 +148,13 @@ function parseLines(body: string): { patch: Patch | null; invalidFields: string[
       if (!usablePatch(validateExpanded({ [key]: value }))) throw new Error("Placeholder update");
       accepted[key] = value; valid++;
     } catch { invalidFields.add(key); issues.push({ line: values[0].line, field: safeField(key), reason: "invalid value or structure" }); }
+  }
+  if (Object.hasOwn(accepted,"weather") && Object.hasOwn(accepted,"condition")) {
+    delete accepted.weather;
+    delete accepted.condition;
+    invalidFields.add("weather");
+    issues.push({line:null,field:"weather",reason:"conflicting weather conditions"});
+    valid-=2;
   }
   return { patch: valid || !lines.length ? validateExpanded(accepted) : null, invalidFields: [...invalidFields], issues };
 }

@@ -170,9 +170,20 @@ export class Sidebar {
                 group.append(node("legend", "lpt-side-legend", app));
                 for (const key of APP_FIELDS[app]) {
                     const field = key.split(".").at(-1)!;
-                    const titles: Record<string, string> = { location: "Location", time: "Time", date: "Date", present: "Who is present", roles: "Roles", physical: "Physical status", mood: "Mood", position: "Position", attire: "Attire", thoughts: "Inner thoughts", people: "People", items: "Key items", rules: "Rules", plots: "Plots", misc: "Misc", locations: "Locations", weather: "Weather", messages: "Messages",calls:"Calls",email:"Email",balance:"Balance",transactions:"Transactions" };
+                    const titles: Record<string, string> = { location: "Location", time: "Time", date: "Date", present: "Who is present", roles: "Roles", physical: "Physical status", mood: "Mood", position: "Position", attire: "Attire", thoughts: "Inner thoughts", people: "People", items: "Key items", rules: "Rules", plots: "Plots", misc: "Misc", locations: "Locations", weather: "Condition", temperature:"Temperature", description:"Description", alert:"Alerts", season:"Season", messages: "Messages",calls:"Calls",email:"Email",balance:"Balance",transactions:"Transactions" };
                     const hints: Record<string, string> = { location: "Exact place and wider area.", time: "Established story time.", date: "Established story date.", present: "Everyone present, by name.", roles: "Known roles and affiliations.", physical: "Observable physical condition.", mood: "Established mood, NPCs only.", position: "Known facing and relative position.", attire: "Worn and recently removed items.", thoughts: "Short private thoughts, NPCs only.", people: "People with a reason to return.", items: "Only items with a specific story function.", rules: "Stated principles or restrictions.", plots: "Promises, meetings and pending events.", misc: "Your own notes; you choose what the AI sees.", locations: "Meaningful places and known details.", weather: "Only weather established in the story.", messages: "Texts actually sent in the story.",calls:"Calls established in the story.",email:"Emails actually sent in the story.",balance:"Only the last stated balance; never calculated.",transactions:"Only stated transactions; never adjusts a balance." };
-                    this.toggle(group, key, titles[field], hints[field], this.doc.settings.enabled[key], on => ({ enabled: { [key]: on } }),true);
+                    this.toggle(group, key, key==="weather.time"?"Time from Scene":key==="weather.date"?"Date from Scene":titles[field], hints[field]??"Show this field when the story establishes it.", this.doc.settings.enabled[key], on => ({ enabled: { [key]: on } }),true);
+                }
+                if(app==="Weather") {
+                    const label=node("label","lpt-side-label lpt-weather-unit-label","Temperature unit");
+                    const select=node("select","lpt-weather-unit");
+                    for(const value of ["F","C"]){const option=node("option","",value);option.value=value;select.append(option);}
+                    select.value=this.doc.settings.weatherUnit;
+                    select.disabled=this.saving;
+                    select.setAttribute("aria-label","Temperature unit");
+                    select.addEventListener("change",()=>{if(origin===this.epoch&&select.isConnected)void this.save({weatherUnit:select.value});});
+                    label.append(select,node("small","lpt-side-help","Changes the label only. The number stays the same."));
+                    group.append(label);
                 }
                 track.append(group);
             }

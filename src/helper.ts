@@ -1,3 +1,4 @@
+import { WEATHER_DETAILS, WEATHER_SWITCHES, statedTemperature } from "./weather-fields";
 import { checkedModelReply, ModelCallError } from "./model-errors";
 import {composeWording} from "./wording";
 import {helperCallSource} from "./calls";
@@ -38,7 +39,7 @@ export function helperValues(content: string, doc: Document, rows:StoryRow[]=[])
   if(jsonFence||clean.startsWith("{")) {
     let json:unknown;try{json=JSON.parse(clean);}catch{throw new ModelCallError("invalid JSON","The reply was invalid JSON.");}
     if(!isRecord(json))throw new HelperFailure("validation rejected");
-    const allowed=[...SCENE_KEYS,"weather","contacts","locations","calls","bank","transactions",...SECTIONS.filter(k=>k!=="misc")];
+    const allowed=[...SCENE_KEYS,"weather","condition",...WEATHER_DETAILS,"contacts","locations","calls","bank","transactions",...SECTIONS.filter(k=>k!=="misc")];
     if(Object.keys(json).some(k=>!allowed.includes(k)))throw new HelperFailure("validation rejected");
     // Validate legacy JSON one top-level field at a time through the common parser.
     const patch=parseExpanded(Object.entries(json).map(([k,v])=>`${k}=${JSON.stringify(v)}`).join("\n"));
@@ -51,7 +52,7 @@ export function helperValues(content: string, doc: Document, rows:StoryRow[]=[])
       patch=parsed.patch;
     } else patch=parseExpanded(clean);
     if(!patch) {
-      const recognizable=/^\s*(?:loc|time|date|weather|present|c|p|people|items|rules|plots|done|call|bank|tx):/m.test(clean);
+      const recognizable=/^\s*(?:loc|time|date|season|weather|condition|temperature|weather_description|weather_alert|present|c|p|people|items|rules|plots|done|call|bank|tx):/m.test(clean);
       throw new HelperFailure(recognizable?"validation rejected":"invalid output");
     }
     input=patchValues(patch);
@@ -59,6 +60,7 @@ export function helperValues(content: string, doc: Document, rows:StoryRow[]=[])
   const data = input as Record<string, unknown>; const result: Record<string,unknown> = {};
   for (const key of SCENE_KEYS) if (doc.settings.enabled[`scene.${key}`] && data[key] !== undefined) result[key]=data[key];
   if (doc.settings.enabled.weather && data.weather !== undefined) result.weather=data.weather;
+  for(const key of WEATHER_DETAILS)if(doc.settings.enabled[WEATHER_SWITCHES[key]]&&data[key]!==undefined)result[key]=data[key];
   if (doc.settings.enabled.locations && data.locations !== undefined) result.locations=data.locations;
   for (const section of SECTIONS.filter(s=>s!=="misc")) if (doc.settings.enabled[`notes.${section}`] && data[section] !== undefined) result[section]=data[section];
   if (Array.isArray(data.contacts)&&CONTACT_KEYS.some(k=>doc.settings.enabled[`contacts.${k}`])) result.contacts=data.contacts.map(raw=>{
@@ -74,7 +76,13 @@ export function helperValues(content: string, doc: Document, rows:StoryRow[]=[])
   }
   const evidenceAfter=(evidence:unknown,index:number)=>typeof evidence==="string" && rows.some(r=>r.index_in_chat>index&&transformTags(r.content,"strip").includes(evidence));
   const keepCell=(key:string,raw:unknown,old?:Cell)=>{
-    if(!old||raw===null)return true;
+    if(raw===null)return true;
+    if(key==="temperature") {
+      const update=change(key,raw);
+      if(!update||typeof update.value!=="string")return false;
+      if(!rows.some(r=>(!old||r.index_in_chat>old.at.index)&&statedTemperature(String(update.value),transformTags(r.content,"strip"))))return false;
+    }
+    if(!old)return true;
     const update=change(key,raw);if(!update)return true;
     if(old.by==="user")return evidenceAfter(update.evidence,old.at.index);
     if(update.evidence && !evidenceAfter(update.evidence,old.at.index))return false;
@@ -86,6 +94,7 @@ export function helperValues(content: string, doc: Document, rows:StoryRow[]=[])
   };
   for(const key of SCENE_KEYS)if(result[key]!==undefined&&!keepCell(key,result[key],doc.state.scene[key]))delete result[key];
   if(result.weather!==undefined&&!keepCell("weather",result.weather,doc.state.weather))delete result.weather;
+  for(const key of WEATHER_DETAILS)if(result[key]!==undefined&&!keepCell(key,result[key],doc.state.weatherDetails?.[key]))delete result[key];
   if(Array.isArray(result.contacts))for(const c of result.contacts as Record<string,unknown>[]) {
     const old=doc.state.contacts.find(x=>normalize(x.name)===normalize(String(c.name)));
     const player=old?.player||doc.playerNames.some(n=>normalize(n)===normalize(String(c.name)));

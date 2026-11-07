@@ -250,7 +250,7 @@ describe("macros and persistent isolation", () => {
     for(const key of SWITCHES)doc.settings.enabled[key]=false;
     doc.settings.enabled.weather=true;
     const text=renderMacro("phone_format",doc);
-    expect(text).toContain('weather: known weather');
+    expect(text).toContain('condition: sunny');
     expect(text).not.toContain('location={');expect(text).not.toContain('contacts=[');expect(text).not.toContain('Actual sent texts only');
     doc.settings.source="helper";
     expect(renderMacro("phone_format",doc)).toContain("Do not write a phone-state block");

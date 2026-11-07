@@ -1,11 +1,12 @@
+import { WEATHER_EXTRAS, WEATHER_SWITCHES, type WeatherDetail } from "./weather-fields";
 import type {ContactInfo} from "./contact-info";
 import { isRecord } from "./shared";
 
-export const SCENE_KEYS = ["location", "time", "date", "present"] as const;
+export const SCENE_KEYS = ["location", "time", "date", "present", "season"] as const;
 export const CONTACT_KEYS = ["roles", "physical", "mood", "position", "attire", "thoughts"] as const;
 export const SECTIONS = ["people", "items", "rules", "plots", "misc"] as const;
 export const SWITCHES = [...SCENE_KEYS.map(k => `scene.${k}`), ...CONTACT_KEYS.map(k => `contacts.${k}`),
-  ...SECTIONS.map(k => `notes.${k}`), "locations", "weather", "messages","calls","email","bank.balance","bank.transactions"] as const;
+  ...SECTIONS.map(k => `notes.${k}`), "locations", ...Object.values(WEATHER_SWITCHES), "weather.time", "weather.date", "messages","calls","email","bank.balance","bank.transactions"] as const;
 export type SceneKey = typeof SCENE_KEYS[number];
 export type ContactKey = typeof CONTACT_KEYS[number];
 export type Section = typeof SECTIONS[number];
@@ -23,7 +24,7 @@ export interface EmailData {from:string;to?:string;subject:string;body:string;ti
 export type ActivityEntry<T> = T & {id:string;at:Origin;by:"ai"|"user";legacyIds?:string[]};
 export interface Patch {
   calls?:CallData[];bank?:BankData[];transactions?:TransactionData[];
-  scene: Partial<Record<SceneKey, Change>>; weather?: Change;
+  scene: Partial<Record<SceneKey, Change>>; weather?: Change; weatherDetails?: Partial<Record<WeatherDetail, Change>>;
   contacts: ContactPatch[]; locations: PlacePatch[]; notes: Partial<Record<Section, NotePatch[]>>;
 }
 export interface TextData { from: string; text: string; time?: string; to?: string; group?:string }
@@ -35,15 +36,16 @@ export interface Note { name: string; detail: string; context: string; resolved:
 export interface State {
   userVersions?:Record<string,{value:unknown;at:Origin}>;
   calls:ActivityEntry<CallData>[];bank:ActivityEntry<BankData>[];transactions:ActivityEntry<TransactionData>[];emails:(ActivityEntry<EmailData>&{direction:"incoming"|"outgoing"})[];
-  scene: Partial<Record<SceneKey, Cell>>; weather?: Cell; contacts: Contact[]; locations: Place[];
+  scene: Partial<Record<SceneKey, Cell>>; weather?: Cell; weatherDetails?: Partial<Record<WeatherDetail, Cell>>; contacts: Contact[]; locations: Place[];
   notes: Record<Section, Note[]>; messages: SavedMessage[]; notices: string[];
 }
 export const CORE_APPS = ["Scene","Weather","Locations","Notes","Contacts","Messages"] as const;
 export const OPTIONAL_APPS=["Calls","Email","Bank"] as const;
 export const ALL_APPS=[...CORE_APPS,...OPTIONAL_APPS] as const;
 export type CoreApp=typeof ALL_APPS[number];
-export const APP_FIELDS:Record<CoreApp,string[]>={Scene:SCENE_KEYS.map(k=>`scene.${k}`),Weather:["weather"],Locations:["locations"],Notes:SECTIONS.map(k=>`notes.${k}`),Contacts:CONTACT_KEYS.map(k=>`contacts.${k}`),Messages:["messages"],Calls:["calls"],Email:["email"],Bank:["bank.balance","bank.transactions"]};
+export const APP_FIELDS:Record<CoreApp,string[]>={Scene:SCENE_KEYS.map(k=>`scene.${k}`),Weather:[...Object.values(WEATHER_SWITCHES),"weather.time","weather.date"],Locations:["locations"],Notes:SECTIONS.map(k=>`notes.${k}`),Contacts:CONTACT_KEYS.map(k=>`contacts.${k}`),Messages:["messages"],Calls:["calls"],Email:["email"],Bank:["bank.balance","bank.transactions"]};
 export interface Settings {
+  weatherUnit:"F"|"C";
   apps:Record<CoreApp,boolean>;
   allowAIUserEdits:boolean;fakeAddresses:boolean;fakeDomain:string;
   enabled: Record<string, boolean>; aiPlayerTexts: boolean; inferMissing: boolean;
@@ -81,7 +83,7 @@ export interface Document {
 }
 export const normalize = (name: string) => name.normalize("NFKC").trim().toLocaleLowerCase("en-US").split(" ").filter(Boolean).join(" ");
 export function defaults(): Settings {
-  return { allowAIUserEdits:false,fakeAddresses:false,fakeDomain:"lumi.verse",apps:Object.fromEntries(ALL_APPS.map(a=>[a,(CORE_APPS as readonly string[]).includes(a)])) as Record<CoreApp,boolean>, enabled: Object.fromEntries(SWITCHES.map(k => [k, k !== "contacts.thoughts"])), aiPlayerTexts: false,
+  return { weatherUnit:"F",allowAIUserEdits:false,fakeAddresses:false,fakeDomain:"lumi.verse",apps:Object.fromEntries(ALL_APPS.map(a=>[a,(CORE_APPS as readonly string[]).includes(a)])) as Record<CoreApp,boolean>, enabled: Object.fromEntries(SWITCHES.map(k => [k, k !== "contacts.thoughts" && !(WEATHER_EXTRAS as readonly string[]).includes(k)])), aiPlayerTexts: false,
     inferMissing: false, keepTexts: 3, keepTrackers: 0, notesPerSection: 10, logLines: 20, source: "main", connection_id: null, helperMessages: 3 };
 }
 export function readSettings(input: unknown): Settings {
@@ -101,6 +103,8 @@ export function readSettings(input: unknown): Settings {
     } else if (["aiPlayerTexts", "inferMissing","allowAIUserEdits","fakeAddresses"].includes(key)) {
       if (typeof input[key] !== "boolean") throw new Error("Invalid switch");
       Object.assign(out, { [key]: input[key] });
+    } else if(key==="weatherUnit"){
+      if(input.weatherUnit!=="F"&&input.weatherUnit!=="C")throw Error("Choose F or C.");out.weatherUnit=input.weatherUnit;
     } else if(key==="fakeDomain"){
       if(typeof input.fakeDomain!=="string"||input.fakeDomain.length>150||!/^([a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z](?:[a-z0-9-]*[a-z0-9])?$/i.test(input.fakeDomain))throw Error("Use a domain such as lumi.verse, without @ or a web address.");out.fakeDomain=input.fakeDomain.toLowerCase();
     } else if (key === "connection_id") {
@@ -116,7 +120,7 @@ export function readSettings(input: unknown): Settings {
       Object.assign(out, { [key]: n });
     }
   }
-  if(input.apps===undefined)for(const app of CORE_APPS)out.apps[app]=APP_FIELDS[app].some(k=>out.enabled[k]);
+  if(input.apps===undefined)for(const app of CORE_APPS)out.apps[app]=app==="Weather"&&typeof out.enabled.weather==="boolean"&&isRecord(input.enabled)&&input.enabled["weather.temperature"]===undefined?out.enabled.weather:APP_FIELDS[app].some(k=>out.enabled[k]);
   return out;
 }
 export function effectiveDocument(doc:Document):Document {

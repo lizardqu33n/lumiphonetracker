@@ -1,3 +1,5 @@
+import { WEATHER_CONDITIONS, WEATHER_SWITCHES, WEATHER_ALERT_ENDED, displayCondition, temperatureParts, type WeatherDetail } from "./weather-fields";
+import { WEATHER_ICONS } from "./weather-icons";
 import {showCopyableError} from "./copy-error";
 import {fieldKey,restorable,fieldValue,type FieldRef} from "./field-protection";
 import {CONTACT_ICONS} from "./contact-icons";
@@ -28,7 +30,7 @@ export const DESCRIPTIONS: Record<App, string> = {
   Locations: "Places that matter in this story.", Notes: "People, items, rules, and plans worth remembering.",
   Contacts: "What the story has established about each character.", Messages: "Texts actually sent in the story.",
 };
-const FIELD_NAMES: Record<string, string> = { location: "Location", time: "Time", date: "Date", present: "Here now",
+const FIELD_NAMES: Record<string, string> = { location: "Location", time: "Time", date: "Date", season: "Season", present: "Here now",
   roles: "Roles", physical: "Physical status", mood: "Mood", position: "Position", attire: "Attire", thoughts: "Inner thoughts" };
 const SECTION_NAMES: Record<Section, string> = { people: "People to remember", items: "Key items", rules: "Rules", plots: "Pending plots", misc: "Misc" };
 const SECTION_FIELDS: Record<Section, [string, string, string]> = {
@@ -345,14 +347,91 @@ export class PhoneView {
     if(this.enabled("scene.location"))this.field(section,"location",this.doc!.state.scene.location,"scene");
     const when=el("div","lpt-scene-when");for(const key of ["time","date"] as const)if(this.enabled(`scene.${key}`))this.field(when,key,this.doc!.state.scene[key],"scene");if(when.children.length)section.append(when);
     if(this.enabled("scene.present"))this.field(section,"present",this.doc!.state.scene.present,"scene");
+    if(this.enabled("scene.season"))this.field(section,"season",this.doc!.state.scene.season,"scene");
     if (!section.children.length) this.empty("Scene fields are off. Turn them on in the sidebar's Phone tab.", section);
     this.content.append(section);
   }
   private weather(): void {
-    const section = el("section", "lpt-weather");
-    if (this.enabled("weather")) this.field(section, "weather", this.doc!.state.weather, "weather");
-    else this.empty("Weather is off. Turn it on in the sidebar's Phone tab.", section);
+    const doc=this.doc!;
+    const section=el("section","lpt-weather");
     this.content.append(section);
+    const conditionOn=this.enabled("weather");
+    const condition=conditionOn&&typeof doc.state.weather?.value==="string"&&doc.state.weather.value.trim()?displayCondition(doc.state.weather.value):undefined;
+    const card=el("div",`lpt-card lpt-weather-card${condition?` is-${condition.kind.replaceAll("_","-")}`:""}`);
+    let hasValue=!!condition;
+    const hero=el("div","lpt-weather-hero");
+    const chips=el("div","lpt-weather-chips");
+    const controls=el("details","lpt-weather-controls");
+    controls.append(el("summary","lpt-weather-controls-title","Locks and restore"));
+    const lock=(field:string,label:string)=>{
+      const row=el("div","lpt-weather-control-row");
+      row.append(el("span","lpt-weather-control-label",label));
+      this.fieldControls(row,{target:"weather",field},label);
+      controls.append(row);
+    };
+    if(conditionOn){
+      const edit=button("","lpt-weather-condition",()=>{
+        const options:[[string,string],...Array<[string,string]>]=[["","Choose a condition"],...Object.entries(WEATHER_CONDITIONS)];
+        this.form(section,[{key:"condition",label:"Condition",value:condition?.kind??"",options,required:true},{key:"other",label:"Other condition",value:condition?.kind==="other"?condition.label:"",max:100}],values=>{
+          const value=values.condition==="other"?`other | ${String(values.other)}`:String(values.condition).replaceAll("_"," ");
+          if(values.condition==="other"&&!values.other)throw Error("Write the other condition.");
+          return {edit:{target:"weather",field:"weather",value}};
+        });
+        const select=section.querySelector<HTMLSelectElement>('select[name="condition"]');
+        const other=section.querySelector<HTMLInputElement>('input[name="other"]');
+        if(select&&other){const update=()=>{other.closest("label")!.hidden=select.value!=="other";};select.addEventListener("change",update);update();}
+      });
+      edit.setAttribute("aria-label","Edit condition");
+      if(condition){
+        const icon=el("img","lpt-weather-icon");
+        icon.src=WEATHER_ICONS[condition.kind==="other"?"cloudy":condition.kind];
+        icon.alt="";
+        icon.draggable=false;
+        const label=el("span","lpt-weather-condition-label",condition.label);
+        renderEmojiText(label,condition.label);
+        edit.append(icon,label);
+      }else edit.append(el("span","lpt-weather-condition-label","Add condition"));
+      const marker=marked(doc.state.weather);
+      if(marker)edit.append(el("span","lpt-marker",marker));
+      hero.append(edit);
+      lock("weather","Condition");
+    }
+    const fields:[WeatherDetail,string,string][]=[
+      ["temperature","Temperature","lpt-weather-temperature"],
+      ["weather_description","Description","lpt-weather-description"],
+      ["weather_alert","Alert","lpt-weather-alert"],
+    ];
+    for(const [field,label,cls]of fields){
+      if(!this.enabled(WEATHER_SWITCHES[field]))continue;
+      const cell=doc.state.weatherDetails?.[field];
+      const value=typeof cell?.value==="string"?cell.value:"";
+      const active=field!=="weather_alert"||value!==WEATHER_ALERT_ENDED;
+      const shown=active?value:"";
+      const temp=field==="temperature"?temperatureParts(shown):undefined;
+      const caption=temp?`${temp.number}°${doc.settings.weatherUnit}`:shown;
+      const edit=button(caption||`Add ${label.toLowerCase()}`,`${cls}${caption?"":" is-empty"}`,()=>{
+        this.form(section,[{key:"value",label:field==="weather_alert"?"Alert (blank clears it)":label,value:shown,max:field==="temperature"?24:160,required:field!=="weather_alert"}],values=>({edit:{target:"weather",field,value:field==="weather_alert"&&!values.value?WEATHER_ALERT_ENDED:values.value}}));
+      });
+      edit.setAttribute("aria-label",`Edit ${label.toLowerCase()}`);
+      if(field==="weather_alert"&&shown){edit.classList.add("is-alert");card.classList.add("is-alert");}
+      if(caption)hasValue=true;
+      if(field==="weather_alert"){
+        if(shown)chips.append(edit);
+        else controls.append(edit);
+      }else hero.append(edit);
+      lock(field,label);
+    }
+    for(const [field,flag]of [["time","weather.time"],["date","weather.date"],["season","scene.season"]] as const){
+      if(!this.enabled(flag)||!this.enabled(`scene.${field}`))continue;
+      const value=doc.state.scene[field]?.value;
+      if(typeof value==="string"&&value.trim()){hasValue=true;chips.append(el("span",`lpt-weather-chip lpt-weather-${field}`,value));}
+    }
+    card.classList.toggle("is-empty",!hasValue);
+    if(hero.children.length)card.append(hero);
+    if(chips.children.length)card.append(chips);
+    if(controls.children.length>1)card.append(controls);
+    if(card.children.length)section.append(card);
+    else this.empty("No weather to show yet. Choose fields in the sidebar's Phone tab.",section);
   }
   private deleteAction(parent: HTMLElement, edit: Partial<ManualEdit>): void {
     const origin=this.chatEpoch;

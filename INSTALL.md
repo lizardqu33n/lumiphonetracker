@@ -94,7 +94,15 @@ Custom connection uses this separate picker. Lumiverse's Council Sidecar setting
 
 ## Using the phone
 
-Tap Scene or Weather to correct a field. Expand Contacts, Locations or Notes to edit/delete; + Add creates your own entries. User edits are marked. Each chat has separate data and tracker settings.
+### Weather
+
+Condition and Temperature start on. Choose F or C under Weather in **What to track**. It changes only the displayed unit. The saved number and its stated unit stay the same.
+
+Turn on Description and Alerts to see them when the story supplies them. Turn on Time or Date in Weather to reuse the corresponding enabled Scene field. Turn on Season under Scene to show it in Weather too. Blank extras stay hidden. An alert clears when the story says it has ended.
+
+Tap a Weather value to correct it. Use **Locks and restore** for field locks and to restore your saved version when available. Your old Weather text stays saved. If it is outside the new list, the screen shows that text with the cloudy icon.
+
+Tap Scene to correct a field. Expand Contacts, Locations or Notes to edit/delete; + Add creates your own entries. User edits are marked. Each chat has separate data and tracker settings.
 
 Messages contains actual sent texts, grouped by sender. Opening a conversation clears its unread badge. Write a reply and choose Add to draft, then review and send it from the normal chat input yourself. Cancelling a draft never files it. On older hosts without composer drafting, copy the offered tag into the normal input instead. The extension never presses Send.
 

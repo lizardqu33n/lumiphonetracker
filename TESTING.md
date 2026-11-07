@@ -1,6 +1,15 @@
-# Verification report - 0.17.1
+# Verification report - 0.18.0
 
-Checked November 6, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **No live Lumiverse session or real model connection was used. A local Lumiverse build and its user-docs were inspected; that is not live-host verification. No paid model request was made.**
+Checked November 7, 2026 (America/Chicago), using Bun, TypeScript and headless Microsoft Edge through Playwright. No live Lumiverse session or real model connection was used.
+
+## 0.18.0 - Weather app rework
+
+267 code tests with 2,070 assertions and 346 browser checks passed. Type checking, reproducible builds and package validation passed.
+
+- Code checks cover legacy weather and profile migration, fixed conditions and Other, valid-line acceptance, exact temperatures with their original units, alert clearing with a story quote, edits, hard locks, and enabled-only Main AI and Custom connection format lines.
+- Browser checks cover the embedded sprite, large temperature display, F/C label changes without data conversion, optional chips, alert clearing, locks, an opaque Weather card and narrow layout. Existing phone opacity and protected Reset checks also run.
+- Decoded all nine embedded PNGs and compared their RGBA pixels against the nine full 418 by 418 cells. All have transparent pixels. The equal-grid cut leaves two columns of the Windy art in the Fog cell. The other cell edges are clear. The images total 889,228 PNG bytes and 1,185,846 data-URI characters. See [the asset measurements](docs/WEATHER-ASSETS.json).
+- Installation in a live Lumiverse, the native mobile drawer, and model adherence to the new instructions remain unverified.
 
 ## 0.17.1 - Model request failures and wizard choices
 

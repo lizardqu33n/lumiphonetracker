@@ -1,3 +1,4 @@
+import { WEATHER_DETAILS } from "./weather-fields";
 import { emptyPatch, normalize, type Patch, type Change, type Value } from "./model";
 import type { ParseIssue } from "./schema";
 
@@ -25,9 +26,9 @@ function marked(raw:string):{ value:string;evidence?:string;inferred?:boolean } 
   return {value,...(evidence?{evidence}:{}),...(inferred?{inferred:true}:{})};
 }
 const wrap=(value:unknown,m:{evidence?:string;inferred?:boolean})=>m.evidence||m.inferred?{value,...(m.evidence?{evidence:m.evidence}:{}),...(m.inferred?{inferred:true}:{})}:value;
-const aliases:Record<string,string>={call:"calls",bank:"bank",tx:"transactions",loc:"location",c:"contacts",p:"locations",done:"plots"};
+const aliases:Record<string,string>={call:"calls",bank:"bank",tx:"transactions",loc:"location",condition:"weather",c:"contacts",p:"locations",done:"plots"};
 const fields:Record<string,string>={roles:"roles",phys:"physical",mood:"mood",pos:"position",thoughts:"thoughts"};
-const allowed=["loc","time","date","weather","present","c","p","people","items","rules","plots","done","call","bank","tx"];
+const allowed=["loc","time","date","season","weather","condition",...WEATHER_DETAILS,"present","c","p","people","items","rules","plots","done","call","bank","tx"];
 
 export function parseShorthand(body:string,validate:(value:unknown)=>Patch):{patch:Patch|null;invalidFields:string[];issues:ParseIssue[]} {
   if(body.length>64000)return {patch:null,invalidFields:[],issues:[{line:null,field:"block",reason:"block too large"}]};
@@ -50,10 +51,11 @@ export function parseShorthand(body:string,validate:(value:unknown)=>Patch):{pat
       if(raw.endsWith(" |"))throw new Error("empty trailing field");
       let data:Record<string,unknown>={};
       if(["call","bank","tx"].includes(key))data=parseActivityLine(key,raw);
-      else if(["time","date","weather","present","loc"].includes(key)) {
+      else if(["time","date","season","weather","condition",...WEATHER_DETAILS,"present","loc"].includes(key)) {
         const m=marked(raw);if(m.inferred)throw new Error("inference");
         const parts=m.value.split(" | ");
         if(key==="loc") {if(parts.length>2)throw new Error("parts");data.location=wrap({name:text(parts[0],100),wider:parts[1]===undefined?[]:list(parts[1])},m);}
+        else if(key==="condition") data.condition=wrap(m.value,m);
         else {if(parts.length>1)throw new Error("parts");data[field]=wrap(key==="present"?list(m.value):text(m.value),m);}
       } else if(key==="c") {
         const parts=raw.split(" | ");const c:Record<string,unknown>={name:text(parts.shift()!,100)};
@@ -81,6 +83,7 @@ export function parseShorthand(body:string,validate:(value:unknown)=>Patch):{pat
         else data[key]=[{name,...(parts[1]!==undefined?{detail:bounded(parts[1],14)}:{}),...(parts[2]!==undefined?{context:text(parts[2],240)}:{}),...(m.evidence?{evidence:m.evidence}:{})}];
       }
       const p=validate(data);Object.assign(patch.scene,p.scene);if(p.weather)patch.weather=p.weather;
+      if(p.weatherDetails)patch.weatherDetails={...patch.weatherDetails,...p.weatherDetails};
       for(const k of ["calls","bank","transactions"] as const)if(p[k])((patch[k]??=[]) as unknown[]).push(...p[k]!);
       patch.contacts.push(...p.contacts);patch.locations.push(...p.locations);
       for(const [section,notes] of Object.entries(p.notes)) (patch.notes[section as keyof Patch["notes"]]??=[]).push(...notes!);
@@ -94,6 +97,7 @@ export function parseShorthand(body:string,validate:(value:unknown)=>Patch):{pat
 export function patchValues(patch:Patch):Record<string,unknown> {
   const cell=(c:Change|undefined):unknown=>c?wrap(c.value,c):undefined;
   return {...Object.fromEntries(Object.entries(patch.scene).filter(([,v])=>v).map(([k,v])=>[k,cell(v)])),...(patch.weather?{weather:cell(patch.weather)}:{}),
+    ...Object.fromEntries(Object.entries(patch.weatherDetails??{}).map(([key,value])=>[key,cell(value)])),
     ...(patch.contacts.length?{contacts:patch.contacts.map(c=>({name:c.name,...Object.fromEntries(Object.entries(c.fields).filter(([,v])=>v).map(([k,v])=>[k,cell(v)]))}))}:{}),
     ...Object.fromEntries(["calls","bank","transactions"].filter(k=>patch[k as "calls"]?.length).map(k=>[k,patch[k as "calls"]])),
     ...(patch.locations.length?{locations:patch.locations}:{}),...patch.notes};
@@ -107,7 +111,7 @@ export function usable(value:Value):boolean {
 }
 export function usablePatch(p:Patch):boolean {
   const valid=(v:string|undefined)=>v===undefined||!v.trim()||!placeholder(v);
-  return Object.values(p.scene).every(c=>!c||usable(c.value))&&(!p.weather||usable(p.weather.value))&&
+  return Object.values(p.scene).every(c=>!c||usable(c.value))&&(!p.weather||usable(p.weather.value))&&Object.values(p.weatherDetails??{}).every(v=>!v||usable(v.value))&&
     p.contacts.every(c=>valid(c.name)&&Object.values(c.fields).every(v=>!v||usable(v.value)))&&
     p.locations.every(p=>valid(p.name)&&valid(p.description)&&valid(p.relation))&&
     Object.values(p.notes).every(notes=>notes!.every(n=>valid(n.name)&&valid(n.detail)&&valid(n.context)));

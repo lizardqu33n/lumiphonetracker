@@ -305,7 +305,7 @@ try {
   await note.getByRole("button", { name: "Delete", exact: true }).click(); await page.waitForTimeout(100);
   check(await ui(page).locator('[data-section="misc"] .lpt-note').count() === 0, "Note delete confirmation saves");
   if(await page.locator(".lpt-island .lpt-back").isVisible())await home(page); await settings(page);
-  const weatherSwitch = ui(page).locator(".lpt-side-setting").filter({ has: page.locator(".lpt-side-title", { hasText: /^Weather$/ }) }).locator('input[type="checkbox"]');
+  const weatherSwitch = ui(page).locator(".lpt-side-setting").filter({ has: page.locator(".lpt-side-title", { hasText: /^Condition$/ }) }).locator('input[type="checkbox"]');
   await weatherSwitch.uncheck(); await page.waitForTimeout(120); await ui(page).locator('[data-app="Weather"]').click();
   check(!(await ui(page).locator(".lpt-weather").innerText()).includes("Soft rain"), "Off switch hides tracked weather");
   if(await page.locator(".lpt-island .lpt-back").isVisible())await home(page); await settings(page);
@@ -341,8 +341,9 @@ try {
   check(await ui(page).locator(".lpt-frame").isVisible(), "Reset recreates a failed placement in the same session");
   check(await ui(page).locator('[style]').count() === 0, "No authored inline styles inside the phone");
   await seed(page); await open(page, "Weather");
-  await ui(page).getByRole("button", { name: "Edit Weather", exact: true }).click();
-  await ui(page).locator('.lpt-form [name="value"]').fill("Clear skies"); await save(page);
+  await ui(page).getByRole("button", { name: "Edit condition", exact: true }).click();
+  await ui(page).locator('.lpt-form select[name="condition"]').selectOption("other");
+  await ui(page).locator('.lpt-form input[name="other"]').fill("Clear skies"); await save(page);
   check((await ui(page).locator(".lpt-weather").innerText()).includes("Clear skies") && (await ui(page).locator(".lpt-weather").innerText()).includes("edited by you"), "Weather correction and marker");
   await home(page); await ui(page).locator('[data-app="Contacts"]').click();
   await ui(page).getByRole("button", { name: "Add contact", exact: true }).click();
@@ -638,6 +639,23 @@ try {
   await fixPage.getByRole("button",{name:"Restore my version of Time",exact:true}).click();await fixPage.waitForTimeout(100);check((await fixPage.getByRole("button",{name:"Edit Time",exact:true}).innerText()).includes("My noon"),"Restore my version restores the saved user field");
   await fixPage.getByRole("button",{name:"Lock Time",exact:true}).click();await fixPage.waitForTimeout(100);await fixPage.evaluate(()=>(window as any).harness.activityStory('It is now Midnight.<phone-state>time: Midnight ~ "It is now Midnight."</phone-state>'));await fixPage.waitForTimeout(120);check((await fixPage.getByRole("button",{name:"Edit Time",exact:true}).innerText()).includes("My noon")&&await fixPage.getByRole("button",{name:"Unlock Time",exact:true}).isVisible(),"An explicit per-field lock blocks even a quoted AI update with the exception on");
   await fixPage.locator(".harness-widget").screenshot({path:".test-artifacts/wizard-fix2-fields.png"});await fixPage.close();
+  const weatherPage=await browser.newPage({viewport:{width:1100,height:850}});await weatherPage.goto(`http://127.0.0.1:${server.port}`);await seed(weatherPage);await open(weatherPage,"Weather");
+  const weatherCard=weatherPage.locator(".lpt-weather-card");check(await weatherCard.evaluate(n=>n.classList.contains("is-other"))&&(await weatherCard.innerText()).includes("Soft rain"),"Legacy free-text weather displays unchanged as Other");
+  await weatherPage.evaluate(()=>(window as any).harness.activityStory('Rain at the docks, 18.5 C. A coastal warning is active. Monday at dusk in autumn.<phone-state>\ncondition: rain\ntemperature: 18.5 C\nweather_description: Rain at the docks\nweather_alert: Coastal warning\ntime: Dusk\ndate: Monday\nseason: Autumn\n</phone-state>'));await weatherPage.waitForTimeout(150);
+  const temperature=weatherPage.locator(".lpt-weather-temperature");check((await temperature.innerText()).includes("18.5")&&(await temperature.innerText()).endsWith("F")&&await weatherPage.locator(".lpt-weather-chips,.lpt-weather-description").count()===0,"Only condition and temperature are shown by default");
+  check(await temperature.evaluate(n=>parseFloat(getComputedStyle(n).fontSize)>=32),"Weather temperature uses the large display size");
+  const imageInfo=await weatherPage.locator(".lpt-weather-icon").evaluate(async node=>{const img=node as HTMLImageElement;await img.decode();const c=document.createElement("canvas");c.width=c.height=418;const ctx=c.getContext("2d")!;ctx.drawImage(img,0,0);const data=ctx.getImageData(0,0,418,418).data;return {size:img.naturalWidth,embedded:img.src.startsWith("data:image/png;base64,"),sharp:getComputedStyle(img).imageRendering==="pixelated",transparent:data.some((v,i)=>i%4===3&&v===0)};});
+  check(imageInfo.size===418&&imageInfo.embedded&&imageInfo.sharp&&imageInfo.transparent,"Weather icon is an embedded, sharp full cell with real transparency");
+  await section(weatherPage,"tracking");await weatherPage.getByLabel("Temperature unit",{exact:true}).selectOption("C");await weatherPage.waitForTimeout(140);check((await temperature.innerText()).includes("18.5")&&(await temperature.innerText()).endsWith("C")&&await weatherPage.evaluate(()=>(window as any).harness.getDocument().state.weatherDetails.temperature.value)==="18.5 C","Unit selector changes only the displayed suffix");
+  for(const field of ["scene.season","weather.time","weather.date","weather.description","weather.alert"]){await weatherPage.locator(`[data-setting="${field}"] input`).check();await weatherPage.waitForTimeout(100);}
+  check((await weatherPage.locator(".lpt-weather-chips").innerText()).includes("Dusk")&&(await weatherPage.locator(".lpt-weather-date").innerText())==="Monday"&&(await weatherPage.locator(".lpt-weather-season").innerText())==="Autumn"&&(await weatherPage.locator(".lpt-weather-description").innerText())==="Rain at the docks"&&await weatherPage.locator(".lpt-weather-alert.is-alert").isVisible(),"Optional description, alert, date, time and season appear through their switches");
+  check(await weatherCard.evaluate(n=>{const c=document.createElement("canvas");c.width=c.height=1;const ctx=c.getContext("2d")!;ctx.fillStyle=getComputedStyle(n).backgroundColor;ctx.fillRect(0,0,1,1);return ctx.getImageData(0,0,1,1).data[3]===255;}),"Weather card surface is opaque");
+  await weatherPage.locator(".harness-widget").screenshot({path:".test-artifacts/weather-rework.png"});
+  await weatherPage.getByRole("button",{name:"Edit temperature",exact:true}).click();await weatherPage.locator('.lpt-form input[name="value"]').fill("19");await save(weatherPage);
+  await weatherPage.locator(".lpt-weather-controls-title").click();await weatherPage.getByRole("button",{name:"Lock Temperature",exact:true}).click();await weatherPage.waitForTimeout(120);
+  await weatherPage.evaluate(()=>(window as any).harness.activityStory('The coastal warning was lifted. It is 22 C now.<phone-state>\ntemperature: 22 C\nweather_alert: ended ~ "The coastal warning was lifted."\n</phone-state>'));await weatherPage.waitForTimeout(150);
+  check((await temperature.innerText()).includes("19")&&await weatherPage.locator(".lpt-weather-alert.is-alert").count()===0,"Temperature edits and locks survive later facts and the ended alert clears");
+  await weatherPage.setViewportSize({width:390,height:600});await weatherPage.waitForTimeout(100);check(await weatherCard.evaluate(n=>n.scrollWidth<=n.clientWidth),"Weather card and chips fit a narrow phone");await weatherPage.close();
   console.log(`Browser UI verification passed: ${checks} checks. Screenshots in .test-artifacts/. No real Lumiverse instance or provider was used.`);
 } catch(error) { console.error(`Browser stopped after check ${checks}: ${lastCheck}`);for(const [i,page]of browser.contexts().flatMap(c=>c.pages()).entries())try{await page.screenshot({path:`.test-artifacts/failure-${i}.png`});}catch{}throw error;
 } finally { await browser.close(); server.stop(true); }

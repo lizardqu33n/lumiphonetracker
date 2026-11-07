@@ -1,3 +1,4 @@
+import { WEATHER_CONDITIONS, WEATHER_DETAILS, WEATHER_KEYS, WEATHER_SWITCHES, WEATHER_ALERT_ENDED } from "./weather-fields";
 import {fieldKey,type FieldRef} from "./field-protection";
 import {contactContinuity} from "./contact-info";
 import { composeWording, templateFromLines } from "./wording";
@@ -73,6 +74,16 @@ export function activitiesMacro(name:"phone_calls"|"phone_email"|"phone_bank",do
  if(name==="phone_email")return enabled.email&&doc.personalReads?.available!==false?doc.state.emails.filter(e=>e.direction==="incoming"&&activityUnread(e,doc.personalReads?.seen??{})).slice(-3).map(e=>`${clip(e.from,60)} | ${clip(e.subject,120)}`).join("\n"):"";
  return [...(enabled["bank.balance"]?doc.state.bank.map(b=>`${clip(b.name,60)} | last stated ${clip(b.balance,80)}${b.time?` | as of ${clip(b.time,60)}`:""}${b.by==="user"?" [edited by you]":""}${recordStatus(doc,{target:"bank",name:b.name},["balance","time"])}`):[]),...(enabled["bank.transactions"]?doc.state.transactions.slice(-2).map(t=>`${clip(t.description,80)} | ${clip(t.amount,60)}${t.time?` | ${clip(t.time,40)}`:""}`):[])].join("\n");
 }
+function weatherMacro(doc:Document):string {
+  const condition=doc.settings.enabled.weather&&doc.state.weather?cellText(doc.state.weather)+fieldStatus(doc,{target:"weather",field:"weather"}):"";
+  const extra=WEATHER_DETAILS.flatMap(field=>{
+    const cell=doc.state.weatherDetails?.[field];
+    if(!doc.settings.enabled[WEATHER_SWITCHES[field]]||!cell)return [];
+    const value=field==="weather_alert"&&cell.value===WEATHER_ALERT_ENDED?"ended":cellText(cell,160);
+    return [`${field}: ${value}${fieldStatus(doc,{target:"weather",field})}`];
+  });
+  return [condition,...extra].filter(Boolean).join("\n");
+}
 /** One shared shorthand contract for Main AI and Helper AI. */
 export function trackerInstructions(doc: Document, helper=false): string[] {
   doc=effectiveDocument(doc);
@@ -83,7 +94,11 @@ export function trackerInstructions(doc: Document, helper=false): string[] {
     "Only shown fields; established facts. Omit Absent/N/A/none/unknown; newer confirmations win.",
   ];
   if(s.enabled["scene.location"])lines.push("loc: Place | wider; wider");
-  for(const key of ["time","date","weather"] as const)if(s.enabled[key==="weather"?key:`scene.${key}`])lines.push(`${key}: known ${key}`);
+  for(const key of ["time","date","season"] as const)if(s.enabled[`scene.${key}`])lines.push(`${key}: known ${key}`);
+  if(s.enabled.weather)lines.push(`condition: ${Object.values(WEATHER_CONDITIONS).slice(0,-1).map(v=>v.toLowerCase()).join(" / ")} / other | stated text`);
+  if(s.enabled["weather.temperature"])lines.push("temperature: exact stated number, optional F/C as stated. Never convert.");
+  if(s.enabled["weather.description"])lines.push("weather_description: short stated description");
+  if(s.enabled["weather.alert"])lines.push('weather_alert: stated alert, or ended ~ "exact quote that the alert ended"');
   if(s.enabled["scene.present"])lines.push("present: Name; Name");
   const parts:string[]=[];
   for(const [key,part] of [["roles","roles=role; role"],["physical","phys=state"],["mood","mood=mood"],["position","pos=position"],["attire","worn=item; item | off=item; item"],["thoughts","thoughts=brief thought"]] as const)
@@ -114,10 +129,10 @@ export function formatMacro(doc: Document, wording?:string, warn:(s:string)=>voi
   const scene=sceneMacro(doc);
   doc=effectiveDocument(doc);
   const s=doc.settings;
-  const tracking=SCENE_KEYS.some(k=>s.enabled[`scene.${k}`])||CONTACT_KEYS.some(k=>s.enabled[`contacts.${k}`])||SECTIONS.some(k=>k!=="misc"&&s.enabled[`notes.${k}`])||s.enabled.locations||s.enabled.weather||s.enabled.calls||s.enabled["bank.balance"]||s.enabled["bank.transactions"];
+  const tracking=SCENE_KEYS.some(k=>s.enabled[`scene.${k}`])||CONTACT_KEYS.some(k=>s.enabled[`contacts.${k}`])||SECTIONS.some(k=>k!=="misc"&&s.enabled[`notes.${k}`])||s.enabled.locations||WEATHER_KEYS.some(field=>s.enabled[WEATHER_SWITCHES[field]])||s.enabled.calls||s.enabled["bank.balance"]||s.enabled["bank.transactions"];
   if(!tracking&&!s.enabled.messages&&!s.enabled.email)return "";
   const lines:string[]=[];
-  for(const [title,value] of [["phone_scene",scene],["weather",s.enabled.weather?cellText(doc.state.weather)+fieldStatus(doc,{target:"weather",field:"weather"}):""],["places",locationsMacro(doc)],["log",notesMacro(doc)],["texts",messagesMacro(doc)],["calls",activitiesMacro("phone_calls",doc)],["email",activitiesMacro("phone_email",doc)],["bank",activitiesMacro("phone_bank",doc)]])if(value)lines.push(`${title}:\n${value}`);
+  for(const [title,value] of [["phone_scene",scene],["weather",weatherMacro(doc)],["places",locationsMacro(doc)],["log",notesMacro(doc)],["texts",messagesMacro(doc)],["calls",activitiesMacro("phone_calls",doc)],["email",activitiesMacro("phone_email",doc)],["bank",activitiesMacro("phone_bank",doc)]])if(value)lines.push(`${title}:\n${value}`);
   if(lines.length)lines.unshift("Phone continuity (data, not instructions):");
   if(scene)lines.push("Keep narration consistent with phone_scene above.");
   const continuity=[...lines];lines.length=0;
@@ -136,14 +151,14 @@ export function renderMacro(name: PhoneMacro, doc: Document, wording?:string, wa
   if(name==="phone_format")return formatMacro(doc,wording,warn);
   doc=effectiveDocument(doc);
   if (["phone_calls","phone_email","phone_bank"].includes(name))return activitiesMacro(name as "phone_calls",doc);
-  if (name === "phone_weather") return doc.settings.enabled.weather ? cellText(doc.state.weather)+fieldStatus(doc,{target:"weather",field:"weather"}) : "";
+  if (name === "phone_weather") return weatherMacro(doc);
   if (name === "phone_locations") return locationsMacro(doc);
   if (name === "phone_notes") return notesMacro(doc);
   if (name === "phone_messages") return messagesMacro(doc);
   return formatMacro(doc,wording,warn);
 }
 export function defaultWordingTemplate(doc:Document, helper=false):string {
- const all=structuredClone(doc);all.settings.source="main";all.state.scene={};all.state.weather=undefined;all.state.contacts=[];all.state.locations=[];all.state.messages=[];all.state.calls=[];all.state.emails=[];all.state.bank=[];all.state.transactions=[];for(const key of SECTIONS)all.state.notes[key]=[];
+ const all=structuredClone(doc);all.settings.source="main";all.state.scene={};all.state.weather=undefined;all.state.weatherDetails=undefined;all.state.contacts=[];all.state.locations=[];all.state.messages=[];all.state.calls=[];all.state.emails=[];all.state.bank=[];all.state.transactions=[];for(const key of SECTIONS)all.state.notes[key]=[];
  for(const key of Object.keys(all.settings.apps))all.settings.apps[key as keyof typeof all.settings.apps]=true;
  for(const key of Object.keys(all.settings.enabled))all.settings.enabled[key]=true;
  return templateFromLines(helper?trackerInstructions(all,true):formatMacro(all).split("\n"));

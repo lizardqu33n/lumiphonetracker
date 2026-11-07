@@ -9,7 +9,11 @@ chat needs no saved facts to receive instructions. No Lumiverse regex scripts.
 loc: Exact place | wider; wider
 time: 12:10 AM
 date: established date
-weather: established weather
+season: established season
+condition: partly cloudy
+temperature: 18 C
+weather_description: Light clouds over the coast.
+weather_alert: Coastal wind warning
 present: Name; Name
 c: Name | roles=role; role | phys=physical state | mood=mood | pos=position | worn=item; item | off=item; item | thoughts=thought
 p: Place name | description | relation
@@ -25,6 +29,14 @@ This is a syntax example, never demo data inserted into the phone.
 **Write ONLY changed fields.** One record per line; fields use exactly ` | `,
 list items use `; `. Omit unknown/unchanged fields. An empty block means no change.
 No additional short-code legend is introduced.
+
+## Weather
+
+- Use `condition` with sunny, clear night, partly cloudy, cloudy, rain, storm, snow, fog or windy. Use `condition: other | written description` for a stated condition outside the list. Old `weather` lines and JSON remain readable as saved.
+- Use the exact stated numeral for `temperature`, optionally followed by F or C when stated. Negative and decimal values are supported. Keep the original number and unit. The display unit is only a label. Skip implied temperatures and do no conversion.
+- `weather_description` and `weather_alert` allow up to 160 characters each. Clear an alert with `weather_alert: ended ~ "The coastal warning was lifted."` using an exact quote from the visible story that confirms it ended. Leave it alone if the story is silent.
+- Scene `season` allows up to 40 characters. Weather displays optional time, date and season from the saved Scene fields. These facts are written and sent back through Scene only.
+- `{{phone_format}}` supplies only the enabled lines. Weather conditions, temperature, description and alert use the same edit and lock protections as other tracker fields.
 
 ## Values and limits
 

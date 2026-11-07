@@ -61,7 +61,7 @@ export function readDocument(raw: string, chatId: string): Document {
       typeof entry.at.variant !== "string" || !isRecord(entry.patch) || !isRecord(entry.patch.scene) ||
       !Array.isArray(entry.patch.contacts) || !isRecord(entry.patch.notes) || !Array.isArray(entry.texts) ||
       typeof entry.prose !== "string" || !["user", "assistant"].includes(String(entry.role))) throw new Error("Invalid saved source");
-    const rawPatch = { ...entry.patch.scene, ...(entry.patch.weather ? { weather: entry.patch.weather } : {}),
+    const rawPatch = { ...entry.patch.scene, ...(isRecord(entry.patch.weatherDetails)?entry.patch.weatherDetails:{}), ...(entry.patch.weather ? { weather: entry.patch.weather } : {}),
       calls:entry.patch.calls,bank:entry.patch.bank,transactions:entry.patch.transactions,
       contacts: entry.patch.contacts.map(c => {
         if (!isRecord(c) || !isRecord(c.fields)) throw new Error("Invalid saved contact");
