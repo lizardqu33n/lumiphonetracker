@@ -324,3 +324,28 @@ free-label field; Main/NPC classification is separate, set from verified names o
 locked by a user. Attempts to write metadata keys in a tracker line are rejected.
 The wizard uses its own validated source-quote JSON, with no writes before explicit
 preview confirmation; it does not rewrite saved blocks or presets. See PART-6.md.
+
+
+## User edits and optional exceptions (0.17.0)
+
+The tag and shorthand syntax are unchanged. With Let the AI change fields I edited
+OFF (default), new replacements of user-edited fields are rejected even when an
+exact quote is supplied. With it ON, an unlocked field may use the existing
+`~ "exact quote of new narrated change"` suffix. The quote must name the replacement
+value and occur in a later story message; inference never replaces an edit. An
+explicit per-field lock always blocks AI replacement. Main and Custom connection
+tracking share these checks. Restore my version retains the last user-entered value.
+Already-admitted quoted updates survive disabling the setting or upgrading old
+journals; changing this setting does not discard source/edit history.
+
+Phone, email, relationship and custom contact details remain outside AI-writable
+shorthand. The setup wizard's optional Make up phone/email (fake) is a separate,
+local, explicitly confirmed exception: only missing selected addresses may be filled
+with labelled fake values. The model must still never invent those fields. Source
+quotes remain required for other setup fields. Setup never overwrites user edits or
+explicit locks, whatever the AI-edit switch says.
+
+`{{phone_format}}` remains the single preset line. Generated safety wording reflects
+the AI-edit switch; compact continuity marks edited/locked fields and fake addresses.
+No extra macro, tag or record type is introduced. See WIZARD-FIX-2.md for the explicit
+exceptions, duplicate review, merging, scopes and migration limitations.

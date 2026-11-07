@@ -1,3 +1,4 @@
+import {fieldAllows} from "./field-protection";
 import {contactMatch} from "./contact-info";
 import { isRecord } from "./shared";
 import { recordText, placeholder } from "./record-values";
@@ -162,6 +163,7 @@ export function applyActivities(doc: Document, patch: Patch, emails: EmailData[]
         const proof = rows.filter(r => !old || r.index_in_chat > old.at.index).some(r => transformTags(r.content, "strip").includes(bank.balance) && normalize(transformTags(r.content, "strip")).includes(normalize(bank.name)));
         if (!user && !proof)
             continue;
+        if(!user&&(!fieldAllows(doc,{target:"bank",name:bank.name,field:"balance"},bank.balance,at,rows.map(r=>transformTags(r.content,"strip")).join("\n"),bank.evidence)||!fieldAllows(doc,{target:"bank",name:bank.name,field:"time"},bank.time,at,rows.map(r=>transformTags(r.content,"strip")).join("\n"),bank.evidence)))continue;
         if (old?.by === "user" && !user && (!bank.evidence || !bank.evidence.includes(bank.balance) || !rows.some(r => r.index_in_chat > old.at.index && transformTags(r.content, "strip").includes(bank.evidence!))))
             continue;
         const key = JSON.stringify(["bank", at, bank]);

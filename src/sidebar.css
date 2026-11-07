@@ -117,3 +117,8 @@
 .lpt-setup-button {margin:var(--lpt-side-gap);min-height:var(--lpt-side-target);border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);background:var(--lpt-side-btn-bg);color:var(--lpt-side-btn-text);cursor:pointer;}
 .lpt-setup-record {background:var(--lpt-side-bg);border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);padding:var(--lpt-side-space);margin:var(--lpt-side-gap) 0;}
 .lpt-setup-record-value {overflow-wrap:anywhere;}
+
+.lpt-setup-duplicates {display:flex;flex-wrap:wrap;gap:var(--lpt-side-gap);}
+.lpt-setup-merge-target,.lpt-setup-keep-name,.lpt-fake-domain {width:100%;max-width:100%;min-width:0;min-height:var(--lpt-side-target);background:var(--lpt-side-bg);color:var(--lpt-side-text);border:1px solid var(--lpt-side-border);border-radius:var(--lpt-side-radius);}
+.lpt-setup-button[aria-pressed="true"] {font-weight:bold;text-decoration:underline;}
+.lpt-setup-match,.lpt-edit-warning {font-weight:bold;}

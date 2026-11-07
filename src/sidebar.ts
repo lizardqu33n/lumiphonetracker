@@ -218,7 +218,10 @@ export class Sidebar {
                 source.append(node("p", "lpt-side-help", "Requests may cost money depending on the model chosen."));
             }
         }
-        const setup=this.section("setup","Setup wizard","This chat");setup.append(this.setup.root);
+        const setup=this.section("setup","Setup wizard","This chat");
+        if(this.doc){this.toggle(setup,"fakeAddresses","Make up phone/email (fake)","Made-up phone numbers and emails are fake. Don't assume they belong to the character or to any real person.",this.doc.settings.fakeAddresses,on=>({fakeAddresses:on}));
+          if(this.doc.settings.fakeAddresses){const label=node("label","lpt-side-label lpt-fake-domain-label","Made-up email domain"),domain=node("input","lpt-input lpt-fake-domain");domain.type="text";domain.maxLength=150;domain.value=this.doc.settings.fakeDomain;domain.disabled=this.saving;domain.setAttribute("aria-label","Made-up email domain");domain.addEventListener("change",()=>{if(origin===this.epoch&&domain.isConnected)void this.save({fakeDomain:domain.value.trim()});});label.append(domain);setup.append(label);}
+        }setup.append(this.setup.root);
         const appearance = this.section("appearance", "Appearance", "All my chats");
         const cssFold=node("details","lpt-side-css-collapse");cssFold.open=this.cssOpen;cssFold.append(node("summary","lpt-side-css-summary","Upload CSS files"));cssFold.addEventListener("toggle",()=>{if(cssFold.isConnected)this.cssOpen=cssFold.open;});
         this.styleUpload(cssFold,"css","Phone styles (styles.css)");this.styleUpload(cssFold,"sidebarCss","Sidebar styles (sidebar.css)");
@@ -232,6 +235,8 @@ export class Sidebar {
             this.number(numbers, "keepTrackers", "Keep tracker blocks in the last N messages", "0 uses continuity summaries only.", 0);
             this.number(numbers, "keepTexts", "Recent messages to keep texts from", "Older text tags stay out of prompt history.", 1);
             this.toggle(advanced, "aiPlayerTexts", "Let the AI write texts, calls and emails for my character", "Off by default. Your own established messages and calls still count.", this.doc.settings.aiPlayerTexts, on => ({ aiPlayerTexts: on }));
+            this.toggle(advanced,"allowAIUserEdits","Let the AI change fields I edited","Off by default. When on, new quoted story facts may replace your edits. Locked fields stay protected. Restore my version keeps your last edit available.",this.doc.settings.allowAIUserEdits,on=>({allowAIUserEdits:on}));
+            if(this.doc.settings.allowAIUserEdits)advanced.append(node("p","lpt-side-help lpt-edit-warning","Warning: AI updates can replace your edited fields. Use a field lock to keep a value fixed."));
             this.toggle(advanced, "inferMissing", "Let the AI fill in missing details", "Off by default. New inferred contact values are marked.", this.doc.settings.inferMissing, on => ({ inferMissing: on }));
         }
         advanced.append(this.personal.wording);

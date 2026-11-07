@@ -1,3 +1,4 @@
+import {fieldKey,restorable,fieldValue,type FieldRef} from "./field-protection";
 import {CONTACT_ICONS} from "./contact-icons";
 import {emptyContactInfo,contactDuplicates,contactMatch} from "./contact-info";
 import {renderEmojiText,attachEmojiPicker} from "./emoji";
@@ -14,7 +15,7 @@ import { conversations, emptyReads, isUnread, receipt, threadKey, type Conversat
 import { isRecord } from "./shared";
 
 export interface ViewActions {
-  update(change: { edit?: Partial<ManualEdit>; settings?: unknown; dismissNotice?: string;portrait?:{name:string;data:string|null};contactInfo?:unknown }, revision: number): Promise<PhoneDocument>;
+  update(change: { edit?: Partial<ManualEdit>; settings?: unknown; dismissNotice?: string;portrait?:{name:string;data:string|null};contactInfo?:unknown;fieldControl?:unknown;mergeContacts?:unknown }, revision: number): Promise<PhoneDocument>;
   preferences(change: { css?: string; dismiss?: App|"Home"|"Draft hint" }): Promise<Preferences>;
   markRead(chatId: string, key: string, observed: { id: string; receipt: string }[]): Promise<ReadState>;
   draft(chatId: string, to: string, text: string,group?:string): { manual: boolean; tag: string };
@@ -320,7 +321,19 @@ export class PhoneView {
       if (key === "location" && v && typeof v === "object" && "wider" in v && v.wider.length) b.append(el("span", "lpt-wider", v.wider.join(" · ")));
       if (key === "attire" && v && typeof v === "object" && "removed" in v) b.append(el("span", "lpt-wider", `Removed: ${v.removed.join(" / ") || "none listed"}`));
     }
-    if (marked(cell)) b.append(el("span", "lpt-marker", marked(cell))); parent.append(b);
+    if (marked(cell)) b.append(el("span", "lpt-marker", marked(cell)));const unit=el("div","lpt-field-unit");unit.append(b);parent.append(unit);this.fieldControls(unit,{target,field:key,...(contact?{name:contact.name}:{})},name);
+  }
+  private fieldControls(parent:HTMLElement,ref:FieldRef,label:string):void {
+    const row=el("div","lpt-field-controls"),locked=this.doc?.fieldLocks?.[fieldKey(ref)]===true,epoch=this.chatEpoch;
+    const control=button(locked?"Unlock":"Lock","lpt-button lpt-field-lock",()=>{if(epoch===this.chatEpoch&&row.isConnected)void this.change({fieldControl:{...ref,action:locked?"unlock":"lock"}});});control.setAttribute("aria-label",`${locked?"Unlock":"Lock"} ${label}`);control.setAttribute("aria-pressed",String(locked));row.classList.toggle("is-locked",locked);row.append(control);
+    if(restorable(this.doc!,ref)){const restore=button("Restore my version","lpt-button lpt-field-restore",()=>{if(epoch===this.chatEpoch&&row.isConnected)void this.change({fieldControl:{...ref,action:"restore"}});});restore.setAttribute("aria-label",`Restore my version of ${label}`);row.append(restore);}parent.append(row);
+  }
+  private mergeContactUI(parent:HTMLElement,c:Contact):void {
+    if(this.doc!.state.contacts.length<2)return;const epoch=this.chatEpoch,open=button("Merge contacts","lpt-button lpt-merge-open",()=>{
+      const box=el("div","lpt-merge-confirm"),label=el("label","lpt-merge-label","Keep this contact:"),select=el("select","lpt-input lpt-merge-target");select.setAttribute("aria-label","Contact to keep");const placeholder=el("option","lpt-merge-option","Choose a contact");placeholder.value="";select.append(placeholder);
+      for(const other of this.doc!.state.contacts)if(other!==c){const option=el("option","lpt-merge-option",other.name);option.value=other.name;select.append(option);}label.append(select);box.append(label,el("p","lpt-help lpt-merge-help","Keeps that contact's values and fills empty fields. Original records stay in saved merge history."));
+      const confirm=button("Confirm merge","lpt-button lpt-merge-save",()=>{if(epoch===this.chatEpoch&&box.isConnected){this.selectedContact=normalize(select.value);void this.change({mergeContacts:{from:c.name,into:select.value,confirm:true}});}});confirm.disabled=true;select.addEventListener("change",()=>{confirm.disabled=!select.value;});box.append(confirm,button("Cancel","lpt-button lpt-merge-cancel",()=>box.remove()));parent.append(box);
+    });parent.append(open);
   }
   private scene(): void {
     const section = el("section", "lpt-scene");
@@ -360,13 +373,13 @@ export class PhoneView {
   private contactPage(parent:HTMLElement,c:Contact):void {
     const info=c.info??emptyContactInfo(c.name),page=el("section",`lpt-card lpt-contact-page is-open ${info.kind==="Main"?"is-main":"is-npc"}`);parent.append(page);
     const nav=el("header","lpt-contact-nav"),back=button("Back","lpt-button lpt-contact-back",()=>{this.selectedContact=null;this.editing=false;if(this.contactOrigin==="Messages")this.navigate("Messages");else this.render();});back.setAttribute("aria-label",this.contactOrigin==="Messages"?"Back to Messages":"Back to Contacts");nav.append(back,button("Edit","lpt-button lpt-contact-edit",()=>this.contactForm(page,c)));page.append(nav);
-    const hero=el("div","lpt-contact-hero");hero.append(this.portrait(c.name,c.player),el("h2","lpt-contact-name lpt-card-title",c.name));const chips=el("div","lpt-contact-chips");for(const role of [info.kind,...(Array.isArray(c.fields.roles?.value)&&this.enabled("contacts.roles")?c.fields.roles.value:[])])chips.append(el("span","lpt-contact-chip",role));hero.append(chips);if(c.player)hero.append(el("span","lpt-marker","You"));if(c.editedByUser)hero.append(el("span","lpt-marker","edited by you"));page.append(hero);
+    const hero=el("div","lpt-contact-hero");hero.append(this.portrait(c.name,c.player),el("h2","lpt-contact-name lpt-card-title",c.name));const chips=el("div","lpt-contact-chips");for(const role of [info.kind,...(Array.isArray(c.fields.roles?.value)&&this.enabled("contacts.roles")?c.fields.roles.value:[])])chips.append(el("span","lpt-contact-chip",role));hero.append(chips);if(c.player)hero.append(el("span","lpt-marker","You"));if(c.editedByUser)hero.append(el("span","lpt-marker","Edited by you"));else if(c.addedBySetup)hero.append(el("span","lpt-marker lpt-setup-origin","Added by setup wizard"));page.append(hero);
     if(c.matchHint)page.append(el("p","lpt-contact-match-hint",c.matchHint));if(contactDuplicates(this.doc!.contactInfo??{}))page.append(el("p","lpt-contact-duplicate-warning","Duplicate phone number or email address. Matching will not choose between them."));
-    const line=(label:string,value:string,action?:()=>void,image?:keyof typeof CONTACT_ICONS)=>{if(!value)return;const field=label==="Phone"?"phone":label==="Email"?"email":label==="Relationship type"?"relationship":"detail";const row=el("div",`lpt-contact-info-row lpt-contact-${field}-row`);row.append(el("span","lpt-contact-info-label",label),el("span","lpt-contact-info-value",value));if(action){const b=button(label==="Phone"?"Message":"Email","lpt-button lpt-contact-link",action);if(image)b.prepend(this.contactIcon(image));row.append(b);}page.append(row);};
+    const line=(label:string,value:string,action?:()=>void,image?:keyof typeof CONTACT_ICONS)=>{if(!value)return;const field=label==="Phone"?"phone":label==="Email"?"email":label==="Relationship type"?"relationship":"detail";const row=el("div",`lpt-contact-info-row lpt-contact-${field}-row`);row.append(el("span","lpt-contact-info-label",label),el("span","lpt-contact-info-value",value));if(info.fakeFields?.includes(field))row.append(el("span","lpt-marker lpt-made-up","made up"));if(action){const b=button(label==="Phone"?"Message":"Email","lpt-button lpt-contact-link",action);if(image)b.prepend(this.contactIcon(image));row.append(b);}page.append(row);};
     if(this.doc!.settings.apps.Messages)line("Phone",info.phone,()=>{this.selectedContact=null;this.selectedText=normalize(c.name);this.navigate("Messages");this.markVisibleConversation();},"message");
     if(this.doc!.settings.apps.Email)line("Email",info.email,()=>{this.selectedContact=null;this.navigate("Email");},"email");
     line("Relationship type",info.relationship);for(const d of info.details)line(d.label,d.value);
-    const extra=el("div","lpt-contact-extra");for(const key of CONTACT_KEYS)if(key!=="roles"&&this.enabled(`contacts.${key}`)&&c.fields[key]&&(!c.player||["physical","position","attire"].includes(key))){const row=el("div","lpt-contact-info-row");row.append(el("span","lpt-contact-info-label",FIELD_NAMES[key]),el("span","lpt-contact-info-value",valueText(c.fields[key])));extra.append(row);}page.append(extra);
+    const extra=el("div","lpt-contact-extra");for(const key of CONTACT_KEYS)if(key!=="roles"&&this.enabled(`contacts.${key}`)&&c.fields[key]&&(!c.player||["physical","position","attire"].includes(key))){const row=el("div","lpt-contact-info-row");row.append(el("span","lpt-contact-info-label",FIELD_NAMES[key]),el("span","lpt-contact-info-value",valueText(c.fields[key])));this.fieldControls(row,{target:"contact",name:c.name,field:key},FIELD_NAMES[key]);extra.append(row);}if(c.fields.roles&&!c.player)this.fieldControls(extra,{target:"contact",name:c.name,field:"roles"},"Roles");page.append(extra);this.mergeContactUI(page,c);
     if(this.doc!.settings.apps.Messages&&!info.phone){const b=button("Message","lpt-button lpt-contact-link",()=>{this.selectedContact=null;this.selectedText=normalize(c.name);this.navigate("Messages");this.markVisibleConversation();});b.prepend(this.contactIcon("message"));page.append(b);}
   }
   private contactForm(parent:HTMLElement,contact?:Contact):void {
@@ -421,7 +434,7 @@ export class PhoneView {
       const body = el("div", "lpt-card-body"); body.append(el("p", "lpt-place-description", place.description || "No description established yet."));
       if (place.relation) body.append(el("p", "lpt-help", place.relation));
       const actions = el("div", "lpt-actions"); actions.append(button("Edit", "lpt-button", () => this.locationForm(body, place)));
-      this.deleteAction(actions, { target: "location", name: place.name }); body.append(actions); card.append(summary, body); section.append(card);
+      for(const field of ["description","relation"])this.fieldControls(body,{target:"location",name:place.name,field},`Place ${field}`);this.deleteAction(actions, { target: "location", name: place.name }); body.append(actions); card.append(summary, body); section.append(card);
     }
     if (!places.length) this.empty("No places yet. This fills in when the story establishes a meaningful place.", section);
   }
@@ -465,7 +478,7 @@ export class PhoneView {
     const body = el("div", "lpt-card-body");
     body.append(el("p", "lpt-note-full", [note.name, note.detail, note.context].filter(Boolean).join(" | ")));
     const actions = el("div", "lpt-actions"); actions.append(button("Edit", "lpt-button", () => this.noteForm(body, key, note)));
-    this.deleteAction(actions, { target: "note", section: key, name: note.name }); body.append(actions); card.append(summary, body); parent.append(card);
+    for(const field of ["detail","context",...(key==="plots"?["resolved"]:[])])this.fieldControls(body,{target:"note",section:key,name:note.name,field},`Note ${field}`);this.deleteAction(actions, { target: "note", section: key, name: note.name }); body.append(actions); card.append(summary, body); parent.append(card);
   }
   private noteForm(parent: HTMLElement, key: Section, note?: Note): void {
     if (!note && this.doc!.state.notes[key].filter(n => !n.resolved).length >= this.doc!.settings.notesPerSection) { this.setError("This section is full. Delete a note to make room."); return; }
@@ -552,7 +565,7 @@ export class PhoneView {
       if(!this.enabled("bank.balance")&&!this.enabled("bank.transactions"))this.empty("Bank fields are off. Change them in the sidebar's Phone tab.",section);
     }
   }
-  private activityControls(parent:HTMLElement,target:"call"|"email"|"bank"|"transaction",entry:Record<string,unknown>,add:(type:typeof target,entry:Record<string,unknown>)=>void):void{const controls=el("div","lpt-actions");controls.append(button("Edit","lpt-button",()=>add(target,entry)));this.deleteAction(controls,{target,name:String(entry.id)});parent.append(controls);if(entry.by==="user"&&isRecord(entry.at)&&entry.at.variant==="manual")parent.append(el("small","lpt-marker","edited by you"));}
+  private activityControls(parent:HTMLElement,target:"call"|"email"|"bank"|"transaction",entry:Record<string,unknown>,add:(type:typeof target,entry:Record<string,unknown>)=>void):void{const controls=el("div","lpt-actions");controls.append(button("Edit","lpt-button",()=>add(target,entry)));this.deleteAction(controls,{target,name:String(entry.id)});parent.append(controls);if(target==="bank")for(const field of ["balance","time"])this.fieldControls(parent,{target:"bank",name:String(entry.name),field},`Bank ${field}`);if(entry.by==="user"&&isRecord(entry.at)&&entry.at.variant==="manual")parent.append(el("small","lpt-marker","edited by you"));}
   private activityForm(parent:HTMLElement,target:"call"|"email"|"bank"|"transaction",entry?:Record<string,unknown>):void{
     const fields=target==="call"?[["name","Name or number"],["direction","Direction"],["time","Time (optional)"],["count","Repeat count"]]:target==="email"?[["from","Sender"],["to","To (optional)"],["subject","Subject"],["body","Body"],["time","Time (optional)"]]:target==="bank"?[["name","Account"],["balance","Stated balance"],["time","As of (optional)"]]:[["description","Description"],["amount","Stated amount"],["time","Time (optional)"]];
     this.form(parent,fields.map(([key,label])=>({key,label,value:String(entry?.[key]??(key==="direction"?"in":key==="count"?1:"")),...(key==="direction"?{options:[["in","Incoming"],["out","Outgoing"],["missed","Missed"]] as [string,string][]}:{}),number:key==="count",required:!label.includes("optional"),multiline:key==="body",max:key==="body"?1500:key==="description"?240:key==="subject"?200:100})),values=>({edit:{target,...(entry?{name:String(entry.id)}:{}),value:Object.fromEntries(Object.entries(values).filter(([,v])=>v!=="").map(([k,v])=>[k,k==="count"?Number(v):v]))}}));

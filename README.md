@@ -2,7 +2,11 @@
 
 A small phone for keeping track of story facts. Each chat has its own Scene, Weather, Locations, Notes, Contacts and Messages, plus optional Calls, Email and Bank. The existing Phone sidebar tab controls apps, tracking and appearance.
 
-**Version 0.16.2: all six build steps are delivered.** Source, manifest, built frontend/backend, tests and guides are included. The new Helper AI has been tested with mocks, not a real paid connection.
+**Version 0.17.0: all six build steps are delivered.** Source, manifest, built frontend/backend, tests and guides are included. The new Helper AI has been tested with mocks, not a real paid connection.
+
+Version 0.17.0 adds duplicate review and contact merging, honest setup source labels,
+optional fake addresses, and an opt-in AI-edit exception with field locks and Restore
+my version. Setup shows known input/request counts only. See [the wizard guide](docs/WIZARD-FIX-2.md).
 
 Version 0.16.2 passes the selected model when running setup and custom tracking,
 and gives safe failure categories. Version 0.16.1 fixes setup connection selection and moves the field-by-field wizard

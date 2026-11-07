@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.17.0 - Wizard duplicate review and edit controls
+
+- Wizard review now shows known source-character, message and request counts only;
+  removed token counting and all wizard price wording.
+- Review matching first/full names with Merge or Keep both. Added confirmed contact
+  merging, aliases, retained originals and rebuild support for existing duplicates.
+- New setup contacts show Added by setup wizard without a user-edit lock. Legacy
+  provenance is not guessed; old labels/protections remain.
+- Optional local fake 555-01xx/email filling, OFF by default, with editable domain
+  and made-up labels. Keeps real/edited values and explicit blanks.
+- Optional AI replacement of user-edited fields, OFF by default, with a warning,
+  exact newer-story evidence, per-field hard locks and Restore my version.
+- Shared chat scopes and trusted-user calls remain; profiles exclude the new safety
+  switches/domain. No new APIs, permissions, tabs, macros or tag syntax.
+
+
 ## 0.16.2 - Pass the model to raw generation
 
 - Setup now sends the reviewed model together with the saved connection ID and

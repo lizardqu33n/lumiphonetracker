@@ -89,7 +89,7 @@ describe("Part 1 shorthand and compliance",()=>{
     expect(doc.state.locations.map(p=>p.name)).toEqual(["Station"]);
   });
   test("exact evidence protects user edits and resolves plots",()=>{
-    const doc=emptyDocument("a");doc.edits.push({id:"edit",target:"contact",name:"Ada",value:{position:"inside the room"},after:"m0",index:0});
+    const doc=emptyDocument("a");doc.settings.allowAIUserEdits=true;doc.edits.push({id:"edit",target:"contact",name:"Ada",value:{position:"inside the room"},after:"m0",index:0});
     const first=row(0,'present: Ada\nc: Ada | pos=inside the room\nplots: Meet Ivo | Meet at dawn | Promise');
     expect(run([first,row(1,'c: Ada | pos=beside the gate')],doc).state.contacts.find(c=>c.name==="Ada")?.fields.position?.value).toBe("inside the room");
     const changed=run([first,row(1,'c: Ada | pos=beside the gate ~ "Ada moves beside the gate."\ndone: Meet Ivo',"Ada moves beside the gate. The meeting with Ivo is complete.")],doc);

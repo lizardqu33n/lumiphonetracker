@@ -1,3 +1,5 @@
+import {canonicalContact,projectMerges} from "./contact-merge";
+import {captureUserVersion,fieldAllows} from "./field-protection";
 import {projectContacts,contactMatch} from "./contact-info";
 import {callId,helperCallSource} from "./calls";
 import { applyActivities,applyActivityEdit } from "./activity";
@@ -24,33 +26,15 @@ const namesPresent = (state: State): string[] => Array.isArray(state.scene.prese
 export function evidenceValid(evidence: string | undefined, prose: string): boolean {
   return !!evidence && evidence.trim().length >= 3 && prose.includes(evidence);
 }
-function evidenceNamesValue(update: Change, old: Cell): boolean {
-  const values = (v: Cell["value"]): string[] => typeof v === "string" ? [v] : Array.isArray(v) ? v :
-    "name" in v ? [v.name] : [...v.worn.map(item => `worn\u0001${item}`), ...v.removed.map(item => `removed\u0001${item}`)];
-  const previous = new Set(values(old.value).map(normalize));
-  const additions = values(update.value).filter(v => !previous.has(normalize(v)));
-  // A removal-only replacement still needs a quote naming what was removed.
-  const changed = additions.length ? additions : values(old.value).filter(v => !values(update.value).map(normalize).includes(normalize(v)));
-  return changed.length > 0 && changed.every(v => {
-    const text = v.includes("\u0001") ? v.slice(v.indexOf("\u0001") + 1) : v;
-    return text.trim() && normalize(update.evidence ?? "").includes(normalize(text));
-  });
-}
 function setCell(old: Cell | undefined, update: Change | undefined, at: Origin, prose: string,
   infer: boolean): Cell | undefined {
   if (!update || !usable(update.value)) return old;
   if (old && same(old.value, update.value)) return old;
   if (update.inferred && (!infer || old)) return old;
-  if (old && old.by === "user" &&
-    (at.index <= old.at.index || !evidenceValid(update.evidence, prose) || !evidenceNamesValue(update, old))) return old;
+  // User versions, chronology, evidence and explicit locks are checked by fieldAllows.
   return { value: update.value, by: "ai", at, inferred: update.inferred === true };
 }
 function notice(state: State, text: string): void { if (!state.notices.includes(text)) state.notices.push(text); }
-function namedChanges(evidence: string | undefined, values: [string | undefined, string][]): boolean {
-  return values.every(([value, old]) => value === undefined || value === old ||
-    (!!value.trim() && normalize(evidence ?? "").includes(normalize(value))));
-}
-
 function legacyPatch(content: string): Patch | null {
   const legacy = parseLegacy(content);
   if (legacy.invalidTracker) return null;
@@ -69,6 +53,7 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
   const players = new Set(playerNames.map(normalize).filter(Boolean));
   // A saved user message is authoritative evidence of that row's author name.
   for (const row of rows) if (row.role === "user" && row.name?.trim()) players.add(normalize(row.name));
+  for(const player of [...players])players.add(normalize(canonicalContact(document,player)));
   // A user's display-name correction must not remove player-field restrictions.
   for (const edit of document.edits) if (edit.target === "contact" && edit.rename && players.has(normalize(edit.name ?? ""))) players.add(normalize(edit.rename));
   const previous = new Map(document.accepted.map(e => [JSON.stringify([e.at.id, e.at.variant]), e]));
@@ -84,6 +69,7 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
       !row.id || !Number.isInteger(row.index_in_chat) || row.index_in_chat < 0) throw new Error("Invalid history");
     ids.add(row.id); indexes.add(row.index_in_chat);
   }
+  for(const m of Object.values(next.contactMerges??{})){const anchor=sorted.find(r=>r.id===m.after);m.index=anchor?.index_in_chat??Math.min(m.index,sorted.at(-1)?.index_in_chat??-1);}
   const displayPlayers = new Map<string, string>();
   for (const name of [...playerNames, ...rows.filter(r => r.role === "user").map(r => r.name ?? "")]) {
     if (name.trim()) displayPlayers.set(normalize(name), name.trim());
@@ -117,10 +103,10 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
       const previouslyPlayer=document.playerNames.some(n=>[edit.name,edit.rename].some(name=>typeof name==="string"&&normalize(name)===normalize(n)));
       if(edit.target==="contact"&&edit.playerAtEdit===undefined&&nowPlayer&&!previouslyPlayer)edit.playerAtEdit=false;
       const replayEdit=edit.target==="contact"&&edit.playerAtEdit===false&&isRecord(edit.value)&&nowPlayer?{...edit,value:Object.fromEntries(Object.entries(edit.value).filter(([key])=>["physical","position","attire"].includes(key)))}:edit;
-      applyManual(state, replayEdit, players, tombstones,document.settings.aiPlayerTexts);
+      const mapped={...replayEdit,index,...(replayEdit.name?{name:canonicalContact(next,replayEdit.name,index)}:{})};applyManual(state,mapped,players,tombstones,document.settings.aiPlayerTexts);
     }
   };
-  manualAt(-1);
+  manualAt(-1);projectMerges(next,-1);
   for (const row of sorted) {
     const at = { id: row.id, index: row.index_in_chat,
       variant: JSON.stringify([row.swipe_id, row.swipe_dates?.[row.swipe_id] ?? null]) };
@@ -209,7 +195,7 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
       }
       applyActivities(next,{...helperPatch,calls:[]},[],entry.at,sources,players,false,tombstones,reservedCalls);
     }
-    manualAt(row.index_in_chat);
+    manualAt(row.index_in_chat);projectMerges(next,row.index_in_chat);
   }
   // Untyped Step 2 notes cannot be assigned a story-log category without guessing.
   // Preserve them in Misc, not marked user-added and not sent to AI without opt-in.
@@ -219,6 +205,7 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
     state.notes.misc.push({ name, detail, context: "Preserved from the earlier tracker", resolved: false,
       sendToAI: false, by: "ai", addedByUser: false, updated: false, at: { id: "legacy", index: -1, variant: "legacy" } });
   }
+  projectMerges(next,Infinity);
   next.callAdmissions=state.calls.map(c=>c.id);
   state.calls.sort((a,b)=>a.at.index-b.at.index);
   next.notices = [...state.notices];
@@ -228,9 +215,10 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
 
 function applyAI(doc: Document, patch: Patch, at: Origin, prose: string, players: Set<string>, tombstones: Set<string>, knownNotes: Set<string>): void {
   const state = doc.state;
-  for (const key of SCENE_KEYS) state.scene[key] = setCell(state.scene[key], patch.scene[key], at, prose, false);
-  state.weather = setCell(state.weather, patch.weather, at, prose, false);
-  for (const update of patch.contacts) {
+  for (const key of SCENE_KEYS){const c=patch.scene[key];if(c&&fieldAllows(doc,{target:"scene",field:key},c.value,at,prose,c.evidence,c.inferred))state.scene[key]=setCell(state.scene[key],c,at,prose,false);}
+  if(patch.weather&&fieldAllows(doc,{target:"weather",field:"weather"},patch.weather.value,at,prose,patch.weather.evidence))state.weather=setCell(state.weather,patch.weather,at,prose,false);
+  if(Array.isArray(state.scene.present?.value))state.scene.present!.value=[...new Set(state.scene.present!.value.map(n=>canonicalContact(doc,n,at.index)))];
+  for(const rawContact of patch.contacts){const update={...rawContact,name:canonicalContact(doc,rawContact.name,at.index)};
     const rejectedKey = JSON.stringify([at.id, at.variant, "contacts", update]);
     if (doc.rejected.includes(rejectedKey)) continue;
     const key = normalize(update.name); if (tombstones.has(`contact/${key}`)) continue;
@@ -248,7 +236,7 @@ function applyAI(doc: Document, patch: Patch, at: Origin, prose: string, players
       const inferenceKey = JSON.stringify([at.id, at.variant, key, field, c]);
       const allowed = doc.settings.inferMissing || doc.inferences.includes(inferenceKey);
       const old = contact.fields[field];
-      contact.fields[field] = setCell(old, c, at, prose, allowed);
+      if(c&&fieldAllows(doc,{target:"contact",name:contact.name,field},c.value,at,prose,c.evidence,c.inferred))contact.fields[field] = setCell(old,c,at,prose,allowed);
       if (contact.fields[field]?.inferred && contact.fields[field] !== old && !doc.inferences.includes(inferenceKey)) doc.inferences.push(inferenceKey);
     }
   }
@@ -273,8 +261,8 @@ function applyAI(doc: Document, patch: Patch, at: Origin, prose: string, players
     if (!old && key===normalize(nameOfPlace(state))) continue;
     if (!old && state.locations.length >= 30) { notice(state, "Locations is full (30/30). Delete a place to make room."); doc.rejected.push(rejectedKey); continue; }
     if (!old && !prose.toLocaleLowerCase().includes(update.name.toLocaleLowerCase())) continue;
-    if (old?.by === "user" && (at.index <= old.at.index || !evidenceValid(update.evidence, prose) ||
-      !namedChanges(update.evidence, [[update.description, old.description], [update.relation, old.relation]]))) continue;
+    for(const field of ["description","relation"] as const)if(update[field]!==undefined&&!fieldAllows(doc,{target:"location",name:update.name,field},update[field],at,prose,update.evidence))delete update[field];
+    if(old&&update.description===undefined&&update.relation===undefined)continue;
     const value = { name: old?.name ?? update.name, description: update.description ?? old?.description ?? "",
       relation: update.relation ?? old?.relation ?? "", at, by: "ai" as const, updated: !!old };
     if (old) Object.assign(old, value); else state.locations.push(value);
@@ -291,10 +279,8 @@ function applyAI(doc: Document, patch: Patch, at: Origin, prose: string, players
       doc.rejected.push(rejectedKey); continue;
     }
     if (!old && update.resolved) continue; // Do not manufacture an already-resolved plot.
-    if (old?.by === "user" && (at.index <= old.at.index || !evidenceValid(update.evidence, prose) ||
-      !namedChanges(update.evidence, [[update.detail, old.detail], [update.context, old.context]]) ||
-      (update.resolved !== undefined && update.resolved !== old.resolved &&
-        !["resolved", "completed", "fulfilled", "done", "reopened", "pending"].some(word => normalize(update.evidence ?? "").includes(word))))) continue;
+    for(const field of ["detail","context","resolved"] as const)if(update[field]!==undefined&&!fieldAllows(doc,{target:"note",name:update.name,section,field},update[field],at,prose,update.evidence))delete update[field];
+    if(old&&update.detail===undefined&&update.context===undefined&&update.resolved===undefined)continue;
     const detail = update.detail ?? old?.detail ?? ""; const context = update.context ?? old?.context ?? "";
     const resolved = section === "plots" ? update.resolved ?? old?.resolved ?? false : false;
     const changed = !!old && (detail !== old.detail || context !== old.context || resolved !== old.resolved);
@@ -305,14 +291,15 @@ function applyAI(doc: Document, patch: Patch, at: Origin, prose: string, players
   }
 }
 
-export function applyManual(state: State, edit: ManualEdit, players: Set<string>, tombstones: Set<string>,allowPlayer=false): void {
+export function applyManual(state:State,edit:ManualEdit,players:Set<string>,tombstones:Set<string>,allowPlayer=false):void {applyManualValue(state,edit,players,tombstones,allowPlayer);captureUserVersion(state,edit);}
+function applyManualValue(state: State, edit: ManualEdit, players: Set<string>, tombstones: Set<string>,allowPlayer=false): void {
   if(applyActivityEdit(state,edit,tombstones,players,allowPlayer||edit.playerWritingAllowed===true))return;
   const at = { id: `edit:${edit.id}`, index: edit.index, variant: "user" };
   if (edit.target === "scene" || edit.target === "weather") {
     const field = edit.target === "weather" ? "weather" : edit.field;
     if (!field || (field !== "weather" && !SCENE_KEYS.includes(field as never))) throw new Error("Invalid editable field");
     const value = change(field, edit.value); if (!value) throw new Error("An edit needs a value");
-    const cell: Cell = { value: value.value, by: "user", at, inferred: false };
+    const cell: Cell = { value: value.value, by: edit.source?"ai":"user", at, inferred: false };
     if (field === "weather") state.weather = cell; else state.scene[field as typeof SCENE_KEYS[number]] = cell;
     return;
   }
@@ -324,7 +311,7 @@ export function applyManual(state: State, edit: ManualEdit, players: Set<string>
   const renameCurrent = () => {
     const present = state.scene.present;
     if (present && Array.isArray(present.value) && present.value.some(n => normalize(n) === key)) {
-      state.scene.present = { value: present.value.map(n => normalize(n) === key ? newName : n), by: "user", at, inferred: false };
+      state.scene.present = { value: present.value.map(n => normalize(n) === key ? newName : n), by: edit.source?"ai":"user", at, inferred: false };
     }
   };
   if (edit.target === "contact") {
@@ -336,9 +323,9 @@ export function applyManual(state: State, edit: ManualEdit, players: Set<string>
     if (newKey !== key && state.contacts.some(c => normalize(c.name) === newKey)) throw new Error("A contact with that name already exists");
     for (const [field, raw] of Object.entries(edit.value)) {
       if (!CONTACT_KEYS.includes(field as never) || (contact.player && !["physical", "position", "attire"].includes(field))) throw new Error("Invalid player/contact field");
-      const value = change(field, raw); if (value) contact.fields[field as typeof CONTACT_KEYS[number]] = { value: value.value, by: "user", at, inferred: false };
+      const value = change(field, raw); if (value) contact.fields[field as typeof CONTACT_KEYS[number]] = { value: value.value, by: edit.source?"ai":"user", at, inferred: false };
     }
-    contact.name = newName; contact.editedByUser = true;
+    contact.name=newName;if(!edit.source)contact.editedByUser=true;else if(edit.source==="setup")contact.addedBySetup=true;
     if (newKey !== key) { tombstones.add(`contact/${key}`); renameCurrent(); }
     if (!old) state.contacts.push(contact); tombstones.delete(`contact/${newKey}`); return;
   }
@@ -348,12 +335,12 @@ export function applyManual(state: State, edit: ManualEdit, players: Set<string>
     if (!isRecord(edit.value) || !short(edit.value.description) || !short(edit.value.relation)) throw new Error("Invalid place edit");
     if (!old && state.locations.length >= 30) throw new Error("Locations is full");
     if (newKey !== key && state.locations.some(p => normalize(p.name) === newKey)) throw new Error("A place with that name already exists");
-    const value = { name: newName, description: edit.value.description, relation: edit.value.relation, at, by: "user" as const, updated: !!old };
+    const value = { name: newName, description: edit.value.description, relation: edit.value.relation, at, by: edit.source?"ai" as const:"user" as const, updated: !!old };
     if (newKey !== key) {
       tombstones.add(`location/${key}`);
       const current = state.scene.location;
       if (current && typeof current.value === "object" && "name" in current.value && normalize(current.value.name) === key) {
-        state.scene.location = { value: { ...current.value, name: newName }, by: "user", at, inferred: false };
+        state.scene.location = { value: { ...current.value, name: newName }, by: edit.source?"ai":"user", at, inferred: false };
       }
     }
     if (old) Object.assign(old, value); else state.locations.push(value); tombstones.delete(`location/${newKey}`); return;
@@ -366,7 +353,7 @@ export function applyManual(state: State, edit: ManualEdit, players: Set<string>
   const note: Note = { name: newName, detail: value.detail ?? old?.detail ?? "", context: value.context ?? old?.context ?? "",
     resolved: section === "plots" && (value.resolved ?? old?.resolved ?? false),
     sendToAI: isRecord(edit.value) && typeof edit.value.sendToAI === "boolean" ? edit.value.sendToAI : old?.sendToAI ?? false,
-    at, by: "user", addedByUser: old?.addedByUser ?? !old, updated: !!old };
+    at, by: edit.source?"ai":"user", addedByUser: old?.addedByUser ?? (!edit.source&&!old), updated: !!old };
   if (newKey !== key) tombstones.add(`note/${section}/${key}`);
   if (old) Object.assign(old, note); else notes.push(note); tombstones.delete(`note/${section}/${newKey}`);
 }

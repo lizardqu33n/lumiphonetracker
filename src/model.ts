@@ -28,11 +28,12 @@ export interface Patch {
 }
 export interface TextData { from: string; text: string; time?: string; to?: string; group?:string }
 export interface SavedMessage extends TextData { originalFrom?:string;originalTo?:string; id: string; direction: "incoming" | "outgoing"; at: Origin; date?:string }
-export interface Contact { info?:ContactInfo;matchHint?:string;name: string; player: boolean; fields: Partial<Record<ContactKey, Cell>>; lastSeen?: string; editedByUser?: boolean }
+export interface Contact { info?:ContactInfo;matchHint?:string;name: string; player: boolean; fields: Partial<Record<ContactKey, Cell>>; lastSeen?: string; editedByUser?: boolean; addedBySetup?:boolean }
 export interface Place { name: string; description: string; relation: string; at: Origin; by: "ai" | "user"; updated: boolean }
 export interface Note { name: string; detail: string; context: string; resolved: boolean; sendToAI: boolean;
   at: Origin; by: "ai" | "user"; addedByUser: boolean; updated: boolean }
 export interface State {
+  userVersions?:Record<string,{value:unknown;at:Origin}>;
   calls:ActivityEntry<CallData>[];bank:ActivityEntry<BankData>[];transactions:ActivityEntry<TransactionData>[];emails:(ActivityEntry<EmailData>&{direction:"incoming"|"outgoing"})[];
   scene: Partial<Record<SceneKey, Cell>>; weather?: Cell; contacts: Contact[]; locations: Place[];
   notes: Record<Section, Note[]>; messages: SavedMessage[]; notices: string[];
@@ -44,6 +45,7 @@ export type CoreApp=typeof ALL_APPS[number];
 export const APP_FIELDS:Record<CoreApp,string[]>={Scene:SCENE_KEYS.map(k=>`scene.${k}`),Weather:["weather"],Locations:["locations"],Notes:SECTIONS.map(k=>`notes.${k}`),Contacts:CONTACT_KEYS.map(k=>`contacts.${k}`),Messages:["messages"],Calls:["calls"],Email:["email"],Bank:["bank.balance","bank.transactions"]};
 export interface Settings {
   apps:Record<CoreApp,boolean>;
+  allowAIUserEdits:boolean;fakeAddresses:boolean;fakeDomain:string;
   enabled: Record<string, boolean>; aiPlayerTexts: boolean; inferMissing: boolean;
   keepTexts: number; keepTrackers: number; notesPerSection: number; logLines: number;
   source: "main" | "helper";
@@ -51,6 +53,7 @@ export interface Settings {
 }
 export interface HelperEntry { id: string; at: Origin; sources: { id: string; signature: string }[]; values: Record<string, unknown>; prose: string }
 export interface ManualEdit {
+  source?:"setup"|"merge"|"lock";editedFields?:string[];
   playerAtEdit?:boolean;
   playerWritingAllowed?:boolean;
   id: string; after: string | null; index: number;
@@ -59,6 +62,9 @@ export interface ManualEdit {
 }
 export interface Accepted { bankProof?:BankData[];at: Origin; patch: Patch; emails?:EmailData[]; texts: TextData[]; role: "user" | "assistant"; name?: string; prose: string }
 export interface Document {
+  fieldLocks?:Record<string,boolean>;userEditAdmissions?:string[];
+  contactMerges?:Record<string,{from:string;into:string;after:string|null;index:number}>;
+  mergeArchive?:unknown[];
   contactInfo?:Record<string,ContactInfo>;
   portraits?:Record<string,string>;
   callAdmissions?:string[];
@@ -75,7 +81,7 @@ export interface Document {
 }
 export const normalize = (name: string) => name.normalize("NFKC").trim().toLocaleLowerCase("en-US").split(" ").filter(Boolean).join(" ");
 export function defaults(): Settings {
-  return { apps:Object.fromEntries(ALL_APPS.map(a=>[a,(CORE_APPS as readonly string[]).includes(a)])) as Record<CoreApp,boolean>, enabled: Object.fromEntries(SWITCHES.map(k => [k, k !== "contacts.thoughts"])), aiPlayerTexts: false,
+  return { allowAIUserEdits:false,fakeAddresses:false,fakeDomain:"lumi.verse",apps:Object.fromEntries(ALL_APPS.map(a=>[a,(CORE_APPS as readonly string[]).includes(a)])) as Record<CoreApp,boolean>, enabled: Object.fromEntries(SWITCHES.map(k => [k, k !== "contacts.thoughts"])), aiPlayerTexts: false,
     inferMissing: false, keepTexts: 3, keepTrackers: 0, notesPerSection: 10, logLines: 20, source: "main", connection_id: null, helperMessages: 3 };
 }
 export function readSettings(input: unknown): Settings {
@@ -92,9 +98,11 @@ export function readSettings(input: unknown): Settings {
         if (!SWITCHES.includes(name as never) || typeof value !== "boolean") throw new Error("Invalid switch");
         out.enabled[name] = value;
       }
-    } else if (["aiPlayerTexts", "inferMissing"].includes(key)) {
+    } else if (["aiPlayerTexts", "inferMissing","allowAIUserEdits","fakeAddresses"].includes(key)) {
       if (typeof input[key] !== "boolean") throw new Error("Invalid switch");
       Object.assign(out, { [key]: input[key] });
+    } else if(key==="fakeDomain"){
+      if(typeof input.fakeDomain!=="string"||input.fakeDomain.length>150||!/^([a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z](?:[a-z0-9-]*[a-z0-9])?$/i.test(input.fakeDomain))throw Error("Use a domain such as lumi.verse, without @ or a web address.");out.fakeDomain=input.fakeDomain.toLowerCase();
     } else if (key === "connection_id") {
       if (input.connection_id !== null && (typeof input.connection_id !== "string" || !input.connection_id || input.connection_id.length > 256)) throw new Error("Invalid connection");
       out.connection_id = input.connection_id;

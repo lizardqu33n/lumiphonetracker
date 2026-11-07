@@ -108,7 +108,7 @@ describe("expanded schema and state", () => {
 
 describe("user corrections and story log", () => {
   test("user correction survives stale later values, but accepts evidenced new scene", () => {
-    const doc = emptyDocument("a"); doc.edits.push(edit("scene", { field: "location", value: "Home" }));
+    const doc = emptyDocument("a");doc.settings.allowAIUserEdits=true; doc.edits.push(edit("scene", { field: "location", value: "Home" }));
     const rows = [row(0, { location: "Cafe" }), row(1, { location: "Cafe" })];
     expect((run(rows, doc).state.scene.location?.value as { name: string }).name).toBe("Home");
     rows[1] = row(1, { location: { value: "Road", evidence: "They leave Home for the Road." } }, "They leave Home for the Road.");
@@ -133,7 +133,7 @@ describe("user corrections and story log", () => {
     expect(result.state.scene.time?.value).toBe("Dawn"); expect(result.state.weather?.value).toBe("Rain");
   });
   test("user-edited contact still needs quoted evidence after normal AI fields become quote-free", () => {
-    const doc = emptyDocument("a"); doc.edits.push(edit("contact", { name: "Ada", value: { physical: "bandaged hand" } }));
+    const doc = emptyDocument("a");doc.settings.allowAIUserEdits=true; doc.edits.push(edit("contact", { name: "Ada", value: { physical: "bandaged hand" } }));
     const rows = [row(0, { present: ["Ada"], contacts: [{ name: "Ada", physical: "unhurt" }] }), row(1, { contacts: [{ name: "Ada", physical: "healed hand" }] })];
     expect(run(rows, doc).state.contacts.find(c => c.name === "Ada")?.fields.physical?.value).toBe("bandaged hand");
     rows[1] = row(1, { contacts: [{ name: "Ada", physical: { value: "healed hand", evidence: "Ada shows her healed hand." } }] }, "Ada shows her healed hand.");

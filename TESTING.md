@@ -1,6 +1,41 @@
-# Verification report - 0.16.2
+# Verification report - 0.17.0
 
-Checked November 5, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **No live Lumiverse session or real model connection was used. A local Lumiverse build and its user-docs were inspected; that is not live-host verification. No paid model request was made.**
+Checked November 6, 2026 (America/Chicago), using Bun 1.4.4, TypeScript 5.7.3, official lumiverse-spindle-types 0.6.77 and headless Microsoft Edge via Playwright 1.58.2. **No live Lumiverse session or real model connection was used. A local Lumiverse build and its user-docs were inspected; that is not live-host verification. No paid model request was made.**
+
+## 0.17.0: wizard review and field protection
+
+245 code tests / 1959 assertions and 328 browser checks pass. Type checking,
+reproducible builds and package validation pass. No live host/model used.
+
+- Review input returns known source characters, request messages and one model
+  request. A mock tokenizer throws if called, proving it is no longer used.
+- Full/first-name matches, same-preview duplicates, mandatory Merge/Keep both,
+  distinct Keep both names, unedited missing-field filling and explicit confirmation.
+- Existing contact merging preserves chosen values, empty-field fill, address/name
+  aliases, archived originals, renaming/deletion, rebuilds and player restrictions.
+- New wizard provenance does not set editedByUser, user versions or a tag lock;
+  normal later facts can update it. Unknown old provenance is not guessed.
+- Fake filling starts OFF, uses local 555-01xx and the selected domain, marks values,
+  skips source-proven/edited/explicitly cleared values, and keeps source quotes.
+- AI edit exception starts OFF; newer exact value-bearing quotes are required ON.
+  Hard locks win, Restore changes only its field, saved versions survive restarts,
+  and admitted older facts survive disabling the switch or upgrading a legacy journal.
+- Shared-chat users see the same story/control data. Another chat has none of these
+  changes. Existing personal unread/appearance/profile/wording tests still pass.
+- Browser tests cover counts without price/token text, duplicate review and Keep
+  both, contact-page merge, setup/made-up markers, domain editing, warning,
+  Restore my version and locks while the exception is on. Existing opacity and
+  protected Reset/hostile-CSS recovery tests still pass.
+- No new API or permissions. Mock scoped calls still require the trusted user ID;
+  raw generation still requires the selected model. Profiles exclude both new
+  exceptions/domain and cannot enable them implicitly.
+
+Unverified live: native multi-user grants/storage, real-model extraction and correct
+attribution, provider behavior, real mobile drawer/keyboard/file behavior. Source
+quotes do not prove that a fact belongs to the right person; preview still matters.
+Old wizard and user edits were identical in storage; old origin labels/locks cannot
+be safely corrected automatically. Merge history is retained in storage, with no
+new history/undo screen. See docs/WIZARD-FIX-2.md for the exact scope and limits.
 
 ## 0.16.2: raw model and failure reporting
 

@@ -1748,3 +1748,14 @@
 .lpt-contact-link,.lpt-contact-detail-add {display:flex;align-items:center;gap:var(--lpt-contact-gap);}
 .lpt-contact-detail-edit-row {display:flex;flex-wrap:wrap;gap:var(--lpt-contact-gap);margin:var(--lpt-contact-gap) 0;}
 .lpt-contact-detail-label,.lpt-contact-detail-value {flex:1;min-width:0;}
+
+/* Field protection and contact merge controls. */
+.lpt-field-controls {display:flex;flex-wrap:wrap;gap:var(--lpt-contact-gap);margin-block:var(--lpt-contact-gap);font-size:var(--lpt-contact-font-size);}
+.lpt-field-controls.is-locked .lpt-field-lock {font-weight:bold;border-color:var(--lpt-contact-border);}
+.lpt-merge-confirm {background:var(--lpt-contact-surface);padding:var(--lpt-contact-padding);border:var(--lpt-contact-line-width) solid var(--lpt-contact-border);border-radius:var(--lpt-contact-radius);}
+.lpt-merge-label {display:flex;flex-direction:column;gap:var(--lpt-contact-gap);}
+.lpt-merge-target {max-width:100%;}
+.lpt-setup-origin,.lpt-made-up {color:var(--lpt-contact-muted);}
+
+.lpt-field-unit {min-width:0;display:flex;flex-direction:column;}
+.lpt-field-unit > .lpt-field {width:100%;}

@@ -1,4 +1,4 @@
-# Contacts and setup wizard - 0.16.2
+# Contacts and setup wizard - 0.17.0
 
 ## Contacts
 
@@ -56,45 +56,29 @@ still writes only changed supported story fields, never these confirmed address 
 
 ## Setup wizard
 
-Use Setup wizard in the sidebar Phone tab. Choose fields within Contacts and Notes,
-and/or Locations. The full list is in [the setup fix guide](FIX-0.16.1.md). Scene is never
-a choice. Removed apps must be added in the sidebar first. Review token cost is free:
-it reads the current card, your active persona and their attached plus your globally
-active lorebooks, then calls the documented tokenizer for the selected connection.
-Disabled lorebook entries are excluded. It sends no chat transcript or Scene state.
+Use the sidebar Phone tab's Setup wizard, with field choices for Contacts, Notes
+and Locations. Scene is excluded. Review input shows known source character and
+request-message counts and the single model request. There is no token-count call
+or money estimate. Run, preview and explicit Save remain separate.
 
-Version 0.16.2 also fixes a missing model in the raw request; see
-[the model request fix](FIX-0.16.2.md) for the documented API/types discrepancy
-and safe failure categories.
+Main AI uses the requesting user's documented default connection; Custom connection
+uses the existing saved connection_id. The selected model and trusted userId are
+passed explicitly to raw generation. No extra picker, key or permission is introduced.
 
-The wizard follows Connections: Main AI uses your documented Lumiverse default
-profile; Custom connection uses the saved connection_id. There is no extra picker
-or key. A manual wizard run never changes the background tracker source. Missing
-access, default connection or model is explained before any model request.
-Only clicking Run setup makes a model request. Cost review shows input tokens, an
-approximate marker when reported by Lumiverse, and a requested output limit of 2,000
-tokens. An exact currency charge is not exposed by the documented API. Requests may
-cost money; token counts are not a provider billing quote.
+First/full-name matches require Merge / Keep both. Setup never replaces a populated,
+user-edited, cleared, deleted or locked field. Missing unedited fields may be filled.
+New setup contacts are labelled Added by setup wizard and are not user-locked.
+Optional fake addresses and AI replacement of user edits start off. See the
+[current wizard guide](WIZARD-FIX-2.md) for their explicit exceptions, merge behavior,
+source-label migration, per-field locks and Restore my version.
 
-The model must return JSON with literal source quotes. Unsupported apps, invented
-values, placeholders, malformed output or unproven quotes fail safely. Literal
-matching cannot prove that a model attributed a fact to the right character: review
-the proposed values before confirming. The wizard has fixed source-only extraction
-rules, separate from editable background tracker wording. It never creates texts,
-emails, calls, bank records or story prose.
-
-Preview saves nothing. Save these additions confirms the preview. Existing populated
-fields, user-edited contacts, explicitly cleared metadata, existing notes/places and
-deleted records are kept. Only new records and unedited empty contact fields can be filled.
-Existing caps remain: 30 contacts, 30 places and the chat's Notes-per-section limit.
-Current-scene place duplicates are skipped. A changed chat revision or changed sources
-reject the operation; no late result can overwrite newer edits or enter another chat.
-No retry loop runs. One ticket can run only once; it expires after ten minutes or a
-worker restart. Prepare a fresh review if it expires. There is no automatic paid request.
-
-Sources are capped at 12 attached/global books and 64,000 characters, with paginated
-entry reads. Oversized/inaccessible sources stop setup instead of silently truncating
-facts. A failed or uncertain save asks you to check the tracker before trying again.
+JSON/source quotes remain required; unknowns are omitted/null. No story rewrite,
+texts, calls, email or bank entries are made by setup. Sources stay capped at 12
+attached/global lorebooks and 64,000 characters; disabled entries are excluded.
+No transcript or Scene state is sent. Caps, tombstones, user/chat/revision pinning,
+changed-source rejection and no-retry behavior remain. A review expires after ten
+minutes or a worker restart. Literal matching cannot prove correct attribution;
+review the proposed additions before confirming them.
 
 ## Documented access and limits
 
@@ -103,9 +87,7 @@ facts. A failed or uncertain save asks you to check the tracker before trying ag
 - `world_books.getGlobal(userId)` and `world_books.entries.list(id,{...,userId})`:
   world_books permission. Book IDs come from documented character/persona fields or
   that user's global list, never guessed chat metadata.
-- `tokens.countMessages(messages,{model,userId})`: no additional permission; reports
-  token count and approximate flag for the selected connection's model.
-- `connections.list(userId)` and `generate.raw({connection_id,userId,...})`: existing
+- `connections.list(userId)` and `generate.raw({connection_id,model,userId,...})`: existing
   generation permission. No API keys or provider configuration are stored.
 
 Only world_books is newly requested. It is optional for normal phone use and used

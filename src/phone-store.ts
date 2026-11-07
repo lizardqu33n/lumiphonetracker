@@ -1,3 +1,6 @@
+import {resolveSetup} from "./setup-review";
+import {fieldKey,readFieldRef,restoreEdit,legacyEditAdmissions} from "./field-protection";
+import {mergeContacts,canonicalContact} from "./contact-merge";
 import {setupCandidates,type SetupData} from "./setup-wizard";
 import {readContactInfo,emptyContactInfo,projectContacts,contactDuplicates} from "./contact-info";
 import {portraitBytes,portraitKey,PORTRAIT_CHAT_LIMIT} from "./portraits";
@@ -37,6 +40,9 @@ export function readDocument(raw: string, chatId: string): Document {
     doc[key] = value[key] as string[] ?? [];
   }
   if(value.portraits!==undefined){if(!isRecord(value.portraits))throw Error("Invalid portraits");doc.portraits=Object.create(null) as Record<string,string>;for(const [name,data]of Object.entries(value.portraits)){portraitBytes(data);doc.portraits[name]=data as string;}if(Object.values(doc.portraits).reduce((sum,v)=>sum+v.length,0)>PORTRAIT_CHAT_LIMIT)throw Error("Portrait storage is full.");}
+  if(value.userEditAdmissions!==undefined){if(!Array.isArray(value.userEditAdmissions)||value.userEditAdmissions.some(x=>typeof x!=="string"))throw Error("Invalid edit admissions");doc.userEditAdmissions=value.userEditAdmissions;}
+  if(value.fieldLocks!==undefined){if(!isRecord(value.fieldLocks))throw Error("Invalid field locks");doc.fieldLocks={};for(const [key,on]of Object.entries(value.fieldLocks)){if(typeof on!=="boolean")throw Error("Invalid field lock");const [target,name,section,field]=JSON.parse(key);const r=readFieldRef({target,name:name||undefined,section,field});doc.fieldLocks[fieldKey(r)]=on;}}
+  if(value.contactMerges!==undefined){if(!isRecord(value.contactMerges)||Object.keys(value.contactMerges).length>100)throw Error("Invalid merged contacts");doc.contactMerges={};for(const [key,m]of Object.entries(value.contactMerges)){if(!isRecord(m)||typeof m.from!=="string"||typeof m.into!=="string"||normalize(m.from)!==key||normalize(m.from)===normalize(m.into)||!(m.after===null||typeof m.after==="string")||!Number.isInteger(m.index))throw Error("Invalid merged contacts");doc.contactMerges[key]=m as unknown as NonNullable<Document["contactMerges"]>[string];}}if(value.mergeArchive!==undefined){if(!Array.isArray(value.mergeArchive)||value.mergeArchive.length>100)throw Error("Invalid merge history");doc.mergeArchive=value.mergeArchive;}
   doc.settings = readSettings(value.settings); doc.legacy = value.legacy;
   if (value.helperOwner !== undefined && (typeof value.helperOwner !== "string" || !value.helperOwner)) throw new Error("Invalid helper owner");
   doc.helperOwner = value.helperOwner as string | undefined;
@@ -86,6 +92,7 @@ export function readDocument(raw: string, chatId: string): Document {
       by: "ai", addedByUser: false, updated: false, at: { id: "admission", index: -1, variant: "" },
     });
   }
+  if(isRecord(value.settings)&&value.settings.allowAIUserEdits===undefined)doc.userEditAdmissions=legacyEditAdmissions(doc,doc.helperEntries.map(e=>({patch:validateExpanded(e.values),at:e.at})));
   return doc;
 }
 export function validateEdit(value: unknown): ManualEdit {
@@ -93,6 +100,7 @@ export function validateEdit(value: unknown): ManualEdit {
     !(value.after === null || typeof value.after === "string") || !Number.isInteger(value.index) || (value.index as number) < -1 ||
     !["scene", "weather", "contact", "location", "note","call","email","bank","transaction"].includes(String(value.target)) ||
     (value.remove !== undefined && typeof value.remove !== "boolean")||(value.playerWritingAllowed!==undefined&&typeof value.playerWritingAllowed!=="boolean")||(value.playerAtEdit!==undefined&&typeof value.playerAtEdit!=="boolean")) throw new Error("Invalid edit");
+  if(value.source!==undefined&&!["setup","merge","lock"].includes(String(value.source)))throw Error("Invalid edit source");if(value.editedFields!==undefined&&(!Array.isArray(value.editedFields)||value.editedFields.some(f=>typeof f!=="string")))throw Error("Invalid edited fields");
   const edit = value as unknown as ManualEdit;
   applyManual(emptyState(), edit, new Set(), new Set(),true);
   return structuredClone(edit);
@@ -150,7 +158,7 @@ export class PhoneStore {
     });
   }
   /** Step 4's controls will use this same validated, chat-authorized operation. */
-  update(userId: string, chatId: string, expectedRevision: number, update: { settings?: unknown; edit?: unknown; dismissNotice?: unknown;portrait?:unknown;contactInfo?:unknown }): Promise<Document> {
+  update(userId: string, chatId: string, expectedRevision: number, update: { settings?: unknown; edit?: unknown; dismissNotice?: unknown;portrait?:unknown;contactInfo?:unknown;fieldControl?:unknown;mergeContacts?:unknown }): Promise<Document> {
     return this.serial(chatId, async () => {
       if (!userId || !(await this.io.authorize(chatId, userId))) throw new Error("Chat unavailable");
       const raw = await this.io.read(chatId); const saved = readDocument(raw, chatId);
@@ -172,11 +180,14 @@ export class PhoneStore {
         if (typeof update.dismissNotice !== "string") throw new Error("Invalid notice");
         doc.notices = doc.notices.filter(n => n !== update.dismissNotice);
       }
+      if(update.fieldControl!==undefined){const control=update.fieldControl;if(!isRecord(control)||!["lock","unlock","restore"].includes(String(control.action)))throw Error("Invalid field control");const r=readFieldRef(control);if(control.action==="restore")update={...update,edit:restoreEdit(doc,r)};else{(doc.fieldLocks??={})[fieldKey(r)]=control.action==="lock";if(control.action==="lock"){try{update={...update,edit:{...restoreEdit(doc,r,true),source:"lock"}};}catch{/* An empty field can be locked without manufacturing a value. */}}}}
+      if(update.mergeContacts!==undefined){const m=update.mergeContacts;if(!isRecord(m)||m.confirm!==true||typeof m.from!=="string"||typeof m.into!=="string")throw Error("Confirm a merge first.");const last=rows.at(-1);mergeContacts(doc,m.from,m.into,last?.id??null,last?.index_in_chat??-1);}
       if (update.edit !== undefined) {
         const input = isRecord(update.edit) ? update.edit : {};
+        if(input.target==="contact"&&typeof input.name==="string"&&!doc.state.contacts.some(c=>normalize(c.name)===normalize(input.name as string))&&doc.contactMerges?.[normalize(input.name)])throw Error("That name is a merged alias. Use a different full name.");
         // Anchor/revision/identity come from the saved history, never from UI claims.
         const last = [...rows].sort((a, b) => a.index_in_chat - b.index_in_chat).at(-1);
-        const edit = validateEdit({ ...input,...(input.target==="contact"?{playerAtEdit:doc.state.contacts.some(c=>c.player&&[input.name,input.rename].some(n=>typeof n==="string"&&normalize(n)===normalize(c.name)))}:{}),playerWritingAllowed:doc.settings.aiPlayerTexts, id: crypto.randomUUID(), after: last?.id ?? null, index: last?.index_in_chat ?? -1 });
+        const edit = validateEdit({ ...input,source:isRecord(update.fieldControl)&&update.fieldControl.action==="lock"?"lock":undefined,editedFields:isRecord(update.fieldControl)?input.editedFields:undefined,...(input.target==="contact"?{playerAtEdit:doc.state.contacts.some(c=>c.player&&[input.name,input.rename].some(n=>typeof n==="string"&&normalize(n)===normalize(c.name)))}:{}),playerWritingAllowed:doc.settings.aiPlayerTexts, id: crypto.randomUUID(), after: last?.id ?? null, index: last?.index_in_chat ?? -1 });
         if (edit.target === "note" && edit.section && !edit.remove) {
           const notes = doc.state.notes[edit.section];
           const existing = notes.some(n => normalize(n.name) === normalize(edit.name ?? ""));
@@ -184,10 +195,12 @@ export class PhoneStore {
           if (!existing && !resolved && notes.filter(n => !n.resolved).length >= doc.settings.notesPerSection) throw new Error("This section is full. Delete a note to make room.");
         }
         if(edit.target==="contact"&&isRecord(edit.value)&&doc.state.contacts.some(c=>c.player&&[edit.name,edit.rename].some(n=>typeof n==="string"&&normalize(n)===normalize(c.name)))&&Object.keys(edit.value).some(k=>!["physical","position","attire"].includes(k)))throw Error("Invalid player/contact field");
+        if(edit.target==="contact"&&edit.remove)for(const m of Object.values(doc.contactMerges??{}))if(normalize(canonicalContact(doc,m.from))===normalize(edit.name??""))doc.edits.push({...edit,id:crypto.randomUUID(),name:m.from});
+        if(edit.rename&&edit.name)for(const [key,on]of Object.entries(doc.fieldLocks??{})){const [target,name,section,field]=JSON.parse(key);if(target===edit.target&&name===normalize(edit.name)&&(target!=="note"||section===edit.section)){doc.fieldLocks![fieldKey({target,name:edit.rename,section,field})]=on;delete doc.fieldLocks![key];}}
         doc.edits.push(edit);
       }
       if(isRecord(update.edit)&&update.edit.target==="contact"&&typeof update.edit.name==="string"&&doc.contactInfo){const key=normalize(update.edit.name);if(update.edit.remove)delete doc.contactInfo[key];else if(typeof update.edit.rename==="string"&&doc.contactInfo[key]){doc.contactInfo[normalize(update.edit.rename)]={...doc.contactInfo[key],name:update.edit.rename};if(normalize(update.edit.rename)!==key)delete doc.contactInfo[key];}}
-      if(update.contactInfo!==undefined){const input=update.contactInfo;if(!isRecord(input)||typeof input.name!=="string")throw Error("Invalid contact details");const name=input.name;const creating=isRecord(update.edit)&&update.edit.target==="contact"&&!update.edit.remove&&[update.edit.name,update.edit.rename].includes(name);if(!creating&&!doc.state.contacts.some(c=>normalize(c.name)===normalize(name)))throw Error("Reopen this contact.");const prior=doc.contactInfo?.[normalize(name)]??doc.state.contacts.find(c=>normalize(c.name)===normalize(name))?.info??emptyContactInfo(name);const info=readContactInfo({...prior,...input,locked:input.kind!==undefined?true:prior.locked,confirmed:[...new Set([...(prior.confirmed??[]),...["phone","email","relationship","details"].filter(k=>input[k]!==undefined)])]},name);(doc.contactInfo??={})[normalize(name)]=info;if(contactDuplicates(doc.contactInfo))this.io.warn?.("Lumi Phone Tracker: duplicate contact number or address; ambiguous matching disabled.");}
+      if(update.contactInfo!==undefined){const input=update.contactInfo;if(!isRecord(input)||typeof input.name!=="string")throw Error("Invalid contact details");const name=input.name;const creating=isRecord(update.edit)&&update.edit.target==="contact"&&!update.edit.remove&&[update.edit.name,update.edit.rename].includes(name);if(!creating&&!doc.state.contacts.some(c=>normalize(c.name)===normalize(name)))throw Error("Reopen this contact.");const prior=doc.contactInfo?.[normalize(name)]??doc.state.contacts.find(c=>normalize(c.name)===normalize(name))?.info??emptyContactInfo(name);const fakeFields=(prior.fakeFields??[]).filter(f=>input[f]===undefined||input[f]===prior[f as "phone"|"email"]);const info=readContactInfo({...prior,...input,fakeFields,locked:input.kind!==undefined?true:prior.locked,confirmed:[...new Set([...(prior.confirmed??[]),...["phone","email","relationship","details"].filter(k=>input[k]!==undefined)])]},name);(doc.contactInfo??={})[normalize(name)]=info;if(contactDuplicates(doc.contactInfo))this.io.warn?.("Lumi Phone Tracker: duplicate contact number or address; ambiguous matching disabled.");}
       if(update.portrait!==undefined){
         const p=update.portrait;if(!isRecord(p)||typeof p.name!=="string"||!doc.state.contacts.some(c=>portraitKey(c.name)===portraitKey(p.name as string)))throw Error("Reopen the contact before changing its portrait.");
         const data=Object.assign(Object.create(null),doc.portraits) as Record<string,string>;if(p.data===null)delete data[portraitKey(p.name)];else {portraitBytes(p.data);data[portraitKey(p.name)]=p.data as string;}
@@ -199,11 +212,11 @@ export class PhoneStore {
       await this.io.write(chatId, JSON.stringify(doc)); return doc;
     });
   }
-  setupApply(userId:string,chatId:string,revision:number,input:SetupData,names:string[]):Promise<Document>{
+  setupApply(userId:string,chatId:string,revision:number,input:SetupData,names:string[],decisions?:unknown):Promise<Document>{
     return this.serial(chatId,async()=>{
-      if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");const raw=await this.io.read(chatId),saved=readDocument(raw,chatId);if(saved.revision!==revision)throw Error("The tracker changed. Nothing was saved.");let {doc,rows}=await this.build(chatId,userId);if(JSON.stringify(doc.accepted,canonicalKeys)!==JSON.stringify(saved.accepted,canonicalKeys))throw Error("The story changed. Nothing was saved.");const data=setupCandidates(doc,input),last=[...rows].sort((a,b)=>a.index_in_chat-b.index_in_chat).at(-1);
-      const add=(target:ManualEdit["target"],name:string,value:unknown,section?:Section)=>doc.edits.push(validateEdit({id:crypto.randomUUID(),target,name,value,...(target==="contact"?{playerAtEdit:doc.playerNames.some(n=>normalize(n)===normalize(name))}:{}),...(section?{section}:{}),after:last?.id??null,index:last?.index_in_chat??-1}));
-      for(const c of data.contacts){const old=doc.state.contacts.find(x=>normalize(x.name)===normalize(c.name));const values=Object.fromEntries(CONTACT_KEYS.filter(k=>c[k]!==undefined).map(k=>[k,c[k]]));if(!old||Object.keys(values).length)add("contact",c.name,values);const prior=doc.contactInfo?.[normalize(c.name)]??old?.info??emptyContactInfo(c.name);const fields=Object.keys(c).filter(k=>["phone","email","relationship","details"].includes(k));const info=readContactInfo({...prior,...c,kind:prior.locked?prior.kind:names.some(n=>normalize(n)===normalize(c.name))?"Main":prior.kind,confirmed:[...new Set([...(prior.confirmed??[]),...fields])]},c.name);(doc.contactInfo??=Object.create(null))[normalize(c.name)]=info;}
+      if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");const raw=await this.io.read(chatId),saved=readDocument(raw,chatId);if(saved.revision!==revision)throw Error("The tracker changed. Nothing was saved.");let {doc,rows}=await this.build(chatId,userId);if(JSON.stringify(doc.accepted,canonicalKeys)!==JSON.stringify(saved.accepted,canonicalKeys))throw Error("The story changed. Nothing was saved.");const data=setupCandidates(doc,resolveSetup(doc,input,decisions)),last=[...rows].sort((a,b)=>a.index_in_chat-b.index_in_chat).at(-1);
+      const add=(target:ManualEdit["target"],name:string,value:unknown,section?:Section)=>doc.edits.push(validateEdit({id:crypto.randomUUID(),target,name,value,source:"setup",...(target==="contact"?{playerAtEdit:doc.playerNames.some(n=>normalize(n)===normalize(name))}:{}),...(section?{section}:{}),after:last?.id??null,index:last?.index_in_chat??-1}));
+      for(const c of data.contacts){const old=doc.state.contacts.find(x=>normalize(x.name)===normalize(c.name));const values=Object.fromEntries(CONTACT_KEYS.filter(k=>c[k]!==undefined).map(k=>[k,c[k]]));if(!old||Object.keys(values).length)add("contact",c.name,values);const prior=doc.contactInfo?.[normalize(c.name)]??old?.info??emptyContactInfo(c.name);const fields=Object.keys(c).filter(k=>["phone","email","relationship","details"].includes(k));const info=readContactInfo({...prior,...c,fakeFields:[...new Set([...(prior.fakeFields??[]),...(c.fakeFields??[])])],kind:prior.locked?prior.kind:names.some(n=>normalize(n)===normalize(c.name))?"Main":prior.kind,confirmed:[...new Set([...(prior.confirmed??[]),...fields])]},c.name);(doc.contactInfo??=Object.create(null))[normalize(c.name)]=info;}
       for(const n of data.notes)add("note",n.name,{detail:n.detail,context:n.context,...(n.section==="misc"?{sendToAI:false}:{})},n.section);
       for(const p of data.locations)add("location",p.name,{description:p.description,relation:p.relation});
       doc=replay(doc,rows,doc.playerNames);projectContacts(doc,names);doc.revision=saved.revision+1;await this.io.write(chatId,JSON.stringify(doc));return doc;

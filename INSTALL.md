@@ -1,11 +1,11 @@
 # Install Lumi Phone Tracker
 
-Version 0.16.2 includes the built files. You do not need to build or upload anything yourself.
+Version 0.17.0 includes the built files. You do not need to build or upload anything yourself.
 
 ## Install or update
 
 1. Open Lumiverse > Extensions > Install.
-2. Paste this repository address: https://github.com/lizardqu33n/lumiphonetracker . For an existing install from this repository, use its update option to get version 0.16.2. Enable the extension.
+2. Paste this repository address: https://github.com/lizardqu33n/lumiphonetracker . For an existing install from this repository, use its update option to get version 0.17.0. Enable the extension.
 3. Allow chat access, message processing, prompt interception and floating panels (chats, chat_mutation, interceptor, ui_panels, macro_interceptor). The existing generation permission enables optional Custom connection: completed-reply tracking and calls through the connection you select. Main AI makes no extra model requests. If generation permission is declined, Main AI still works.
 4. Open a chat. Tap the floating phone, or use Open phone in the Phone sidebar tab.
 5. Add this exact single line to your active preset and save it:
@@ -207,39 +207,43 @@ Connections and Settings profiles are new labels for the same existing controls.
 Your saved choices, profiles and wording survive; the preset line is still
 `{{phone_format}}` once. No permission has been added.
 
-## Contacts and setup (0.16.1)
+## Contacts and setup (0.17.0)
 
-Tap a contact for its full page; Edit has phone/email, relationship, free role labels,
+Tap a contact for its full page. Edit has addresses, relationship, role labels,
 custom details, portraits and confirmed Delete. Main/NPC is a label you can change.
-Phone and Email fields follow whether those apps are added. Message opens the
-contact's thread; Add to draft still does not send. Email opens the existing inbox.
+Merge contacts is on the contact page: choose which contact to keep and confirm.
+It keeps that card's values, fills empty fields and retains old matching aliases.
 
-Setup wizard is in the sidebar Phone tab. Add the apps you want in App Store, then
-open Setup wizard. Select individual Contacts fields, Notes sections and/or Locations.
-Scene is excluded. Import choices do not change your tracking switches.
-It follows Connections: Main AI uses your Lumiverse default connection; Custom
-connection uses the saved choice. No extra picker is needed. If access, the connection
-or its model is missing, it explains why. Review token count and cost note, then Run setup.
-Inspect the preview; only Save these additions confirms it. Existing edits stay.
-You can leave background tracking on Main AI; the wizard is a separate explicit run.
+Setup wizard is in the sidebar Phone tab. Add the needed apps in App Store, choose
+individual fields, then Review input. It shows source characters, request messages
+and one model request. Run setup, inspect the preview, then Save these additions.
+First/full-name matches need Merge or Keep both; an identical full name needs a
+new name for the separate contact. Existing edited values are never overwritten.
 
-The server operator must allow **world_books** for lorebook reads, plus the existing
-characters, personas and generation permissions. Normal phone use still works
-without lorebook access. Without card/persona access, new contacts start NPC.
-No new API key or connection is needed. Input token counts may be approximate;
-there is no documented exact price quote. No model request runs before Run setup.
+Connections is unchanged: Main AI uses your Lumiverse default profile; Custom
+connection uses the saved choice. No additional picker/key is needed. The operator
+must allow world_books, characters, personas and generation for setup. It explains
+missing access. Source/model changes require a fresh review. No automatic retry.
 
-Keep your preset line `{{phone_format}}` once. New confirmed contact metadata is
-sent compactly for NPCs; Main/player cards omit it. The AI cannot write those fields.
-See [Contacts and setup](docs/PART-6.md) for source limits and permission details.
+New wizard contacts say Added by setup wizard and are not automatically locked.
+Older wizard additions cannot safely be distinguished from user edits; their old
+labels/protections are preserved. Your edits show Edited by you.
 
-### Setup request fix (0.16.2)
+Optional Make up phone/email (fake) starts off, next to its editable domain. When on,
+setup can fill missing selected addresses with 555-01xx numbers and emails at that
+domain. They are marked made up. Real/edited values and explicitly cleared fields
+stay untouched. This deliberately allows an exception to never invent.
+Made-up phone numbers and emails are fake. Don't assume they belong to the character
+or to any real person. lumi.verse is not a reserved fake domain.
 
-Update the extension to 0.16.2, then review the cost again and run setup. No new
-connection or permission is needed. Setup now sends the selected model as well as
-the connection ID. The same correction applies to background Custom connection
-tracking. A failure leaves saved data intact and never starts a retry loop.
-Setup failures now show a short category, such as Provider error or Permission
-missing. The server console records the category only, without story text or keys.
-If setup still fails, report that category and whether it happened during cost
-review, Run setup or saving. Preview and confirmed saving work as before.
+Advanced's Let the AI change fields I edited starts off. When on, only new quoted
+story facts may replace an unlocked field. This deliberately allows an exception
+to user edits are confirmed facts. Lock protects an individual field even while
+this is on. Restore my version restores the last user-entered value for that field.
+The wizard always keeps your edited values. These switches/domain are shared chat
+settings, not saved in Settings profiles; applying a profile leaves them unchanged.
+
+Keep {{phone_format}} once in your preset. Tag syntax is unchanged; compact safety
+wording now follows the edit switch and marks protected continuity fields.
+See [the wizard guide](docs/WIZARD-FIX-2.md) for merging, restoration and migration
+limits, and [Contacts and setup](docs/PART-6.md) for source access details.

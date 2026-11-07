@@ -790,3 +790,46 @@ btn-text tokens. The obsolete Home entry/header/title elements have been removed
 
 All other lpt-setup-* preview/action/status classes listed above remain. No change
 to Contacts classes or phone opacity. Sidebar setup shares the existing accordion.
+
+
+## 0.17.0: wizard review, merging and protected fields
+
+Existing classes are not renamed. The setup section stays in the sidebar settings
+boundary, outside phone CSS. The protected toolbar/Reset are unchanged. No new color
+variables are needed: phone controls use the existing --lpt-contact-* color, border,
+radius, padding, gap and font tokens; sidebar controls use --lpt-side-* equivalents.
+All surfaces keep their existing opaque defaults. No inline styles are used.
+
+| Class | Purpose |
+| --- | --- |
+| `.lpt-field-unit` | Holds one field button and its sibling protection controls; Time/Date remain two compact units. |
+| `.lpt-field-controls` | Wrapping row of Lock/Unlock and, when available, Restore my version. |
+| `.lpt-field-controls.is-locked` | An explicitly locked field. |
+| `.lpt-field-lock` | Lock/Unlock button with field-specific accessible label and aria-pressed. |
+| `.lpt-field-restore` | Restores this field's last user-entered value. |
+| `.lpt-merge-open` | Merge contacts action on a contact page. |
+| `.lpt-merge-confirm` | Inline confirmed-merge form on that same page. |
+| `.lpt-merge-label` | Label for the contact to keep. |
+| `.lpt-merge-target` | Existing-contact choice; starts with a placeholder, no implicit choice. |
+| `.lpt-merge-option` | An option in that choice. |
+| `.lpt-merge-help` | Explains retained values and saved originals. |
+| `.lpt-merge-save` | Confirm merge; disabled until a contact is chosen. |
+| `.lpt-merge-cancel` | Dismisses the inline merge form. |
+| `.lpt-setup-origin` | Added by setup wizard marker on new wizard-created contacts. |
+| `.lpt-made-up` | Made-up address marker on the contact page. |
+| `.lpt-setup-cost` | Retained class; now shows known character/message/request counts, not prices or tokens. |
+| `.lpt-setup-match` | Already exists / Maybe the same person preview label. |
+| `.lpt-setup-duplicates` | Inline duplicate-choice controls. |
+| `.lpt-setup-merge-target` | Which matched preview/existing name to merge into. |
+| `.lpt-setup-target` | An option for that merge target. |
+| `.lpt-setup-keep-name` | Name for the separate contact when Keep both is selected. |
+| `.lpt-setup-merge` | Merge choice; aria-pressed reports selection. |
+| `.lpt-setup-keep` | Keep both choice; aria-pressed reports selection. |
+| `.lpt-fake-domain-label` | Domain-setting label beside the optional fake-address switch. |
+| `.lpt-fake-domain` | Editable plain domain; visible only when fake filling is on. |
+| `.lpt-edit-warning` | Visible warning while AI replacement of user edits is enabled. |
+
+These additions inherit the established font, focus, tap-target and button styles.
+The `.lpt-setup-checkbox` field IDs remain unchanged; new switches use stable
+`data-setting="fakeAddresses"` and `data-setting="allowAIUserEdits"` attributes.
+The original phone frame, launcher and app class names remain unchanged.
