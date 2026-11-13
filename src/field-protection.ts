@@ -42,7 +42,7 @@ export function fieldAllows(doc:Document,r:FieldRef,value:unknown,at:Origin,pros
  if(doc.fieldLocks?.[fieldKey(r)])return false;
  const previous=doc.state.userVersions?.[fieldKey(r)];if(!previous)return true;
  const admission=editAdmission(r,value,at,evidence);
- if((!doc.settings.allowAIUserEdits&&!doc.userEditAdmissions?.includes(admission))||inferred||at.index<=previous.at.index||!evidence||evidence.trim().length<3||!prose.includes(evidence))return false;
+ if((!doc.settings.allowAIUserEdits&&!doc.userEditAdmissions?.includes(admission))||inferred||at.index<=previous.at.index||!evidence||evidence.trim().length<3||!prose.replaceAll("\u2800"," ").includes(evidence.replaceAll("\u2800"," ")))return false;
  const terms=values(value),old=values(fieldValue(doc.state,r));const added=terms.filter(v=>!old.map(normalize).includes(normalize(v)));const changed=added.length?added:old.filter(v=>!terms.map(normalize).includes(normalize(v)));
  const accepted=r.target==="weather"&&r.field==="weather_alert"&&value==="ended"?alertEndedIn(evidence):
  r.target==="weather"&&r.field==="temperature"&&typeof value==="string"?statedTemperature(value,evidence):

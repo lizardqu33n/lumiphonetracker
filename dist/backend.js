@@ -51,6 +51,7 @@ class SetupChoiceStore {
 }
 
 // src/shared.ts
+var normalSpaces = (text) => text.replaceAll("\u2800", " ");
 var EXTENSION_NAME = "Lumi Phone Tracker";
 var BUILD_STEP = 6;
 var TRACKER_TAG = "phone-state";
@@ -275,7 +276,7 @@ var CORE_APPS = ["Scene", "Weather", "Locations", "Notes", "Contacts", "Messages
 var OPTIONAL_APPS = ["Calls", "Email", "Bank"];
 var ALL_APPS = [...CORE_APPS, ...OPTIONAL_APPS];
 var APP_FIELDS = { Scene: SCENE_KEYS.map((k) => `scene.${k}`), Weather: [...Object.values(WEATHER_SWITCHES), "weather.time", "weather.date"], Locations: ["locations"], Notes: SECTIONS.map((k) => `notes.${k}`), Contacts: CONTACT_KEYS.map((k) => `contacts.${k}`), Messages: ["messages"], Calls: ["calls"], Email: ["email"], Bank: ["bank.balance", "bank.transactions"] };
-var normalize = (name) => name.normalize("NFKC").trim().toLocaleLowerCase("en-US").split(" ").filter(Boolean).join(" ");
+var normalize = (name) => name.replaceAll("\u2800", " ").normalize("NFKC").trim().toLocaleLowerCase("en-US").split(" ").filter(Boolean).join(" ");
 function defaults() {
   return {
     weatherUnit: "F",
@@ -543,7 +544,7 @@ function fieldAllows(doc, r, value, at, prose, evidence, inferred = false) {
   if (!previous)
     return true;
   const admission = editAdmission(r, value, at, evidence);
-  if (!doc.settings.allowAIUserEdits && !doc.userEditAdmissions?.includes(admission) || inferred || at.index <= previous.at.index || !evidence || evidence.trim().length < 3 || !prose.includes(evidence))
+  if (!doc.settings.allowAIUserEdits && !doc.userEditAdmissions?.includes(admission) || inferred || at.index <= previous.at.index || !evidence || evidence.trim().length < 3 || !prose.replaceAll("\u2800", " ").includes(evidence.replaceAll("\u2800", " ")))
     return false;
   const terms = values(value), old = values(fieldValue(doc.state, r));
   const added = terms.filter((v) => !old.map(normalize).includes(normalize(v)));
@@ -1430,7 +1431,7 @@ ${values.join(`
 
 // src/tags.ts
 var NAMES = [TRACKER_TAG, TEXT_TAG, "phone-email"];
-var space = (c) => c === " " || c === `
+var space = (c) => c === " " || c === "\u2800" || c === `
 ` || c === "\r" || c === "\t";
 function scanTags(text) {
   const lower = text.toLowerCase();
@@ -1496,12 +1497,13 @@ function transformTags(text, mode) {
   for (const span of scanTags(text)) {
     output += text.slice(offset, span.start);
     if (mode === "display" && span.complete && span.canonical && parseAttributes(span.header))
-      output += text.slice(span.start, span.end);
+      output += text.slice(span.start, span.end).replaceAll("\u2800", " ");
     offset = span.end;
   }
   return output + text.slice(offset);
 }
 function decodeEntities(text) {
+  text = text.replaceAll("\u2800", " ");
   const entities = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'" };
   let output = "";
   for (let i = 0;i < text.length; i++) {
@@ -2155,7 +2157,7 @@ function bounded(s, n) {
 function list(s, n) {
   if (!s.trim())
     return [];
-  return s.split("; ").map((v) => n ? bounded(v, n) : text2(v, 100));
+  return normalSpaces(s).split(/;\s*/u).map((v) => n ? bounded(v, n) : text2(v, 100));
 }
 function marked(raw) {
   const chunks = raw.split(" ~ ");
@@ -2237,6 +2239,8 @@ function parseShorthand(body, validate) {
       } else if (key === "c") {
         const parts = raw.split(" | ");
         const c = { name: text2(parts.shift(), 100) };
+        if (String(c.name).includes(";"))
+          throw new Error("multiple contact names");
         if (!parts.length)
           throw new Error("empty contact");
         const seen = new Set;
@@ -2341,7 +2345,17 @@ function keys2(v, allowed) {
     throw new Error("Unknown field");
 }
 var list2 = (v) => Array.isArray(v) && v.every((x) => named(x));
+function normalizeStrings(value) {
+  if (typeof value === "string")
+    return normalSpaces(value);
+  if (Array.isArray(value))
+    return value.map(normalizeStrings);
+  if (isRecord(value))
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, normalizeStrings(item)]));
+  return value;
+}
 function change(key, raw) {
+  raw = normalizeStrings(raw);
   if (raw === null)
     return;
   let value = raw;
@@ -2371,7 +2385,9 @@ function change(key, raw) {
   } else if (["present", "roles"].includes(key)) {
     if (!list2(value))
       throw new Error("Invalid list");
-    value = [...new Set(value.map((x) => x.trim()))];
+    value = [...new Set(value.flatMap((x) => key === "present" ? x.split(/;\s*/u) : [x]).map((x) => x.trim()))];
+    if (!list2(value))
+      throw Error("Invalid list");
   } else if (key === "attire") {
     if (!isRecord(value))
       throw new Error("Invalid attire");
@@ -2415,6 +2431,7 @@ function validateNote(raw, user = false) {
   return raw;
 }
 function validateExpanded(input) {
+  input = normalizeStrings(input);
   if (!isRecord(input))
     throw new Error("Invalid tracker");
   keys2(input, [...SCENE_KEYS, "weather", "condition", ...WEATHER_DETAILS, "calls", "bank", "transactions", "contacts", "locations", ...SECTIONS.filter((k) => k !== "misc")]);
@@ -2453,6 +2470,8 @@ function validateExpanded(input) {
       if (!named(entry.name))
         throw new Error("Invalid name");
       if (key === "contacts") {
+        if (entry.name.includes(";"))
+          continue;
         const fields = {};
         for (const field of CONTACT_KEYS)
           if (entry[field] !== undefined) {
@@ -2492,6 +2511,7 @@ function parseExpanded(body) {
   return parseLines(body).patch;
 }
 function parseLines(body) {
+  body = normalSpaces(body);
   if (body.length > 64000)
     return { patch: null, invalidFields: [], issues: [{ line: null, field: "block", reason: "block too large" }] };
   if (/^\s*(?:loc|time|date|season|weather|condition|temperature|weather_description|weather_alert|present|c|p|people|items|rules|plots|done|call|bank|tx):/m.test(body))
@@ -2681,7 +2701,7 @@ function helperValues(content, doc, rows = []) {
     if (!valid.length && Object.keys(result).length === 0)
       throw new HelperFailure("validation rejected");
   }
-  const evidenceAfter = (evidence, index) => typeof evidence === "string" && rows.some((r) => r.index_in_chat > index && transformTags(r.content, "strip").includes(evidence));
+  const evidenceAfter = (evidence, index) => typeof evidence === "string" && rows.some((r) => r.index_in_chat > index && transformTags(r.content, "strip").replaceAll("\u2800", " ").includes(evidence.replaceAll("\u2800", " ")));
   const keepCell = (key, raw, old) => {
     if (raw === null)
       return true;
@@ -3270,7 +3290,7 @@ var nameOfPlace = (state) => {
 };
 var namesPresent = (state) => Array.isArray(state.scene.present?.value) ? state.scene.present.value : [];
 function evidenceValid(evidence, prose) {
-  return !!evidence && evidence.trim().length >= 3 && prose.includes(evidence);
+  return !!evidence && evidence.trim().length >= 3 && normalSpaces(prose).includes(normalSpaces(evidence));
 }
 function setCell(old, update, at, prose, infer) {
   if (!update || !usable(update.value))
@@ -3549,6 +3569,14 @@ details=`);
   return next;
 }
 function applyAI(doc, patch, at, prose, players, tombstones, knownNotes) {
+  patch = { ...patch, scene: { ...patch.scene }, contacts: patch.contacts.filter((c) => !c.name.includes(";")) };
+  if (patch.scene.present) {
+    try {
+      patch.scene.present = change("present", patch.scene.present);
+    } catch {
+      delete patch.scene.present;
+    }
+  }
   const state = doc.state;
   for (const key of SCENE_KEYS) {
     const c = patch.scene[key];

@@ -1,7 +1,7 @@
 import { WEATHER_DETAILS, temperatureParts, validateCondition, validWeatherText } from "./weather-fields";
 import { validateActivity, validateEmail } from "./activity";
 import { parseShorthand, usablePatch } from "./shorthand";
-import { isRecord } from "./shared";
+import { isRecord, normalSpaces } from "./shared";
 import { CONTACT_KEYS, SCENE_KEYS, SECTIONS, emptyPatch, type Change, type Patch, type NotePatch, type Value } from "./model";
 import { decodeEntities, parseAttributes, scanTags, transformTags } from "./tags";
 import type { TextData } from "./model";
@@ -13,7 +13,14 @@ function keys(v: Record<string, unknown>, allowed: readonly string[]): void {
   if (Object.keys(v).some(k => !allowed.includes(k))) throw new Error("Unknown field");
 }
 const list = (v: unknown): v is string[] => Array.isArray(v) && v.every(x => named(x));
+function normalizeStrings(value: unknown): unknown {
+  if (typeof value === "string") return normalSpaces(value);
+  if (Array.isArray(value)) return value.map(normalizeStrings);
+  if (isRecord(value)) return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, normalizeStrings(item)]));
+  return value;
+}
 export function change(key: string, raw: unknown): Change | undefined {
+  raw = normalizeStrings(raw);
   if (raw === null) return;
   let value: unknown = raw; let evidence: string | undefined; let inferred = false;
   if (isRecord(raw) && Object.hasOwn(raw, "value")) {
@@ -31,7 +38,8 @@ export function change(key: string, raw: unknown): Change | undefined {
     value = { name: value.name.trim(), wider: value.wider ?? [] };
   } else if (["present", "roles"].includes(key)) {
     if (!list(value)) throw new Error("Invalid list");
-    value = [...new Set(value.map(x => x.trim()))];
+    value = [...new Set(value.flatMap(x => key === "present" ? x.split(/;\s*/u) : [x]).map(x => x.trim()))];
+    if (!list(value)) throw Error("Invalid list");
   } else if (key === "attire") {
     if (!isRecord(value)) throw new Error("Invalid attire");
     keys(value, ["worn", "removed"]);
@@ -62,6 +70,7 @@ export function validateNote(raw: unknown, user = false): NotePatch {
 }
 /** JSON used by the main block and later Helper AI follows exactly the same schema. */
 export function validateExpanded(input: unknown): Patch {
+  input = normalizeStrings(input);
   if (!isRecord(input)) throw new Error("Invalid tracker");
   keys(input, [...SCENE_KEYS, "weather", "condition", ...WEATHER_DETAILS,"calls","bank","transactions", "contacts", "locations", ...SECTIONS.filter(k => k !== "misc")]);
   const patch = emptyPatch();
@@ -81,6 +90,7 @@ export function validateExpanded(input: unknown): Patch {
       if (!isRecord(entry)) throw new Error("Invalid entry"); keys(entry, allowed);
       if (!named(entry.name)) throw new Error("Invalid name");
       if (key === "contacts") {
+        if (entry.name.includes(";")) continue;
         const fields: Patch["contacts"][number]["fields"] = {};
         for (const field of CONTACT_KEYS) if (entry[field] !== undefined) {
           const c = change(field, entry[field]);
@@ -115,6 +125,7 @@ export function parseExpanded(body: string): Patch | null {
 }
 /** Independent top-level lines; nested objects/arrays remain atomic. */
 function parseLines(body: string): { patch: Patch | null; invalidFields: string[]; issues: ParseIssue[] } {
+  body = normalSpaces(body);
   if (body.length > 64000) return { patch: null, invalidFields: [], issues: [{ line: null, field: "block", reason: "block too large" }] };
   if (/^\s*(?:loc|time|date|season|weather|condition|temperature|weather_description|weather_alert|present|c|p|people|items|rules|plots|done|call|bank|tx):/m.test(body)) return parseShorthand(decodeEntities(body), validateExpanded);
   const groups = new Map<string, { value: string; line: number }[]>();

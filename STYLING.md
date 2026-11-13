@@ -807,6 +807,7 @@ All surfaces keep their existing opaque defaults. No inline styles are used.
 | `.lpt-field-controls.is-locked` | An explicitly locked field. |
 | `.lpt-field-lock` | Lock/Unlock button with field-specific accessible label and aria-pressed. |
 | `.lpt-field-restore` | Restores this field's last user-entered value. |
+| `.lpt-field-control-label` | Visible field name beside protection icons in repeated rows. |
 | `.lpt-field-action-icon` | Decorative Lock, Unlock or Restore image. |
 
 Set `--lpt-field-action-icon-size` on `.lpt-root` to resize the three images. The default is 32 px. Buttons use `--lpt-contact-target` for the minimum tap area.

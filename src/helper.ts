@@ -74,7 +74,7 @@ export function helperValues(content: string, doc: Document, rows:StoryRow[]=[])
     if(valid.length)result.calls=valid;else delete result.calls;
     if(!valid.length && Object.keys(result).length===0)throw new HelperFailure("validation rejected");
   }
-  const evidenceAfter=(evidence:unknown,index:number)=>typeof evidence==="string" && rows.some(r=>r.index_in_chat>index&&transformTags(r.content,"strip").includes(evidence));
+  const evidenceAfter=(evidence:unknown,index:number)=>typeof evidence==="string" && rows.some(r=>r.index_in_chat>index&&transformTags(r.content,"strip").replaceAll("\u2800"," ").includes(evidence.replaceAll("\u2800"," ")));
   const keepCell=(key:string,raw:unknown,old?:Cell)=>{
     if(raw===null)return true;
     if(key==="temperature") {

@@ -27,7 +27,7 @@ done: Plot name
 
 This is a syntax example, never demo data inserted into the phone.
 **Write ONLY changed fields.** One record per line; fields use exactly ` | `,
-list items use `; `. Omit unknown/unchanged fields. An empty block means no change.
+list items use `; `. The parser also accepts semicolons without a following space. Braille blank U+2800 is read as a normal space, including in evidence. A contact record needs one name, never a semicolon-separated name list. Omit unknown/unchanged fields. An empty block means no change.
 No additional short-code legend is introduced.
 
 ## Weather

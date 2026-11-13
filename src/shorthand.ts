@@ -1,3 +1,4 @@
+import { normalSpaces } from "./shared";
 import { WEATHER_DETAILS } from "./weather-fields";
 import { emptyPatch, normalize, type Patch, type Change, type Value } from "./model";
 import type { ParseIssue } from "./schema";
@@ -14,7 +15,7 @@ function text(s:string, limit=500):string {
 function bounded(s:string,n:number):string { const v=text(s);if(words(v)>n)throw new Error("long");return v; }
 function list(s:string,n?:number):string[] {
   if (!s.trim()) return [];
-  return s.split("; ").map(v=>n?bounded(v,n):text(v,100));
+  return normalSpaces(s).split(/;\s*/u).map(v=>n?bounded(v,n):text(v,100));
 }
 function marked(raw:string):{ value:string;evidence?:string;inferred?:boolean } {
   const chunks=raw.split(" ~ ");const value=chunks.shift()!.trim();let evidence:string|undefined;let inferred=false;
@@ -59,6 +60,7 @@ export function parseShorthand(body:string,validate:(value:unknown)=>Patch):{pat
         else {if(parts.length>1)throw new Error("parts");data[field]=wrap(key==="present"?list(m.value):text(m.value),m);}
       } else if(key==="c") {
         const parts=raw.split(" | ");const c:Record<string,unknown>={name:text(parts.shift()!,100)};
+        if(String(c.name).includes(";"))throw new Error("multiple contact names");
         if(!parts.length)throw new Error("empty contact");const seen=new Set<string>();const attire:Record<string,ReturnType<typeof marked>>={};
         for(const part of parts) {
           const eq=part.indexOf("=");const k=part.slice(0,eq).trim();

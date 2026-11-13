@@ -1814,3 +1814,12 @@
 .lpt-weather-alert.is-alert {color:var(--lpt-weather-alert-color);border-color:currentColor;}
 .lpt-weather-controls-title {cursor:pointer;}
 .lpt-weather-control-row {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--lpt-weather-gap);}
+
+/* Keep field actions beside their own values, including compact Scene rows. */
+.lpt-field-unit {display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:var(--lpt-contact-gap);}
+.lpt-field-unit > .lpt-field {min-width:0;overflow-wrap:anywhere;}
+.lpt-field-unit > .lpt-field-controls {margin:0;align-self:start;}
+.lpt-scene-when > .lpt-field-unit {grid-template-columns:minmax(0,1fr);align-content:start;}
+.lpt-scene-when > .lpt-field-unit > .lpt-field-controls {max-width:100%;}
+.lpt-field-control-label {min-width:0;overflow-wrap:anywhere;}
+.lpt-location .lpt-field-value {word-break:normal;overflow-wrap:break-word;}

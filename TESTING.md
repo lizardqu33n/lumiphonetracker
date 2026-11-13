@@ -1,4 +1,14 @@
-# Verification report - 0.18.1
+# Verification report - 0.18.2
+
+## 0.18.2 - Names, blank characters and field controls
+
+Checked November 13, 2026 (America/Chicago). 269 code tests with 2,091 assertions and 355 browser checks passed. Type checking, reproducible builds and package validation passed.
+
+- Added regression checks for presence lists with missing spaces and U+2800, old JSON presence arrays, combined-name AI contact rejection, rebuilds from a prior journal, text tag spacing and exact quotes containing U+2800.
+- Browser checks cover separate presence chips and contact rows, visible labels on repeated protection controls, field actions beside Scene values and narrow phone widths. Existing locking, restore, opacity and protected Reset checks run too.
+- Existing manually entered or edited contact records stay protected. No live Lumiverse install or the original affected chat was available.
+
+## 0.18.1 - Field action icons
 
 267 code tests and 349 browser checks passed. The browser verified three distinct embedded icons at 32 px, 44 px tap targets, accessible names, and Lock, Unlock and Restore behavior. Type checking, reproducible builds and package validation passed. Live Lumiverse was not used.
 

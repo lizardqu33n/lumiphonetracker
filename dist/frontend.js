@@ -27,6 +27,7 @@ function showCopyableError(parent, text) {
 }
 
 // src/shared.ts
+var normalSpaces = (text) => text.replaceAll("⠀", " ");
 var EXTENSION_NAME = "Lumi Phone Tracker";
 var TRACKER_TAG = "phone-state";
 var TEXT_TAG = "phone-text";
@@ -273,7 +274,7 @@ var CORE_APPS = ["Scene", "Weather", "Locations", "Notes", "Contacts", "Messages
 var OPTIONAL_APPS = ["Calls", "Email", "Bank"];
 var ALL_APPS = [...CORE_APPS, ...OPTIONAL_APPS];
 var APP_FIELDS = { Scene: SCENE_KEYS.map((k) => `scene.${k}`), Weather: [...Object.values(WEATHER_SWITCHES), "weather.time", "weather.date"], Locations: ["locations"], Notes: SECTIONS.map((k) => `notes.${k}`), Contacts: CONTACT_KEYS.map((k) => `contacts.${k}`), Messages: ["messages"], Calls: ["calls"], Email: ["email"], Bank: ["bank.balance", "bank.transactions"] };
-var normalize = (name) => name.normalize("NFKC").trim().toLocaleLowerCase("en-US").split(" ").filter(Boolean).join(" ");
+var normalize = (name) => name.replaceAll("⠀", " ").normalize("NFKC").trim().toLocaleLowerCase("en-US").split(" ").filter(Boolean).join(" ");
 function defaults() {
   return {
     weatherUnit: "F",
@@ -1103,7 +1104,7 @@ function el(tag, cls, text) {
   const node = document.createElement(tag);
   node.className = cls;
   if (text !== undefined)
-    renderEmojiText(node, text);
+    renderEmojiText(node, normalSpaces(text));
   return node;
 }
 function appImage(name) {
@@ -1702,6 +1703,8 @@ class PhoneView {
   }
   fieldControls(parent, ref, label) {
     const row = el("div", "lpt-field-controls"), locked = this.doc?.fieldLocks?.[fieldKey(ref)] === true, epoch = this.chatEpoch;
+    if (!parent.classList.contains("lpt-field-unit") && !parent.classList.contains("lpt-weather-control-row"))
+      row.append(el("span", "lpt-field-control-label", label));
     const action = locked ? "unlock" : "lock";
     const control = fieldActionButton(action, `${locked ? "Unlock" : "Lock"} ${label}`, () => {
       if (epoch === this.chatEpoch && row.isConnected)
@@ -4494,6 +4497,15 @@ var styles_default = `/* =======================================================
 .lpt-weather-alert.is-alert {color:var(--lpt-weather-alert-color);border-color:currentColor;}
 .lpt-weather-controls-title {cursor:pointer;}
 .lpt-weather-control-row {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--lpt-weather-gap);}
+
+/* Keep field actions beside their own values, including compact Scene rows. */
+.lpt-field-unit {display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:var(--lpt-contact-gap);}
+.lpt-field-unit > .lpt-field {min-width:0;overflow-wrap:anywhere;}
+.lpt-field-unit > .lpt-field-controls {margin:0;align-self:start;}
+.lpt-scene-when > .lpt-field-unit {grid-template-columns:minmax(0,1fr);align-content:start;}
+.lpt-scene-when > .lpt-field-unit > .lpt-field-controls {max-width:100%;}
+.lpt-field-control-label {min-width:0;overflow-wrap:anywhere;}
+.lpt-location .lpt-field-value {word-break:normal;overflow-wrap:break-word;}
 `;
 
 // src/message-reads.ts

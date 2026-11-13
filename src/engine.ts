@@ -11,7 +11,7 @@ import { CONTACT_KEYS, SCENE_KEYS, SECTIONS, emptyPatch, emptyState, normalize,
   type Origin, type Patch, type Section, type State } from "./model";
 import type { HistoryMessage } from "./history";
 import { readSnapshot } from "./history";
-import { isRecord } from "./shared";
+import { isRecord, normalSpaces } from "./shared";
 import { usable, placeholder } from "./shorthand";
 import { transformTags } from "./tags";
 
@@ -25,7 +25,7 @@ const nameOfPlace = (state: State) => {
 };
 const namesPresent = (state: State): string[] => Array.isArray(state.scene.present?.value) ? state.scene.present!.value as string[] : [];
 export function evidenceValid(evidence: string | undefined, prose: string): boolean {
-  return !!evidence && evidence.trim().length >= 3 && prose.includes(evidence);
+  return !!evidence && evidence.trim().length >= 3 && normalSpaces(prose).includes(normalSpaces(evidence));
 }
 function setCell(old: Cell | undefined, update: Change | undefined, at: Origin, prose: string,
   infer: boolean): Cell | undefined {
@@ -216,6 +216,11 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
 }
 
 function applyAI(doc: Document, patch: Patch, at: Origin, prose: string, players: Set<string>, tombstones: Set<string>, knownNotes: Set<string>): void {
+  patch = {...patch, scene: {...patch.scene}, contacts: patch.contacts.filter(c => !c.name.includes(";"))};
+  if (patch.scene.present) {
+    try { patch.scene.present = change("present", patch.scene.present); }
+    catch { delete patch.scene.present; }
+  }
   const state = doc.state;
   for (const key of SCENE_KEYS){const c=patch.scene[key];if(c&&fieldAllows(doc,{target:"scene",field:key},c.value,at,prose,c.evidence,c.inferred))state.scene[key]=setCell(state.scene[key],c,at,prose,false);}
   if(patch.weather&&fieldAllows(doc,{target:"weather",field:"weather"},patch.weather.value,at,prose,patch.weather.evidence))state.weather=setCell(state.weather,patch.weather,at,prose,false);

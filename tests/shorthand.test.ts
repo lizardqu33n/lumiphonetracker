@@ -125,3 +125,32 @@ describe("Part 1 shorthand and compliance",()=>{
     expect(text).not.toContain("key=JSON");
   });
 });
+
+test("presence splits semicolons with ordinary, missing and braille spaces on rebuild", () => {
+  const names = ["Mags", "Cody", "Alex", "Lila"];
+  for (const separator of [";", "; ", ";\u2800"]) {
+    const story = row(0, "present: " + names.join(separator) + "\nc: " + names.join(separator) + " | mood=Calm");
+    const document = run([story]);
+    expect(document.state.scene.present?.value).toEqual(names);
+    expect(document.state.contacts.map(c => c.name).filter(n => n !== "Player")).toEqual(names);
+    expect(document.state.contacts.every(c => !c.name.includes(";"))).toBe(true);
+    expect(run([story], document).state.contacts).toEqual(document.state.contacts);
+    document.accepted[0].patch.contacts.push({name:names.join("; "),fields:{}});
+    document.accepted[0].patch.scene.present = {value:[names.join("; ")]};
+    expect(run([story],document).state.contacts.every(c => !c.name.includes(";"))).toBe(true);
+  }
+  const legacy = parseExpanded('present=["Mags; Cody; Alex; Lila"]');
+  expect(legacy?.scene.present?.value).toEqual(names);
+});
+test("braille blank is space in shorthand, legacy JSON, text tags and exact evidence", () => {
+  expect(parseExpanded("\u2800loc:\u2800Silver\u2800Creek")?.scene.location?.value).toEqual({name:"Silver Creek",wider:[]});
+  expect(parseExpanded('time="Late\u2800night"')?.scene.time?.value).toBe("Late night");
+  const text = parseExpandedReply('<phone-text\u2800from="Ada">Be\u2800careful</phone-text>');
+  expect(text.texts[0]?.text).toBe("Be careful");
+  expect(transformTags('<phone-text\u2800from="Ada">Hi</phone-text>',"display")).toBe('<phone-text from="Ada">Hi</phone-text>');
+  const document = run([row(0, 'loc: Gate')]);
+  document.edits.push({id:"edit",after:"m0",index:0,target:"scene",field:"location",value:{name:"My gate",wider:[]}});
+  document.settings.allowAIUserEdits = true;
+  const next = run([row(0, 'loc: Gate'),row(1, 'loc: Silver Creek ~ "They reach Silver Creek."', 'They\u2800reach\u2800Silver\u2800Creek.')],document);
+  expect(next.state.scene.location?.value).toEqual({name:"Silver Creek",wider:[]});
+});

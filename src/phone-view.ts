@@ -16,7 +16,7 @@ import { prepareCustomCSS } from "./custom-css";
 import { LAUNCHER_ICON } from "./launcher-icon";
 import { HOME_ICONS, type IconNode } from "./icons";
 import { conversations, emptyReads, isUnread, receipt, threadKey, type Conversation, type ReadState } from "./messages";
-import { isRecord } from "./shared";
+import { isRecord, normalSpaces } from "./shared";
 
 export interface ViewActions {
   update(change: { edit?: Partial<ManualEdit>; settings?: unknown; dismissNotice?: string;portrait?:{name:string;data:string|null};contactInfo?:unknown;fieldControl?:unknown;mergeContacts?:unknown }, revision: number): Promise<PhoneDocument>;
@@ -43,7 +43,7 @@ const CONTROL_PATHS: Record<string, string[]> = {
   Phone: ["M7 2h10v20H7Z", "M10 18h4"], Back: ["m14 5-7 7 7 7"], Close: ["m6 6 12 12M18 6 6 18"],
 };
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag); node.className = cls; if (text !== undefined) renderEmojiText(node,text); return node;
+  const node = document.createElement(tag); node.className = cls; if (text !== undefined) renderEmojiText(node,normalSpaces(text)); return node;
 }
 export function appImage(name:string):HTMLImageElement {const img=el("img","lpt-app-image");img.src=APP_IMAGES[name]??"";img.alt="";img.setAttribute("aria-hidden","true");img.draggable=false;return img;}
 export function icon(name: string): SVGSVGElement {
@@ -344,6 +344,7 @@ export class PhoneView {
   }
   private fieldControls(parent:HTMLElement,ref:FieldRef,label:string):void {
     const row=el("div","lpt-field-controls"),locked=this.doc?.fieldLocks?.[fieldKey(ref)]===true,epoch=this.chatEpoch;
+    if (!parent.classList.contains("lpt-field-unit") && !parent.classList.contains("lpt-weather-control-row")) row.append(el("span","lpt-field-control-label",label));
     const action = locked ? "unlock" : "lock";
     const control = fieldActionButton(action, `${locked ? "Unlock" : "Lock"} ${label}`, () => {
       if (epoch === this.chatEpoch && row.isConnected) void this.change({fieldControl:{...ref, action}});

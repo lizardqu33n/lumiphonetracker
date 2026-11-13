@@ -11,7 +11,7 @@ export interface TagSpan {
   canonical: boolean;
 }
 const NAMES = [TRACKER_TAG, TEXT_TAG,"phone-email"];
-const space = (c: string) => c === " " || c === "\n" || c === "\r" || c === "\t";
+const space = (c: string) => c === " " || c === "\u2800" || c === "\n" || c === "\r" || c === "\t";
 
 /** A small scanner for our two reserved tags, never an HTML parser or regex script. */
 export function scanTags(text: string): TagSpan[] {
@@ -69,7 +69,7 @@ export function transformTags(text: string, mode: "display" | "strip"): string {
   let offset = 0;
   for (const span of scanTags(text)) {
     output += text.slice(offset, span.start);
-    if (mode === "display" && span.complete && span.canonical && parseAttributes(span.header)) output += text.slice(span.start, span.end);
+    if (mode === "display" && span.complete && span.canonical && parseAttributes(span.header)) output += text.slice(span.start, span.end).replaceAll("\u2800", " ");
     offset = span.end;
   }
   return output + text.slice(offset);
@@ -94,6 +94,7 @@ export function stripHistoryTags(messages: LlmMessageDTO[]): LlmMessageDTO[] {
 }
 
 export function decodeEntities(text: string): string {
+  text = text.replaceAll("\u2800", " ");
   const entities: Record<string, string> = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'" };
   let output = "";
   for (let i = 0; i < text.length; i++) {

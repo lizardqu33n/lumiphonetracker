@@ -1,3 +1,5 @@
+export const normalSpaces = (text: string): string => text.replaceAll("\u2800", " ");
+
 export const EXTENSION_NAME = "Lumi Phone Tracker";
 export const BUILD_STEP = 6;
 export const TRACKER_TAG = "phone-state";

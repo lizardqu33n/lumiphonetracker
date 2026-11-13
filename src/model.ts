@@ -81,7 +81,7 @@ export interface Document {
   helperEntries: HelperEntry[];
   helperAttempts: string[];
 }
-export const normalize = (name: string) => name.normalize("NFKC").trim().toLocaleLowerCase("en-US").split(" ").filter(Boolean).join(" ");
+export const normalize = (name: string) => name.replaceAll("\u2800", " ").normalize("NFKC").trim().toLocaleLowerCase("en-US").split(" ").filter(Boolean).join(" ");
 export function defaults(): Settings {
   return { weatherUnit:"F",allowAIUserEdits:false,fakeAddresses:false,fakeDomain:"lumi.verse",apps:Object.fromEntries(ALL_APPS.map(a=>[a,(CORE_APPS as readonly string[]).includes(a)])) as Record<CoreApp,boolean>, enabled: Object.fromEntries(SWITCHES.map(k => [k, k !== "contacts.thoughts" && !(WEATHER_EXTRAS as readonly string[]).includes(k)])), aiPlayerTexts: false,
     inferMissing: false, keepTexts: 3, keepTrackers: 0, notesPerSection: 10, logLines: 20, source: "main", connection_id: null, helperMessages: 3 };

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.18.2 - Name separators and field controls
+
+- Semicolon-separated presence names work with or without a following space. AI contact records containing a name list are skipped during rebuild.
+- Braille blank U+2800 is treated as an ordinary space when reading tracker fields, text tags and evidence.
+- Field controls stay beside Scene values. Repeated protection controls have visible field labels.
+
 ## 0.18.1 - Field action icons
 
 - Lock, Unlock and Restore my version now use embedded 32 px pixel-art icons with their original accessible names.

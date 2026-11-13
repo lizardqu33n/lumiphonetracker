@@ -679,6 +679,26 @@ try {
   await weatherPage.evaluate(()=>(window as any).harness.activityStory('The coastal warning was lifted. It is 22 C now.<phone-state>\ntemperature: 22 C\nweather_alert: ended ~ "The coastal warning was lifted."\n</phone-state>'));await weatherPage.waitForTimeout(150);
   check((await temperature.innerText()).includes("19")&&await weatherPage.locator(".lpt-weather-alert.is-alert").count()===0,"Temperature edits and locks survive later facts and the ended alert clears");
   await weatherPage.setViewportSize({width:390,height:600});await weatherPage.waitForTimeout(100);check(await weatherCard.evaluate(n=>n.scrollWidth<=n.clientWidth),"Weather card and chips fit a narrow phone");await weatherPage.close();
+
+  const spacesPage=await browser.newPage({viewport:{width:1100,height:850}});
+  await spacesPage.goto(`http://127.0.0.1:${server.port}`);await seed(spacesPage);
+  await spacesPage.evaluate(()=>(window as any).harness.activityStory('Mags, Cody, Alex and Lila are at Silver Creek.<phone-state>\nloc:\u2800Silver\u2800Creek\npresent: Mags;\u2800Cody;Alex; Lila\nc: Mags; Cody; Alex; Lila | mood=Calm\n</phone-state>'));
+  await spacesPage.waitForTimeout(150);await open(spacesPage,"Scene");
+  check((await spacesPage.locator(".lpt-present-name").allTextContents()).join("|")==="Mags|Cody|Alex|Lila","Braille and unspaced semicolons create separate Here now chips");
+  check((await spacesPage.getByRole("button",{name:"Edit Location",exact:true}).innerText()).includes("Silver Creek"),"Braille blank displays as an ordinary space");
+  const locationUnit=spacesPage.locator(".lpt-field-unit").filter({has:spacesPage.getByRole("button",{name:"Edit Location",exact:true})});
+  check(await locationUnit.evaluate(n=>{const field=n.querySelector(".lpt-field")!.getBoundingClientRect(),actions=n.querySelector(".lpt-field-controls")!.getBoundingClientRect();return actions.x>=field.right && actions.y<field.bottom;}),"Scene protection stays beside its field");
+  await spacesPage.setViewportSize({width:390,height:650});
+  check(await spacesPage.locator(".lpt-scene").evaluate(n=>n.scrollWidth<=n.clientWidth),"Scene fields and their controls fit a narrow phone");
+  await spacesPage.setViewportSize({width:1100,height:850});
+  await spacesPage.locator(".harness-widget").screenshot({path:".test-artifacts/spaces-scene.png"});
+  await home(spacesPage);await open(spacesPage,"Contacts");
+  check((await spacesPage.locator(".lpt-contact-row").allTextContents()).every(name=>!name.includes(";")),"Presence never creates a combined-name contact");
+  await home(spacesPage);await open(spacesPage,"Notes");const firstNote=spacesPage.locator(".lpt-note").first();
+  await firstNote.evaluate(n=>{let parent=n.parentElement;while(parent){if(parent instanceof HTMLDetailsElement)parent.open=true;parent=parent.parentElement;}});
+  await firstNote.locator("summary").click();
+  check(await spacesPage.locator(".lpt-note .lpt-field-control-label").first().isVisible(),"Note protection controls have visible field labels");
+  await spacesPage.close();
   console.log(`Browser UI verification passed: ${checks} checks. Screenshots in .test-artifacts/. No real Lumiverse instance or provider was used.`);
 } catch(error) { console.error(`Browser stopped after check ${checks}: ${lastCheck}`);for(const [i,page]of browser.contexts().flatMap(c=>c.pages()).entries())try{await page.screenshot({path:`.test-artifacts/failure-${i}.png`});}catch{}throw error;
 } finally { await browser.close(); server.stop(true); }
