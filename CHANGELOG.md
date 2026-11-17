@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.18.9 - Pastel type hierarchy and compact sidebar
+
+- Paired handwritten system headings with a readable body typeface, lighter values and small uppercase field labels. Refined contact and note alignment and action placement.
+- Compacted sidebar artwork, tracking chips, accordion headers and form controls while retaining the protected toolbar.
+- App Store uses the supplied embedded plus/minus artwork without visible action text. Tooltips and accessible names identify the action and app.
+
+
 ## 0.18.8 - Fit artwork to icon buttons
 
 - Unified icon-only button boxes and their artwork sizing. Icons fill the available square with object-fit containment, keeping their proportions and tap targets.

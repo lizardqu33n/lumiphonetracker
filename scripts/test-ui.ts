@@ -758,6 +758,22 @@ try {
     const image=button.querySelector("img")!,box=button.getBoundingClientRect(),art=image.getBoundingClientRect();
     return box.width===box.height&&box.width>=44&&art.width<=box.width&&art.height<=box.height&&getComputedStyle(image).objectFit==="contain";
   })),"Image buttons share square containers and contain proportional artwork with full tap targets");
+
+  await section(corrections,"apps");
+  const removeScene=corrections.locator(".lpt-sidebar").getByRole("button",{name:"Remove Scene",exact:true});
+  const minusSrc=await removeScene.locator("img").getAttribute("src");
+  check(await removeScene.evaluate(n=>n.textContent===""&&n.getAttribute("title")==="Remove Scene"&&n.querySelector("img")?.getAttribute("src")?.startsWith("data:image/png;base64,")),"App Store uses embedded supplied artwork with tooltip and accessible name only");
+  await removeScene.click();await corrections.waitForTimeout(100);
+  const addScene=corrections.locator(".lpt-sidebar").getByRole("button",{name:"Add Scene",exact:true});
+  check(await addScene.locator("img").getAttribute("src")!==minusSrc,"App Store switches to the supplied plus after removing an app");
+  await addScene.click();await corrections.waitForTimeout(100);
+  check(await corrections.locator(".lpt-sidebar").getByRole("button",{name:"Remove Scene",exact:true}).locator("img").getAttribute("src")===minusSrc,"Adding the app restores its minus control");
+  await corrections.locator(".harness-drawer").screenshot({path:".test-artifacts/pastel-app-store.png"});
+  await section(corrections,"tracking");
+  check(await corrections.locator(".lpt-toggle-chip").evaluateAll(nodes=>nodes.length>0&&nodes.every(n=>n.getBoundingClientRect().height<=30)),"Desktop tracking chips stay compact");
+  await corrections.locator(".harness-drawer").screenshot({path:".test-artifacts/pastel-tracking.png"});
+  await corrections.locator(".harness-drawer").evaluate(n=>(n as HTMLElement).style.width="220px");
+  check(await corrections.locator(".lpt-sidebar-settings").evaluate(n=>n.scrollWidth<=n.clientWidth),"Sidebar settings fit a narrow drawer");
   await corrections.close();
   console.log(`Browser UI verification passed: ${checks} checks. Screenshots in .test-artifacts/. No real Lumiverse instance or provider was used.`);
 } catch(error) { console.error(`Browser stopped after check ${checks}: ${lastCheck}`);for(const [i,page]of browser.contexts().flatMap(c=>c.pages()).entries())try{await page.screenshot({path:`.test-artifacts/failure-${i}.png`});}catch{}throw error;

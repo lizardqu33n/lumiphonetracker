@@ -4553,6 +4553,39 @@ var styles_default = `/* =======================================================
 .lpt-root :is(.lpt-button,.lpt-save,.lpt-cancel,.lpt-delete):not(:has(> img:only-child)) {
   width:fit-content;justify-self:start;
 }
+
+/* Pastel diary hierarchy for contact cards and note pages. */
+.lpt-root {
+  --lpt-font:"Trebuchet MS","Verdana",sans-serif;
+  --lpt-heading-font:"Comic Sans MS","Chalkboard SE",cursive;
+  --lpt-title-size:20px;
+  --lpt-contact-font:var(--lpt-font);
+  --lpt-contact-label-size:11px;
+  --lpt-contact-hero-name-size:20px;
+}
+.lpt-heading {font-weight:700;letter-spacing:-.04em;}
+.lpt-card-title,.lpt-section-title,.lpt-note-line {font-family:var(--lpt-heading-font);font-weight:700;letter-spacing:-.02em;}
+.lpt-contact-name {font-family:var(--lpt-heading-font);font-size:var(--lpt-contact-hero-name-size);font-weight:700;margin:0;}
+.lpt-contact-hero {gap:var(--lpt-space);padding-block:var(--lpt-space);}
+.lpt-contact-chips {gap:calc(var(--lpt-space) / 2);}
+.lpt-contact-chip {font-size:var(--lpt-small-font-size);font-weight:600;}
+.lpt-contact-info-label,.lpt-note-part-label {
+  font-size:var(--lpt-contact-label-size);font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;line-height:1.5;
+}
+.lpt-contact-info-row,.lpt-note-part {
+  padding-block:var(--lpt-space);row-gap:calc(var(--lpt-space) / 2);
+}
+.lpt-contact-info-value,.lpt-note-part-value {font-weight:500;line-height:1.5;}
+.lpt-contact-info-row > .lpt-field-controls,.lpt-note-part > .lpt-field-controls {align-self:center;}
+.lpt-note > .lpt-summary {background:var(--lpt-elevated-bg);border-radius:var(--lpt-card-radius) var(--lpt-card-radius) 0 0;}
+.lpt-note-line {font-size:15px;line-height:1.4;}
+.lpt-note .lpt-card-body {padding:var(--lpt-space);}
+.lpt-note .lpt-actions {display:flex;justify-content:flex-end;padding-top:var(--lpt-space);margin:0;}
+.lpt-contact-actions {justify-content:flex-end;border-top:var(--lpt-border-size) solid var(--lpt-border);padding-top:var(--lpt-space);}
+.lpt-marker {font-family:var(--lpt-font);font-weight:700;}
+
+.lpt-contact-extra > .lpt-field-controls .lpt-field-control-label {font-size:var(--lpt-contact-label-size);font-weight:700;letter-spacing:.06em;text-transform:uppercase;}
 `;
 
 // src/message-reads.ts
@@ -5440,9 +5473,15 @@ class Sidebar {
       label.append(node("strong", "lpt-store-name", app));
       const added = this.doc?.settings.apps[app] === true;
       row.title = DESCRIPTIONS[app];
-      const button = node("button", "lpt-store-button", added ? "Remove" : "Add");
+      const button = node("button", "lpt-store-button");
+      const actionImage = node("img", "lpt-store-action-image");
+      actionImage.src = added ? ACTION_IMAGES.remove : ACTION_IMAGES.add;
+      actionImage.alt = "";
+      actionImage.draggable = false;
+      actionImage.setAttribute("aria-hidden", "true");
+      button.append(actionImage);
       button.type = "button";
-      button.title = DESCRIPTIONS[app];
+      button.title = `${added ? "Remove" : "Add"} ${app}`;
       button.setAttribute("aria-description", DESCRIPTIONS[app]);
       button.disabled = !this.doc || this.saving;
       button.setAttribute("aria-label", `${added ? "Remove" : "Add"} ${app}`);
@@ -5736,6 +5775,38 @@ var sidebar_default = `/* Sidebar only: protected from the phone Shadow DOM/cust
 
 @media (pointer:coarse) {
   .lpt-store-button,.lpt-toggle-chip,.lpt-side-number,.lpt-helper-source,.lpt-helper-connection,.lpt-personal-button,.lpt-personal-input,.lpt-personal-select,.lpt-setup-button,.lpt-css-file::file-selector-button {min-height:var(--lpt-side-target);}
+}
+
+/* Compact pastel stationery typography, with the protected toolbar intact. */
+.lpt-sidebar {
+  --lpt-side-font:"Trebuchet MS","Verdana",sans-serif;
+  --lpt-side-heading-font:"Comic Sans MS","Chalkboard SE",cursive;
+  --lpt-side-font-size:12px;--lpt-side-gap:4px;--lpt-side-space:6px;
+  --lpt-side-toolbar-icon:24px;--lpt-side-section-icon:18px;--lpt-side-app-icon:20px;
+  --lpt-side-store-action-size:28px;
+  font-family:var(--lpt-side-font);font-size:var(--lpt-side-font-size);line-height:1.4;
+}
+.lpt-toolbar-button {min-height:44px;}
+.lpt-side-summary {min-height:34px;gap:6px;}
+.lpt-side-heading {font-family:var(--lpt-side-heading-font);font-size:13px;font-weight:700;}
+.lpt-side-legend {font-family:var(--lpt-side-heading-font);font-size:12px;padding-bottom:2px;}
+.lpt-side-group {gap:4px;margin:4px 0 6px;}
+.lpt-toggle-chip {min-height:26px;padding:2px 5px;gap:4px;border-radius:6px;font-size:11px;}
+.lpt-side-checkbox {width:12px;height:12px;}
+.lpt-store-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;}
+.lpt-store-row {grid-template-columns:var(--lpt-side-app-icon) minmax(0,1fr) var(--lpt-side-store-action-size);gap:4px;padding:4px;}
+.lpt-store-row .lpt-side-label {grid-column:2;grid-row:1;text-align:left;}
+.lpt-store-name {font-family:var(--lpt-side-font);font-size:11px;font-weight:700;}
+.lpt-store-button {grid-column:3;grid-row:1;display:grid;place-items:center;width:var(--lpt-side-store-action-size);height:var(--lpt-side-store-action-size);min-height:0;padding:0;border:0;background:transparent;box-shadow:none;}
+.lpt-store-action-image {display:block;width:100%;height:100%;object-fit:contain;image-rendering:pixelated;}
+.lpt-side-number,.lpt-helper-source,.lpt-helper-connection,.lpt-personal-input,.lpt-personal-select {min-height:28px;padding:3px 6px;font-size:12px;}
+@container (min-width:300px) {.lpt-store-grid {grid-template-columns:repeat(2,minmax(0,1fr));}}
+@container (max-width:219px) {.lpt-store-grid {grid-template-columns:1fr;}}
+@media (pointer:coarse) {
+  .lpt-toggle-chip,.lpt-side-summary {min-height:36px;}
+  .lpt-store-row {min-height:44px;}
+  .lpt-store-button {position:relative;}
+  .lpt-store-button::after {content:"";position:absolute;inset:-8px 0;}
 }
 `;
 

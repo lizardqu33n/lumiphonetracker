@@ -2024,3 +2024,36 @@
 .lpt-root :is(.lpt-button,.lpt-save,.lpt-cancel,.lpt-delete):not(:has(> img:only-child)) {
   width:fit-content;justify-self:start;
 }
+
+/* Pastel diary hierarchy for contact cards and note pages. */
+.lpt-root {
+  --lpt-font:"Trebuchet MS","Verdana",sans-serif;
+  --lpt-heading-font:"Comic Sans MS","Chalkboard SE",cursive;
+  --lpt-title-size:20px;
+  --lpt-contact-font:var(--lpt-font);
+  --lpt-contact-label-size:11px;
+  --lpt-contact-hero-name-size:20px;
+}
+.lpt-heading {font-weight:700;letter-spacing:-.04em;}
+.lpt-card-title,.lpt-section-title,.lpt-note-line {font-family:var(--lpt-heading-font);font-weight:700;letter-spacing:-.02em;}
+.lpt-contact-name {font-family:var(--lpt-heading-font);font-size:var(--lpt-contact-hero-name-size);font-weight:700;margin:0;}
+.lpt-contact-hero {gap:var(--lpt-space);padding-block:var(--lpt-space);}
+.lpt-contact-chips {gap:calc(var(--lpt-space) / 2);}
+.lpt-contact-chip {font-size:var(--lpt-small-font-size);font-weight:600;}
+.lpt-contact-info-label,.lpt-note-part-label {
+  font-size:var(--lpt-contact-label-size);font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;line-height:1.5;
+}
+.lpt-contact-info-row,.lpt-note-part {
+  padding-block:var(--lpt-space);row-gap:calc(var(--lpt-space) / 2);
+}
+.lpt-contact-info-value,.lpt-note-part-value {font-weight:500;line-height:1.5;}
+.lpt-contact-info-row > .lpt-field-controls,.lpt-note-part > .lpt-field-controls {align-self:center;}
+.lpt-note > .lpt-summary {background:var(--lpt-elevated-bg);border-radius:var(--lpt-card-radius) var(--lpt-card-radius) 0 0;}
+.lpt-note-line {font-size:15px;line-height:1.4;}
+.lpt-note .lpt-card-body {padding:var(--lpt-space);}
+.lpt-note .lpt-actions {display:flex;justify-content:flex-end;padding-top:var(--lpt-space);margin:0;}
+.lpt-contact-actions {justify-content:flex-end;border-top:var(--lpt-border-size) solid var(--lpt-border);padding-top:var(--lpt-space);}
+.lpt-marker {font-family:var(--lpt-font);font-weight:700;}
+
+.lpt-contact-extra > .lpt-field-controls .lpt-field-control-label {font-size:var(--lpt-contact-label-size);font-weight:700;letter-spacing:.06em;text-transform:uppercase;}

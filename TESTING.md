@@ -1,4 +1,9 @@
-# Verification report - 0.18.8
+# Verification report - 0.18.9
+
+Checked November 17, 2026. 269 code tests and 17 focused browser checks passed with type checking and reproducible build/package validation. Reviewed Contacts, Notes, App Store and tracking screenshots. Verified embedded plus/minus controls, accessible names and tooltips, add/remove icon switching, compact tracking chips and narrow drawer fitting. Existing focused checks cover phone layout and proportional images. The previously documented full browser suite limitations remain. Live Lumiverse, a real mobile drawer/keyboard, and font availability on other devices remain unverified. Font stacks use local system fallbacks without external loading.
+
+## 0.18.8 - Button fitting
+
 
 269 code tests and 12 focused browser checks passed, along with type checking and reproducible build/package validation. Reviewed Notes and Contacts captures. Image-only controls are square, retain at least 44px targets, contain their artwork and use object-fit: contain. The full-suite limitations documented below and real-host/mobile verification remain outstanding.
 

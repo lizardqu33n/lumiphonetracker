@@ -1,3 +1,4 @@
+import { ACTION_IMAGES } from "./action-images";
 import {SetupView,type SetupRequest} from "./setup-view";
 import {CONTACT_ICONS} from "./contact-icons";
 import {PersonalControls} from "./personal-controls";
@@ -154,8 +155,12 @@ export class Sidebar {
             label.append(node("strong", "lpt-store-name", app));
             const added = this.doc?.settings.apps[app] === true;
             row.title=DESCRIPTIONS[app];
-            const button = node("button", "lpt-store-button", added ? "Remove" : "Add");
-            button.type = "button";button.title=DESCRIPTIONS[app];button.setAttribute("aria-description",DESCRIPTIONS[app]);
+            const button = node("button", "lpt-store-button");
+            const actionImage = node("img", "lpt-store-action-image");
+            actionImage.src = added ? ACTION_IMAGES.remove : ACTION_IMAGES.add;
+            actionImage.alt = ""; actionImage.draggable = false;
+            actionImage.setAttribute("aria-hidden", "true"); button.append(actionImage);
+            button.type = "button";button.title = `${added ? "Remove" : "Add"} ${app}`;button.setAttribute("aria-description",DESCRIPTIONS[app]);
             button.disabled = !this.doc || this.saving;
             button.setAttribute("aria-label", `${added ? "Remove" : "Add"} ${app}`);
             button.addEventListener("click", () => { if(origin===this.epoch&&row.isConnected)void this.save({ apps: { [app]: !added } }); });

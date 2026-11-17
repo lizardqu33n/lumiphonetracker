@@ -917,3 +917,9 @@ The supplied five action icons use .lpt-action-image inside .lpt-image-action. V
 ## Button fitting in 0.18.8
 
 --lpt-image-button-size controls image-only phone buttons and defaults to --lpt-control-size (44px). Their child image fills the button content box with object-fit: contain and centered positioning. Source transparency remains visible, and the source aspect ratio is preserved. This shared rule replaces independent artwork sizes for these controls. Text action buttons use fit-content widths. Launcher and Home app tiles keep their separate sizing rules.
+
+## Pastel hierarchy and sidebar compaction in 0.18.9
+
+Phone body text uses --lpt-font (Trebuchet MS, Verdana, sans-serif). --lpt-heading-font retains the system handwritten stack. --lpt-contact-label-size defaults to 11px and --lpt-contact-hero-name-size to 20px. Note titles and section headings share the handwritten stack. Existing colors are preserved.
+
+The sidebar defines --lpt-side-font and --lpt-side-heading-font using the same two font families. Toolbar, section and app artwork defaults to 24px, 18px and 20px. --lpt-side-store-action-size defaults to 28px. .lpt-store-action-image contains the supplied plus/minus artwork in each existing .lpt-store-button. App names remain visible, actions have tooltips and accessible names. Desktop tracking chips use 26px minimum height with roomier touch controls. The App Store uses two compact columns and one column below 220px. The protected toolbar retains 44px targets.
