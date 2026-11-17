@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.18.10 - Google Fonts typography
+
+- Replaced Comic Sans and system body typography with Fredoka headings and Nunito body text in the phone and sidebar.
+- Bundled official Google Fonts WOFF2 files and their SIL Open Font Licenses. Embedded font data loads inside the extension sandbox without remote font requests.
+
+
 ## 0.18.9 - Pastel type hierarchy and compact sidebar
 
 - Paired handwritten system headings with a readable body typeface, lighter values and small uppercase field labels. Refined contact and note alignment and action placement.

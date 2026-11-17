@@ -150,8 +150,8 @@
 
 /* Compact pastel stationery typography, with the protected toolbar intact. */
 .lpt-sidebar {
-  --lpt-side-font:"Trebuchet MS","Verdana",sans-serif;
-  --lpt-side-heading-font:"Comic Sans MS","Chalkboard SE",cursive;
+  --lpt-side-font:"LPT Nunito","Verdana",sans-serif;
+  --lpt-side-heading-font:"LPT Fredoka","Arial Rounded MT Bold",sans-serif;
   --lpt-side-font-size:12px;--lpt-side-gap:4px;--lpt-side-space:6px;
   --lpt-side-toolbar-icon:24px;--lpt-side-section-icon:18px;--lpt-side-app-icon:20px;
   --lpt-side-store-action-size:28px;

@@ -1,4 +1,9 @@
-# Verification report - 0.18.9
+# Verification report - 0.18.10
+
+269 code tests and 18 focused browser checks passed, plus type checking and reproducible build/package validation. Browser verification explicitly loads both bundled Google Fonts through document.fonts and checks loaded FontFace objects. Reviewed Fredoka/Nunito phone and sidebar captures. The local Lumiverse sandbox source permits data fonts and blocks remote font requests, so fonts are embedded. The previous full-suite limitations remain. A real Lumiverse install and real mobile device were not tested.
+
+## 0.18.9 - Pastel hierarchy
+
 
 Checked November 17, 2026. 269 code tests and 17 focused browser checks passed with type checking and reproducible build/package validation. Reviewed Contacts, Notes, App Store and tracking screenshots. Verified embedded plus/minus controls, accessible names and tooltips, add/remove icon switching, compact tracking chips and narrow drawer fitting. Existing focused checks cover phone layout and proportional images. The previously documented full browser suite limitations remain. Live Lumiverse, a real mobile drawer/keyboard, and font availability on other devices remain unverified. Font stacks use local system fallbacks without external loading.
 

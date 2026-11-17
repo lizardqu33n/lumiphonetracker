@@ -1,3 +1,4 @@
+import fontCSS from "./fonts.css" with {type:"text"};
 import {showCopyableError} from "./copy-error";
 import {safeModelMessage} from "./model-errors";
 import {prepareSidebarCSS} from "./custom-css";
@@ -53,7 +54,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   const applySidebarStyle=(text:string)=>{const scoped=prepareSidebarCSS(text);const remove=scoped?ctx.dom.addStyle(scoped):()=>{};removeSidebarStyle();removeSidebarStyle=remove;};
   disposers.push(()=>removeSidebarStyle());
   const removeHostStyle = ctx.dom.addStyle(css);
-  disposers.push(removeHostStyle,ctx.dom.addStyle(sidebarCSS));
+  disposers.push(removeHostStyle,ctx.dom.addStyle(sidebarCSS),ctx.dom.addStyle(fontCSS));
 
   const sendSync = () => {
     pendingSync = crypto.randomUUID();

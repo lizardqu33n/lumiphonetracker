@@ -711,7 +711,13 @@ try {
   await buttonsPage.locator(".harness-widget").screenshot({path:".test-artifacts/compact-weather-buttons.png"});await buttonsPage.close();
   }
   const corrections=await browser.newPage({viewport:{width:1100,height:850}});
-  await corrections.goto("http://127.0.0.1:"+server.port);await seed(corrections);await open(corrections,"Scene");
+  await corrections.goto("http://127.0.0.1:"+server.port);await seed(corrections);
+  check(await corrections.evaluate(async()=>{
+    const headings=await document.fonts.load('700 20px "LPT Fredoka"',"Phone");
+    const body=await document.fonts.load('400 14px "LPT Nunito"',"Tracker");
+    return headings.length>0&&body.length>0&&[...headings,...body].every(font=>font.status==="loaded");
+  }),"Bundled Google Fonts load successfully rather than falling back to installed fonts");
+  await open(corrections,"Scene");
   const location=corrections.locator(".lpt-field-unit").filter({has:corrections.getByRole("button",{name:"Edit Location",exact:true})});
   check(await location.evaluate(n=>{const card=n.getBoundingClientRect(),button=n.querySelector(".lpt-field-lock")!.getBoundingClientRect();return button.left>=card.left&&button.right<=card.right&&button.top>=card.top&&button.bottom<=card.bottom;}),"Location control fits entirely inside its card container");
   check(await corrections.locator(".lpt-close").evaluate(n=>n.querySelector(".lpt-action-image")!==null&&n.getBoundingClientRect().width>=44),"Header uses supplied artwork with a full click target");

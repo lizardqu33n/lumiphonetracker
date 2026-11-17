@@ -125,7 +125,7 @@
   --lpt-frame-radius: 44px;
   --lpt-space: 6px;
 
-  /* ---- Type (system fonts only) ---- */
+  /* ---- Type (bundled Google Fonts override these fallbacks below) ---- */
   --lpt-font: ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN", "Arial Rounded MT Bold", "Varela Round", system-ui, sans-serif;
   --lpt-font-size: 14px;
   --lpt-small-font-size: 12px;
@@ -1999,7 +1999,7 @@
 .lpt-scene-when .lpt-field-label {min-height:var(--lpt-action-image-size);padding-right:var(--lpt-contact-target);box-sizing:border-box;}
 .lpt-scene-when > .lpt-field-unit > .lpt-field-controls {top:0;bottom:auto;}
 
-.lpt-root {--lpt-heading-font:"Comic Sans MS","Chalkboard SE",cursive;--lpt-contact-font-size:13px;}
+.lpt-root {--lpt-heading-font:"LPT Fredoka","Arial Rounded MT Bold",sans-serif;--lpt-contact-font-size:13px;}
 .lpt-heading {font-family:var(--lpt-heading-font);}
 .lpt-contact-actions {display:flex;align-items:center;flex-wrap:wrap;gap:var(--lpt-space);}
 .lpt-contact-actions .lpt-merge-confirm {flex-basis:100%;}
@@ -2027,8 +2027,8 @@
 
 /* Pastel diary hierarchy for contact cards and note pages. */
 .lpt-root {
-  --lpt-font:"Trebuchet MS","Verdana",sans-serif;
-  --lpt-heading-font:"Comic Sans MS","Chalkboard SE",cursive;
+  --lpt-font:"LPT Nunito","Verdana",sans-serif;
+  --lpt-heading-font:"LPT Fredoka","Arial Rounded MT Bold",sans-serif;
   --lpt-title-size:20px;
   --lpt-contact-font:var(--lpt-font);
   --lpt-contact-label-size:11px;

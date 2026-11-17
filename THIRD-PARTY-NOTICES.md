@@ -19,3 +19,7 @@ The seven Home icons are from [Lucide](https://github.com/lucide-icons/lucide), 
 | Settings | [sliders-horizontal](https://github.com/lucide-icons/lucide/blob/1980e3d59b0fa1a2aeb566d5902b25ee98204001/icons/sliders-horizontal.svg) |
 
 The upstream license is preserved in [licenses/LUCIDE-LICENSE.txt](licenses/LUCIDE-LICENSE.txt). SVG elements are created with the browser DOM, with no raw HTML injection. Stroke color remains currentColor, with thickness controlled by --lpt-icon-stroke-size.
+
+## Google Fonts
+
+Fredoka by The Fredoka Project Authors and Nunito by The Nunito Project Authors are distributed under SIL Open Font License 1.1. The complete license and copyright notices are included in licenses/FREDOKA-OFL.txt and licenses/NUNITO-OFL.txt. Official font binaries were downloaded through https://fonts.googleapis.com/css2 and https://fonts.gstatic.com/. License sources are https://github.com/google/fonts/tree/main/ofl/fredoka and https://github.com/google/fonts/tree/main/ofl/nunito. Font binaries are unchanged and use extension-specific CSS aliases to avoid host family conflicts.
