@@ -1,4 +1,11 @@
-# Verification report - 0.18.5
+# Verification report - 0.18.6
+
+Checked November 17, 2026. 269 code tests, type checking and reproducible build/package validation passed. Seven focused browser checks passed through bun scripts/test-ui.ts --screenshots-only. Reviewed captures of Bank, Notes, Contacts, Home and Scene. Checks cover header artwork and full click targets, compact readable Bank inputs, wrapping note titles and nonduplicated title/body text, proportional Message artwork, location containment and all Scene targets with long text at narrow width.
+
+The complete browser suite did not pass. It stops in older sidebar assertions that expect sizes, smooth scaling and visible labels changed by the existing local theme. An emoji tooltip assertion also failed during a separate run. Those unrelated production components were left as supplied. The focused run uses the normal renderer and mock host. No live Lumiverse install or the original affected chat was tested.
+
+## 0.18.5 - Unlock artwork
+
 
 269 code tests, type checking, reproducible builds and package validation passed for the updated unlock asset. Lock and Restore assets were checked unchanged during replacement. The latest full browser run covered the preceding UI changes with 358 checks. No live Lumiverse install was used.
 

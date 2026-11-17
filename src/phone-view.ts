@@ -344,7 +344,7 @@ export class PhoneView {
   }
   private fieldControls(parent:HTMLElement,ref:FieldRef,label:string):void {
     const row=el("div","lpt-field-controls"),locked=this.doc?.fieldLocks?.[fieldKey(ref)]===true,epoch=this.chatEpoch;
-    if (!parent.classList.contains("lpt-field-unit") && !parent.classList.contains("lpt-weather-control-row") && !parent.classList.contains("lpt-contact-info-row")) row.append(el("span","lpt-field-control-label",label));
+    if (!parent.classList.contains("lpt-field-unit") && !parent.classList.contains("lpt-weather-control-row") && !parent.classList.contains("lpt-contact-info-row")) row.append(el("span","lpt-field-control-label",ref.target === "note" ? label.replace(/^Note /, "") : label));
     const action = locked ? "unlock" : "lock";
     const control = fieldActionButton(action, `${locked ? "Unlock" : "Lock"} ${label}`, () => {
       if (epoch === this.chatEpoch && row.isConnected) void this.change({fieldControl:{...ref, action}});
@@ -579,12 +579,12 @@ export class PhoneView {
   }
   private noteCard(parent: HTMLElement, key: Section, note: Note): void {
     const card = el("details", "lpt-card lpt-note"); const summary = el("summary", "lpt-summary");
-    summary.append(el("span", "lpt-note-line", [note.name, note.detail, note.context].filter(Boolean).join(" | ")));
+    summary.append(el("span", "lpt-note-line", note.name));
     if (note.addedByUser) summary.append(el("span", "lpt-marker", "added by you"));
     if (note.by === "user" && (!note.addedByUser || note.updated)) summary.append(el("span", "lpt-marker", "edited by you"));
     if (note.updated) summary.append(el("span", "lpt-marker", "Updated"));
     const body = el("div", "lpt-card-body");
-    body.append(el("p", "lpt-note-full", [note.name, note.detail, note.context].filter(Boolean).join(" | ")));
+    body.append(el("p", "lpt-note-full", [...new Set([note.detail, note.context].filter(value => value && value !== note.name))].join("\n")));
     const actions = el("div", "lpt-actions"); actions.append(button("Edit", "lpt-button", () => this.noteForm(body, key, note)));
     for(const field of ["detail","context",...(key==="plots"?["resolved"]:[])])this.fieldControls(body,{target:"note",section:key,name:note.name,field},`Note ${field}`);this.deleteAction(actions, { target: "note", section: key, name: note.name }); body.append(actions); card.append(summary, body); parent.append(card);
   }

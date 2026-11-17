@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.18.6 - Screenshot layout corrections
+
+- Header buttons use smaller visible circles and preserve their full click targets. Single-line form fields are slimmer.
+- Notes display a wrapping title once, with distinct detail/context text and aligned protection controls. Saved note data is unchanged.
+- Contact Message artwork is larger with preserved aspect ratio. Home tiles fit their grid cells.
+- The Scene location card now contains its value and controls together. Shared field layout keeps actions inside their containers with long values.
+
+
 ## 0.18.5 - Updated unlock artwork
 
 - Replaced the unlock icon with the supplied padlock-and-key image, embedded as a transparent 128px PNG using the existing display size.

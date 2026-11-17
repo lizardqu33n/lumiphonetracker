@@ -27,6 +27,7 @@ async function open(page: Page, app?: string) { const launcher=page.locator(".lp
 async function home(page: Page) {const contactBack=page.locator(".lpt-island .lpt-contact-back");if(await contactBack.isVisible())await contactBack.click();const threadBack=page.locator(".lpt-island .lpt-thread-back");if(await threadBack.isVisible())await threadBack.click();const back=page.locator(".lpt-island").getByRole("button",{name:"Back to Home",exact:true});if(await back.isVisible())await back.click(); }
 async function save(page: Page) { await ui(page).locator(".lpt-form").getByRole("button", { name: "Save", exact: true }).click(); await page.waitForFunction(() => !document.querySelector(".lpt-island")?.shadowRoot?.querySelector(".lpt-form")); }
 try {
+  if (!process.argv.includes("--screenshots-only")) {
   for(const density of [1,2]) {
     const context=await browser.newContext({viewport:{width:1100,height:850},deviceScaleFactor:density});
     const iconPage=await context.newPage();const imageRequests:string[]=[];
@@ -92,7 +93,7 @@ try {
   }
   const emojiContext=await browser.newContext({viewport:{width:390,height:844},deviceScaleFactor:2});const emojiPage=await emojiContext.newPage();const emojiRequests:string[]=[];emojiPage.on("request",r=>{if(r.resourceType()==="image"&&!r.url().startsWith("data:"))emojiRequests.push(r.url());});await emojiPage.goto(`http://127.0.0.1:${server.port}`);await ready(emojiPage);await open(emojiPage);await emojiPage.locator(".harness-drawer").evaluate(n=>{(n as HTMLElement).hidden=true;});
   await emojiPage.evaluate(()=>(window as any).harness.activityStory('Story<phone-state>\nweather: Warm :smile:\npeople: Promise | Keep :heart: | Tomorrow\n</phone-state><phone-text from="Ada" to="Player">Hi :smile: :not_known: &lt;script&gt;plain&lt;/script&gt;</phone-text>'));await emojiPage.waitForTimeout(180);
-  await emojiPage.locator('.lpt-island [data-app="Weather"]').click();check(await emojiPage.locator(".lpt-weather .lpt-emoji").count()===1,"Weather displays a known shortcode as an image without rewriting data");await home(emojiPage);await emojiPage.locator('.lpt-island [data-app="Notes"]').click();check(await emojiPage.locator(".lpt-note-line .lpt-emoji").count()===1,"Notes also render known shortcodes");await home(emojiPage);await emojiPage.locator('.lpt-island [data-app="Messages"]').click();check(await emojiPage.locator(".lpt-thread-preview .lpt-emoji").count()===1,"Conversation preview renders a known shortcode");await emojiPage.locator('.lpt-thread-row[data-conversation="ada"]').click();
+  await emojiPage.locator('.lpt-island [data-app="Weather"]').click();check(await emojiPage.locator(".lpt-weather .lpt-emoji").count()===1,"Weather displays a known shortcode as an image without rewriting data");await home(emojiPage);await emojiPage.locator('.lpt-island [data-app="Notes"]').click();check(await emojiPage.locator(".lpt-note .lpt-emoji").count()===1,"Notes also render known shortcodes");await home(emojiPage);await emojiPage.locator('.lpt-island [data-app="Messages"]').click();check(await emojiPage.locator(".lpt-thread-preview .lpt-emoji").count()===1,"Conversation preview renders a known shortcode");await emojiPage.locator('.lpt-thread-row[data-conversation="ada"]').click();
   check(await emojiPage.locator(".lpt-text-body .lpt-emoji").count()===1&&(await emojiPage.locator(".lpt-text-body").innerText()).includes(":not_known:")&&await emojiPage.locator(".lpt-text-body script").count()===0,"Known emoji render safely while unknown codes and markup remain plain text");
   const emojiInput=emojiPage.locator(".lpt-reply-input"),emojiToggle=emojiPage.getByRole("button",{name:"Choose emoji",exact:true}),emojiPicker=emojiPage.locator(".lpt-emoji-picker");await emojiInput.fill("left RIGHT tail");await emojiInput.evaluate(n=>(n as HTMLTextAreaElement).setSelectionRange(5,10));await emojiToggle.click();
   check(await emojiPicker.isVisible()&&await emojiPicker.locator(".lpt-emoji-option").count()===28,"Emoji button opens all 28 named choices");check(await emojiPicker.evaluate(n=>{const c=document.createElement("canvas");c.width=c.height=1;const x=c.getContext("2d")!;x.fillStyle=getComputedStyle(n).backgroundColor;x.fillRect(0,0,1,1);return x.getImageData(0,0,1,1).data[3]===255;}),"Picker surface is fully opaque");
@@ -366,9 +367,9 @@ try {
   check(await ui(page).locator(".lpt-form").count() === 1 && (await ui(page).locator(".lpt-error").innerText()).length > 0, "Invalid note stays in its form without replacing saved data");
   await ui(page).locator('.lpt-form [name="detail"]').fill('&lt;img src=x onerror="window.injected=true"&gt;');
   await save(page);
-  check(await ui(page).locator(".lpt-note-line img").count() === 0 && !(await page.evaluate(() => (window as any).injected)), "Generated text never becomes HTML");
+  check(await ui(page).locator(".lpt-note-full img").count() === 0 && !(await page.evaluate(() => (window as any).injected)), "Generated text never becomes HTML");
   await ui(page).locator('[data-section="misc"] > summary').click();
-  check((await ui(page).locator(".lpt-note-line").last().innerText()).includes("&lt;img"), "Entity-like text is displayed literally");
+  check((await ui(page).locator(".lpt-note-full").last().textContent())?.includes("&lt;img"), "Entity-like text is displayed literally");
   await seed(page, "empty"); await open(page, "Contacts");
   check(!(await ui(page).locator(".lpt-contacts").innerText()).includes("Ada"), "No demo data in an empty chat");
   await seed(page); await open(page, "Scene");
@@ -708,6 +709,35 @@ try {
   await home(buttonsPage);await open(buttonsPage,"Weather");await buttonsPage.getByRole("button",{name:"Edit condition",exact:true}).click();
   check(await buttonsPage.locator('.lpt-form select').evaluate(n=>getComputedStyle(n).color==="rgb(66, 6, 66)"),"Condition dropdown uses dark readable input text");
   await buttonsPage.locator(".harness-widget").screenshot({path:".test-artifacts/compact-weather-buttons.png"});await buttonsPage.close();
+  }
+  const corrections=await browser.newPage({viewport:{width:1100,height:850}});
+  await corrections.goto("http://127.0.0.1:"+server.port);await seed(corrections);await open(corrections,"Scene");
+  const location=corrections.locator(".lpt-field-unit").filter({has:corrections.getByRole("button",{name:"Edit Location",exact:true})});
+  check(await location.evaluate(n=>{const card=n.getBoundingClientRect(),button=n.querySelector(".lpt-field-lock")!.getBoundingClientRect();return button.left>=card.left&&button.right<=card.right&&button.top>=card.top&&button.bottom<=card.bottom;}),"Location control fits entirely inside its card container");
+  check(await corrections.locator(".lpt-close").evaluate(n=>getComputedStyle(n,"::before").width==="32px"&&n.getBoundingClientRect().width>=44),"Header artwork is 32px with a full click target");
+  await corrections.locator(".harness-widget").screenshot({path:".test-artifacts/corrections-scene.png"});
+  await home(corrections);await open(corrections,"Notes");
+  await corrections.locator(".lpt-note").first().evaluate(n=>{let p=n.parentElement;while(p){if(p instanceof HTMLDetailsElement)p.open=true;p=p.parentElement;} (n as HTMLDetailsElement).open=true;});
+  check(await corrections.locator(".lpt-note-line").first().evaluate(n=>getComputedStyle(n).whiteSpace==="normal"&&n.scrollWidth<=n.clientWidth),"Note titles wrap without clipping");
+  check(await corrections.locator(".lpt-note").first().evaluate(n=>{const title=n.querySelector(".lpt-note-line")!.textContent;return !n.querySelector(".lpt-note-full")!.textContent!.includes(title!);}),"Note body omits the repeated title");
+  await corrections.locator(".harness-widget").screenshot({path:".test-artifacts/corrections-notes.png"});
+  await home(corrections);await open(corrections,"Contacts");await corrections.locator(".lpt-contact-row").filter({hasText:"Ada"}).click();
+  check(await corrections.locator(".lpt-contact-link img").first().evaluate(n=>getComputedStyle(n).width==="32px"&&getComputedStyle(n).objectFit==="contain"&&getComputedStyle(n).flexShrink==="0"),"Contact message artwork is larger and cannot shrink or stretch");
+  await corrections.locator(".harness-widget").screenshot({path:".test-artifacts/corrections-contact.png"});
+  await home(corrections);await corrections.locator(".harness-widget").screenshot({path:".test-artifacts/corrections-home.png"});
+  await section(corrections,"apps");
+  await corrections.locator(".lpt-sidebar").getByRole("button",{name:"Add Bank",exact:true}).click();
+  await corrections.waitForTimeout(150);await open(corrections,"Bank");
+  await corrections.getByRole("button",{name:"+ Add account",exact:true}).click();
+  check(await corrections.locator(".lpt-form input").evaluateAll(nodes=>nodes.length===3&&nodes.every(n=>n.getBoundingClientRect().height<=36&&getComputedStyle(n).color==="rgb(66, 6, 66)")),"Bank inputs are slim and readable");
+  await corrections.locator(".lpt-form").evaluate(n=>n.scrollIntoView({block:"end"}));
+  await corrections.locator(".harness-widget").screenshot({path:".test-artifacts/corrections-bank.png"});
+  await corrections.getByRole("button",{name:"Cancel",exact:true}).click();
+  await home(corrections);await open(corrections,"Scene");
+  await corrections.evaluate(()=>(window as any).harness.activityStory('They reach the old apartment.<phone-state>loc: A very long apartment location beside the old railway station | Portland; Oregon\nseason: Late autumn\n</phone-state>'));
+  await corrections.waitForTimeout(100);await corrections.setViewportSize({width:390,height:700});
+  check(await corrections.locator(".lpt-scene").evaluate(n=>n.scrollWidth<=n.clientWidth&&Array.from(n.querySelectorAll(".lpt-field-unit")).every(unit=>{const box=unit.getBoundingClientRect();return Array.from(unit.querySelectorAll(".lpt-field-lock,.lpt-field-restore")).every(control=>{const r=control.getBoundingClientRect();return r.left>=box.left&&r.right<=box.right&&r.top>=box.top&&r.bottom<=box.bottom;});})),"All Scene targets fit their shared containers with long values at narrow width");
+  await corrections.close();
   console.log(`Browser UI verification passed: ${checks} checks. Screenshots in .test-artifacts/. No real Lumiverse instance or provider was used.`);
 } catch(error) { console.error(`Browser stopped after check ${checks}: ${lastCheck}`);for(const [i,page]of browser.contexts().flatMap(c=>c.pages()).entries())try{await page.screenshot({path:`.test-artifacts/failure-${i}.png`});}catch{}throw error;
 } finally { await browser.close(); server.stop(true); }

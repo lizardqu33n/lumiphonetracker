@@ -1704,7 +1704,7 @@ class PhoneView {
   fieldControls(parent, ref, label) {
     const row = el("div", "lpt-field-controls"), locked = this.doc?.fieldLocks?.[fieldKey(ref)] === true, epoch = this.chatEpoch;
     if (!parent.classList.contains("lpt-field-unit") && !parent.classList.contains("lpt-weather-control-row") && !parent.classList.contains("lpt-contact-info-row"))
-      row.append(el("span", "lpt-field-control-label", label));
+      row.append(el("span", "lpt-field-control-label", ref.target === "note" ? label.replace(/^Note /, "") : label));
     const action = locked ? "unlock" : "lock";
     const control = fieldActionButton(action, `${locked ? "Unlock" : "Lock"} ${label}`, () => {
       if (epoch === this.chatEpoch && row.isConnected)
@@ -2280,7 +2280,7 @@ class PhoneView {
   noteCard(parent, key, note) {
     const card = el("details", "lpt-card lpt-note");
     const summary = el("summary", "lpt-summary");
-    summary.append(el("span", "lpt-note-line", [note.name, note.detail, note.context].filter(Boolean).join(" | ")));
+    summary.append(el("span", "lpt-note-line", note.name));
     if (note.addedByUser)
       summary.append(el("span", "lpt-marker", "added by you"));
     if (note.by === "user" && (!note.addedByUser || note.updated))
@@ -2288,7 +2288,8 @@ class PhoneView {
     if (note.updated)
       summary.append(el("span", "lpt-marker", "Updated"));
     const body = el("div", "lpt-card-body");
-    body.append(el("p", "lpt-note-full", [note.name, note.detail, note.context].filter(Boolean).join(" | ")));
+    body.append(el("p", "lpt-note-full", [...new Set([note.detail, note.context].filter((value) => value && value !== note.name))].join(`
+`)));
     const actions = el("div", "lpt-actions");
     actions.append(button("Edit", "lpt-button", () => this.noteForm(body, key, note)));
     for (const field of ["detail", "context", ...key === "plots" ? ["resolved"] : []])
@@ -4595,6 +4596,59 @@ var styles_default = `/* =======================================================
 @media (pointer:coarse) {
   .lpt-root :is(.lpt-button,.lpt-add,.lpt-save,.lpt-cancel,.lpt-delete,.lpt-open-texts,.lpt-add-draft) {min-height:var(--lpt-control-size);}
 }
+
+/* Targeted screenshot corrections. Shared controls retain their full targets. */
+.lpt-root {
+  --lpt-header-button-size:32px;
+  --lpt-form-field-height:32px;
+  --lpt-contact-message-icon-size:32px;
+}
+.lpt-header :is(.lpt-back,.lpt-close) {
+  position:relative;isolation:isolate;background:none;border:0;box-shadow:none;
+  width:var(--lpt-control-size);height:var(--lpt-control-size);min-width:var(--lpt-control-size);min-height:var(--lpt-control-size);
+  padding:0;flex:none;
+}
+.lpt-header :is(.lpt-back,.lpt-close)::before {
+  content:"";position:absolute;z-index:-1;
+  width:var(--lpt-header-button-size);height:var(--lpt-header-button-size);
+  border:var(--lpt-border-size) solid var(--lpt-btn-edge);border-radius:50%;
+  box-sizing:border-box;background-color:var(--lpt-btn-soft-bg);background-image:var(--lpt-gloss);
+  box-shadow:0 2px 0 var(--lpt-shadow-hard);
+}
+.lpt-header :is(.lpt-back,.lpt-close) .lpt-icon {width:20px;height:20px;}
+.lpt-root .lpt-form :is(input.lpt-input,select.lpt-input,.lpt-number) {
+  min-height:var(--lpt-form-field-height);padding:3px var(--lpt-space);line-height:var(--lpt-line-height);
+}
+.lpt-note > .lpt-summary {padding:var(--lpt-space) var(--lpt-space) var(--lpt-space) calc(var(--lpt-icon-size) + var(--lpt-space) * 2);}
+.lpt-note-line {white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;}
+.lpt-note-full {white-space:pre-wrap;margin:0 0 var(--lpt-space);overflow-wrap:anywhere;}
+.lpt-note-full:empty {display:none;}
+.lpt-note .lpt-card-body > .lpt-field-controls {display:inline-flex;vertical-align:middle;width:calc(50% - var(--lpt-space));justify-content:flex-start;flex-wrap:wrap;margin:0;gap:var(--lpt-space);}
+.lpt-note .lpt-actions {margin-top:var(--lpt-space);gap:var(--lpt-space);}
+.lpt-note .lpt-delete {border-style:solid;}
+.lpt-contact-link .lpt-contact-action-icon {
+  flex:none;width:var(--lpt-contact-message-icon-size);height:var(--lpt-contact-message-icon-size);object-fit:contain;
+}
+.lpt-contact-link {gap:var(--lpt-space);max-width:100%;}
+.lpt-header {min-width:0;}
+.lpt-home {min-width:0;align-content:start;}
+.lpt-home .lpt-app-icon {max-width:100%;aspect-ratio:1;height:auto;}
+.lpt-home .lpt-app-image {max-width:100%;max-height:100%;object-fit:contain;flex:none;}
+.lpt-home .lpt-app-label {max-width:100%;overflow-wrap:anywhere;}
+.lpt-field-unit {box-sizing:border-box;min-width:0;padding-inline:var(--lpt-space);grid-template-columns:minmax(0,1fr) auto;}
+.lpt-field-unit > .lpt-field-controls {min-width:0;max-width:calc(var(--lpt-contact-target) * 2);flex-wrap:wrap;}
+.lpt-field-unit:has(> .lpt-location) {
+  border:var(--lpt-card-border-size) solid var(--lpt-accent);border-radius:var(--lpt-card-radius);
+  background-color:var(--lpt-elevated-bg);box-shadow:2px 2px 0 var(--lpt-shadow-hard);
+}
+.lpt-field-unit > .lpt-location {border:0;box-shadow:none;background:transparent;border-radius:0;}
+.lpt-field-unit > .lpt-location::after {display:none;}
+.lpt-field-unit > .lpt-location .lpt-field-label::after {content:var(--lpt-sparkle-glyph);padding-left:var(--lpt-space);}
+.lpt-scene-when > .lpt-field-unit {display:grid;grid-template-columns:minmax(0,1fr) auto;padding-inline:var(--lpt-space);}
+.lpt-scene-when > .lpt-field-unit > .lpt-field-controls {justify-self:start;max-width:100%;}
+
+.lpt-scene > .lpt-field-unit:not(:has(> .lpt-location)) {border-bottom:var(--lpt-border-size) solid var(--lpt-border);}
+.lpt-scene > .lpt-field-unit > .lpt-field:not(.lpt-location) {border-bottom:0;}
 `;
 
 // src/message-reads.ts

@@ -903,3 +903,7 @@ The existing spacing variables now default to 6px for --lpt-space and --lpt-cont
 ## Action controls in 0.18.4
 
 --lpt-action-height defaults to 32px, --lpt-action-padding to 8px and --lpt-action-radius to 12px. Touch pointers retain --lpt-control-size. Buttons explicitly use --lpt-btn-text and input fields use --lpt-input-text to override inherited light text. Existing phone custom CSS can override these variables.
+
+## Screenshot corrections in 0.18.6
+
+The root variables --lpt-header-button-size, --lpt-form-field-height and --lpt-contact-message-icon-size default to 32px. Header circles use a decorative pseudo-element inside the existing full-size button target. The shared .lpt-field-unit owns the location card border and lays out the value with its controls. Existing classes remain in place. Notes use .lpt-note-line for a wrapping title and .lpt-note-full for the detail and context, without repeating the title. Home artwork and contact action images use object-fit: contain to preserve their source proportions.
