@@ -1,4 +1,7 @@
-# Verification report - 0.18.2
+# Verification report - 0.18.3
+
+Checked November 17, 2026. 269 code tests and 355 browser checks passed, along with type checking and reproducible build/package validation. Reviewed Scene and Contact detail screenshots for spacing and readable value columns. Native Lumiverse and uploaded custom CSS combinations remain unverified.
+
 
 ## 0.18.2 - Names, blank characters and field controls
 

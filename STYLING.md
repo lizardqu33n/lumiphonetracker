@@ -895,3 +895,7 @@ The Weather card uses the Contact page colors and spacing by default. Define the
 | `.lpt-weather-unit-label`, `.lpt-weather-unit` | Unit picker label and select in the sidebar stylesheet. |
 
 Condition states on the card are `.is-sunny`, `.is-clear-night`, `.is-partly-cloudy`, `.is-cloudy`, `.is-rain`, `.is-storm`, `.is-snow`, `.is-fog`, `.is-windy` and `.is-other`. The card or an editable control uses `.is-empty` when it has no value. The card and alert chip use `.is-alert` while an alert is active. The unit picker lives outside phone custom CSS.
+
+## Compact layout in 0.18.3
+
+The existing spacing variables now default to 6px for --lpt-space and --lpt-contact-gap, with 8px contact padding. Contact list portraits default to 32px and detail portraits to 64px. Cards retain their opaque pastel theme surfaces. Existing class names remain usable. Contact detail labels and values share the first column, with field controls in the second. Contact list role summaries show up to two lines, with full roles on the contact page. Action icons remain 32px with 44px tap targets.

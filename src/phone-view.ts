@@ -344,7 +344,7 @@ export class PhoneView {
   }
   private fieldControls(parent:HTMLElement,ref:FieldRef,label:string):void {
     const row=el("div","lpt-field-controls"),locked=this.doc?.fieldLocks?.[fieldKey(ref)]===true,epoch=this.chatEpoch;
-    if (!parent.classList.contains("lpt-field-unit") && !parent.classList.contains("lpt-weather-control-row")) row.append(el("span","lpt-field-control-label",label));
+    if (!parent.classList.contains("lpt-field-unit") && !parent.classList.contains("lpt-weather-control-row") && !parent.classList.contains("lpt-contact-info-row")) row.append(el("span","lpt-field-control-label",label));
     const action = locked ? "unlock" : "lock";
     const control = fieldActionButton(action, `${locked ? "Unlock" : "Lock"} ${label}`, () => {
       if (epoch === this.chatEpoch && row.isConnected) void this.change({fieldControl:{...ref, action}});

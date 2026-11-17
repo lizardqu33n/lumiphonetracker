@@ -1703,7 +1703,7 @@ class PhoneView {
   }
   fieldControls(parent, ref, label) {
     const row = el("div", "lpt-field-controls"), locked = this.doc?.fieldLocks?.[fieldKey(ref)] === true, epoch = this.chatEpoch;
-    if (!parent.classList.contains("lpt-field-unit") && !parent.classList.contains("lpt-weather-control-row"))
+    if (!parent.classList.contains("lpt-field-unit") && !parent.classList.contains("lpt-weather-control-row") && !parent.classList.contains("lpt-contact-info-row"))
       row.append(el("span", "lpt-field-control-label", label));
     const action = locked ? "unlock" : "lock";
     const control = fieldActionButton(action, `${locked ? "Unlock" : "Lock"} ${label}`, () => {
@@ -2803,17 +2803,17 @@ var styles_default = `/* =======================================================
 
   /* ---- Radii and spacing ---- */
   --lpt-radius: 14px;
-  --lpt-card-radius: 20px;
+  --lpt-card-radius: 14px;
   --lpt-icon-radius: 22px;
   --lpt-frame-radius: 44px;
-  --lpt-space: 8px;
+  --lpt-space: 6px;
 
   /* ---- Type (system fonts only) ---- */
   --lpt-font: ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN", "Arial Rounded MT Bold", "Varela Round", system-ui, sans-serif;
   --lpt-font-size: 14px;
   --lpt-small-font-size: 12px;
   --lpt-title-size: 19px;
-  --lpt-location-size: 24px;
+  --lpt-location-size: 21px;
   --lpt-weight: 500;
   --lpt-strong-weight: 750;
   --lpt-line-height: 1.45;
@@ -2832,7 +2832,7 @@ var styles_default = `/* =======================================================
   --lpt-icon-stroke-size: 2px;
   --lpt-control-size: 44px;
   --lpt-border-size: 2px;
-  --lpt-card-border-size: 3px;
+  --lpt-card-border-size: 2px;
   --lpt-frame-border-size: 4px;
   --lpt-focus-size: 3px;
   --lpt-opacity-disabled: 0.55;
@@ -4411,7 +4411,7 @@ var styles_default = `/* =======================================================
 .lpt-emoji-picker:has(.lpt-emoji-option:hover) .lpt-emoji-tooltip,.lpt-emoji-picker:has(.lpt-emoji-option:focus-visible) .lpt-emoji-tooltip {visibility:visible;}
 
 /* Part 6: Contacts; all new appearance values live on the phone root. */
-.lpt-root {--lpt-contact-bg:var(--lpt-screen-bg,#19171f);--lpt-contact-surface:var(--lpt-card-bg,#24212d);--lpt-contact-text:var(--lpt-text,#eee);--lpt-contact-muted:var(--lpt-muted,#aaa);--lpt-contact-radius:16px;--lpt-contact-gap:8px;--lpt-contact-padding:12px;--lpt-contact-font:var(--lpt-font,system-ui);--lpt-contact-font-size:14px;--lpt-contact-portrait-size:40px;--lpt-contact-hero-portrait-size:88px;--lpt-contact-chip-radius:999px;--lpt-contact-action-size:24px;--lpt-contact-border:var(--lpt-outline,#420642);--lpt-contact-target:44px;--lpt-contact-line-width:1px;}
+.lpt-root {--lpt-contact-bg:var(--lpt-screen-bg,#19171f);--lpt-contact-surface:var(--lpt-card-bg,#24212d);--lpt-contact-text:var(--lpt-text,#eee);--lpt-contact-muted:var(--lpt-muted,#aaa);--lpt-contact-radius:12px;--lpt-contact-gap:6px;--lpt-contact-padding:8px;--lpt-contact-font:var(--lpt-font,system-ui);--lpt-contact-font-size:14px;--lpt-contact-portrait-size:32px;--lpt-contact-hero-portrait-size:64px;--lpt-contact-chip-radius:999px;--lpt-contact-action-size:24px;--lpt-contact-border:var(--lpt-outline,#420642);--lpt-contact-target:44px;--lpt-contact-line-width:1px;}
 .lpt-contacts,.lpt-contact-page {background:var(--lpt-contact-bg);color:var(--lpt-contact-text);font-family:var(--lpt-contact-font);font-size:var(--lpt-contact-font-size);}
 .lpt-contact-list-header,.lpt-contact-nav {display:flex;align-items:center;justify-content:space-between;gap:var(--lpt-contact-gap);}
 .lpt-contact-list-title,.lpt-contact-letter,.lpt-contact-name {margin:var(--lpt-contact-gap) 0;font:inherit;font-weight:bold;}
@@ -4506,6 +4506,26 @@ var styles_default = `/* =======================================================
 .lpt-scene-when > .lpt-field-unit > .lpt-field-controls {max-width:100%;}
 .lpt-field-control-label {min-width:0;overflow-wrap:anywhere;}
 .lpt-location .lpt-field-value {word-break:normal;overflow-wrap:break-word;}
+
+/* Compact Y2K content: pastel outlines and pixel art with less empty space. */
+.lpt-contact-row.lpt-card {margin-bottom:var(--lpt-contact-gap);padding:var(--lpt-contact-padding);min-height:var(--lpt-contact-target);}
+.lpt-contact-copy {flex:1;min-width:0;}
+.lpt-contact-copy .lpt-card-title {margin:0;line-height:var(--lpt-line-height);}
+.lpt-contact-copy .lpt-card-subtitle {margin-top:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.lpt-contact-copy .lpt-marker {width:max-content;max-width:100%;margin-top:0;padding-block:0;}
+.lpt-contact-letter {margin:var(--lpt-contact-gap) 0;}
+.lpt-contact-extra .lpt-contact-info-row {display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:var(--lpt-contact-gap);row-gap:0;padding:var(--lpt-contact-gap) 0;}
+.lpt-contact-extra .lpt-contact-info-label {grid-column:1;font-size:var(--lpt-small-font-size);color:var(--lpt-muted);}
+.lpt-contact-extra .lpt-contact-info-value {grid-column:1;overflow-wrap:break-word;}
+.lpt-contact-extra .lpt-field-controls {grid-column:2;grid-row:1 / span 2;margin:0;align-self:center;}
+.lpt-field-unit {gap:0;}
+.lpt-field-unit > .lpt-field {margin-bottom:var(--lpt-space);padding:var(--lpt-space);}
+.lpt-scene-when .lpt-field-unit {position:relative;padding-bottom:var(--lpt-control-size);}
+.lpt-scene-when .lpt-field-controls {position:absolute;bottom:0;left:0;right:0;}
+.lpt-present-list {gap:calc(var(--lpt-space) / 2);margin-top:var(--lpt-space);}
+.lpt-present-name {padding:0 var(--lpt-space);line-height:var(--lpt-line-height);}
+.lpt-field-controls .lpt-field-lock,.lpt-field-controls .lpt-field-restore {background:transparent;border-color:transparent;box-shadow:none;}
+.lpt-field-controls .lpt-field-lock:hover,.lpt-field-controls .lpt-field-restore:hover {background:var(--lpt-elevated-bg);}
 `;
 
 // src/message-reads.ts

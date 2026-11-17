@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.18.3 - Compact Y2K layout
+
+- Reduced content spacing, contact card padding and portrait sizes while retaining pastel colors and pixel icons.
+- Contact details use a label above the value with one action column. Duplicate labels are removed.
+- Presence chips are smaller, player markers fit their text, and field icons use lighter button styling with full tap targets.
+
 ## 0.18.2 - Name separators and field controls
 
 - Semicolon-separated presence names work with or without a following space. AI contact records containing a name list are skipped during rebuild.
