@@ -1,4 +1,9 @@
-# Verification report - 0.18.7
+# Verification report - 0.18.8
+
+269 code tests and 12 focused browser checks passed, along with type checking and reproducible build/package validation. Reviewed Notes and Contacts captures. Image-only controls are square, retain at least 44px targets, contain their artwork and use object-fit: contain. The full-suite limitations documented below and real-host/mobile verification remain outstanding.
+
+## 0.18.7 - Annotated corrections
+
 
 Checked November 17, 2026. 269 code tests and 11 focused browser checks passed, plus type checking and reproducible build/package validation. The focused command is bun scripts/test-ui.ts --screenshots-only. Reviewed contact, Scene, Notes, thread/composer and Email screenshots. Checked icon-only Add with its tooltip and accessible name, contact image proportions, centered thread header, aligned composer, corner target containment at narrow width and consistent Email typography. The previously documented full-suite sidebar/emoji failures remain outside this correction pass. No real Lumiverse install or mobile keyboard was available.
 

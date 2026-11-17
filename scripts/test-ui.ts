@@ -722,7 +722,7 @@ try {
   check(await corrections.locator(".lpt-note").first().evaluate(n=>{const title=n.querySelector(".lpt-note-line")!.textContent;return !n.querySelector(".lpt-note-full")!.textContent!.includes(title!);}),"Note body omits the repeated title");
   await corrections.locator(".harness-widget").screenshot({path:".test-artifacts/corrections-notes.png"});
   await home(corrections);await open(corrections,"Contacts");await corrections.locator(".lpt-contact-row").filter({hasText:"Ada"}).click();
-  check(await corrections.locator(".lpt-contact-link img").first().evaluate(n=>getComputedStyle(n).width==="40px"&&getComputedStyle(n).objectFit==="contain"&&getComputedStyle(n).flexShrink==="0"),"Contact message artwork is larger and cannot shrink or stretch");
+  check(await corrections.locator(".lpt-contact-link img").first().evaluate(n=>getComputedStyle(n).objectFit==="contain"&&Math.abs(n.getBoundingClientRect().width-n.parentElement!.clientWidth)<1),"Contact message artwork is larger and cannot shrink or stretch");
   await corrections.locator(".harness-widget").screenshot({path:".test-artifacts/corrections-contact.png"});
   await home(corrections);await corrections.locator(".harness-widget").screenshot({path:".test-artifacts/corrections-home.png"});
   await section(corrections,"apps");
@@ -753,6 +753,11 @@ try {
   await corrections.waitForTimeout(100);await home(corrections);await open(corrections,"Email");
   check(await corrections.locator(".lpt-email-summary").first().evaluate(n=>getComputedStyle(n).fontFamily===getComputedStyle(n.closest(".lpt-root")!).fontFamily&&getComputedStyle(n).fontSize==="14px"),"Email rows use the same readable typeface and body size as the phone");
   await corrections.locator(".harness-widget").screenshot({path:".test-artifacts/annotations-email.png"});
+
+  check(await corrections.locator(".lpt-island button").evaluateAll(buttons=>buttons.filter(b=>b.querySelector(":scope > img:only-child")&&b.matches(".lpt-image-action,.lpt-icon-action,.lpt-field-lock,.lpt-field-restore,.lpt-back,.lpt-close,.lpt-contact-link")).every(button=>{
+    const image=button.querySelector("img")!,box=button.getBoundingClientRect(),art=image.getBoundingClientRect();
+    return box.width===box.height&&box.width>=44&&art.width<=box.width&&art.height<=box.height&&getComputedStyle(image).objectFit==="contain";
+  })),"Image buttons share square containers and contain proportional artwork with full tap targets");
   await corrections.close();
   console.log(`Browser UI verification passed: ${checks} checks. Screenshots in .test-artifacts/. No real Lumiverse instance or provider was used.`);
 } catch(error) { console.error(`Browser stopped after check ${checks}: ${lastCheck}`);for(const [i,page]of browser.contexts().flatMap(c=>c.pages()).entries())try{await page.screenshot({path:`.test-artifacts/failure-${i}.png`});}catch{}throw error;

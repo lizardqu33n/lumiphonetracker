@@ -2004,3 +2004,23 @@
 .lpt-contact-actions {display:flex;align-items:center;flex-wrap:wrap;gap:var(--lpt-space);}
 .lpt-contact-actions .lpt-merge-confirm {flex-basis:100%;}
 .lpt-reply-label {padding-top:0;}
+
+/* Image actions use one square size for the target and its contained artwork. */
+.lpt-root {
+  --lpt-image-button-size:var(--lpt-control-size);
+}
+.lpt-root :is(.lpt-image-action,.lpt-icon-action,.lpt-field-lock,.lpt-field-restore,.lpt-back,.lpt-close,.lpt-contact-link):has(> img:only-child) {
+  display:inline-grid;place-items:center;box-sizing:border-box;
+  width:var(--lpt-image-button-size);height:var(--lpt-image-button-size);
+  min-width:var(--lpt-image-button-size);min-height:var(--lpt-image-button-size);
+  max-width:var(--lpt-image-button-size);max-height:var(--lpt-image-button-size);
+  flex:0 0 var(--lpt-image-button-size);padding:0;gap:0;
+  justify-self:start;vertical-align:middle;
+}
+.lpt-root :is(.lpt-image-action,.lpt-icon-action,.lpt-field-lock,.lpt-field-restore,.lpt-back,.lpt-close,.lpt-contact-link) > img:only-child {
+  display:block;width:100%;height:100%;max-width:100%;max-height:100%;
+  object-fit:contain;object-position:center;aspect-ratio:1;flex:none;
+}
+.lpt-root :is(.lpt-button,.lpt-save,.lpt-cancel,.lpt-delete):not(:has(> img:only-child)) {
+  width:fit-content;justify-self:start;
+}

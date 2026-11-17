@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.18.8 - Fit artwork to icon buttons
+
+- Unified icon-only button boxes and their artwork sizing. Icons fill the available square with object-fit containment, keeping their proportions and tap targets.
+- Text action buttons size to their content instead of stretching across a container.
+
+
 ## 0.18.7 - Annotated screenshot corrections
 
 - Embedded the supplied Add, Remove/Delete, Edit, Back and Exit icons as icon-only phone controls with accessible names and tooltips.

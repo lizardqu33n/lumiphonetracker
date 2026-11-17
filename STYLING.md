@@ -913,3 +913,7 @@ The root variables --lpt-header-button-size, --lpt-form-field-height and --lpt-c
 The supplied five action icons use .lpt-action-image inside .lpt-image-action. Visible image size comes from --lpt-action-image-size, default 32px. Targets keep --lpt-control-size. Artwork preserves the supplied transparent glow. The five embedded PNGs total 94,276 bytes. No external images are loaded.
 
 --lpt-heading-font uses Comic Sans MS, Chalkboard SE and the system cursive fallback. Contact detail text uses --lpt-contact-font-size, default 13px, and --lpt-contact-message-icon-size defaults to 40px. .lpt-contact-actions aligns Merge contacts and Message. .lpt-note-part, .lpt-note-part-label and .lpt-note-part-value group each displayed note field with its own control. Shared field units reserve room for corner controls. All prior class names remain available.
+
+## Button fitting in 0.18.8
+
+--lpt-image-button-size controls image-only phone buttons and defaults to --lpt-control-size (44px). Their child image fills the button content box with object-fit: contain and centered positioning. Source transparency remains visible, and the source aspect ratio is preserved. This shared rule replaces independent artwork sizes for these controls. Text action buttons use fit-content widths. Launcher and Home app tiles keep their separate sizing rules.
