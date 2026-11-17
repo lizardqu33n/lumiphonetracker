@@ -927,3 +927,9 @@ The sidebar defines --lpt-side-font and --lpt-side-heading-font using the same t
 ## Google Fonts in 0.18.10
 
 Current heading variables use LPT Fredoka and body variables use LPT Nunito. These are CSS aliases for the official Google Fonts families, bundled as WOFF2 data in src/fonts.css. Font registration uses the existing documented DOM addStyle helper at document scope so the phone Shadow DOM and sidebar both see the faces. The local Lumiverse sandbox permits data fonts and restricts remote font loading. Earlier system-font defaults described above are superseded. Fonts add 180,676 bytes before base64 encoding. Their original licenses are in licenses/FREDOKA-OFL.txt and licenses/NUNITO-OFL.txt. Custom CSS can still override the family variables.
+
+## Requested fonts and app tiles in 0.18.11
+
+Current font roles supersede the earlier defaults. --lpt-heading-font uses LPT Cherry Bomb One for titles and major headings. --lpt-ui-font uses LPT DynaPuff for buttons, badges, chips, counters and small UI labels. --lpt-font uses LPT Sour Gummy for body text, field values and descriptions. --lpt-decorative-font exposes LPT Shrikhand for optional custom accents and is not applied to normal UI. Sidebar equivalents are --lpt-side-heading-font, --lpt-side-ui-font, --lpt-side-font and --lpt-side-decorative-font. Font binaries total 470,212 bytes before base64 encoding.
+
+The existing .lpt-store-row is an app tile with artwork, visible app name and action in three stacked grid rows. .lpt-store-button and .lpt-store-action-image remain the same classes. The tile grid uses three columns, or two below 230px. Action icons keep tooltips and accessible names. No app data or setting scopes change.

@@ -1,4 +1,9 @@
-# Verification report - 0.18.10
+# Verification report - 0.18.11
+
+269 code tests and 20 focused browser checks passed with type checking and reproducible builds/package validation. All four Google Fonts are explicitly loaded and checked through document.fonts. Computed font checks cover phone titles, App Store labels and sidebar body text. App tile geometry verifies centered actions below the artwork and names. Reviewed phone and sidebar captures. Prior full-suite limitations remain documented below. A real Lumiverse install and mobile device were not used.
+
+## 0.18.10 - Fredoka and Nunito
+
 
 269 code tests and 18 focused browser checks passed, plus type checking and reproducible build/package validation. Browser verification explicitly loads both bundled Google Fonts through document.fonts and checks loaded FontFace objects. Reviewed Fredoka/Nunito phone and sidebar captures. The local Lumiverse sandbox source permits data fonts and blocks remote font requests, so fonts are embedded. The previous full-suite limitations remain. A real Lumiverse install and real mobile device were not tested.
 

@@ -713,9 +713,11 @@ try {
   const corrections=await browser.newPage({viewport:{width:1100,height:850}});
   await corrections.goto("http://127.0.0.1:"+server.port);await seed(corrections);
   check(await corrections.evaluate(async()=>{
-    const headings=await document.fonts.load('700 20px "LPT Fredoka"',"Phone");
-    const body=await document.fonts.load('400 14px "LPT Nunito"',"Tracker");
-    return headings.length>0&&body.length>0&&[...headings,...body].every(font=>font.status==="loaded");
+    const headings=await document.fonts.load('400 20px "LPT Cherry Bomb One"',"Phone");
+    const body=await document.fonts.load('400 14px "LPT Sour Gummy"',"Tracker");
+    const ui=await document.fonts.load('400 12px "LPT DynaPuff"',"Add");
+    const accent=await document.fonts.load('400 20px "LPT Shrikhand"',"Accent");
+    return [headings,body,ui,accent].every(fonts=>fonts.length>0&&fonts.every(font=>font.status==="loaded"));
   }),"Bundled Google Fonts load successfully rather than falling back to installed fonts");
   await open(corrections,"Scene");
   const location=corrections.locator(".lpt-field-unit").filter({has:corrections.getByRole("button",{name:"Edit Location",exact:true})});
@@ -780,6 +782,14 @@ try {
   await corrections.locator(".harness-drawer").screenshot({path:".test-artifacts/pastel-tracking.png"});
   await corrections.locator(".harness-drawer").evaluate(n=>(n as HTMLElement).style.width="220px");
   check(await corrections.locator(".lpt-sidebar-settings").evaluate(n=>n.scrollWidth<=n.clientWidth),"Sidebar settings fit a narrow drawer");
+
+  await section(corrections,"apps");
+  check(await corrections.locator(".lpt-store-row").evaluateAll(rows=>rows.every(row=>{
+    const art=row.querySelector(".lpt-store-icon")!.getBoundingClientRect(),label=row.querySelector(".lpt-side-label")!.getBoundingClientRect(),action=row.querySelector(".lpt-store-button")!.getBoundingClientRect();
+    return action.top>=label.bottom&&label.top>=art.bottom&&Math.abs((action.left+action.width/2)-(art.left+art.width/2))<2;
+  })),"App Store action icons sit centered below each app tile");
+  await corrections.locator(".harness-drawer").screenshot({path:".test-artifacts/requested-fonts-app-store.png"});
+  check(await corrections.locator(".lpt-heading").evaluate(n=>getComputedStyle(n).fontFamily.includes("Cherry Bomb One"))&&await corrections.locator(".lpt-store-name").first().evaluate(n=>getComputedStyle(n).fontFamily.includes("DynaPuff"))&&await corrections.locator(".lpt-sidebar").evaluate(n=>getComputedStyle(n).fontFamily.includes("Sour Gummy")),"Requested font roles apply across the phone and sidebar");
   await corrections.close();
   console.log(`Browser UI verification passed: ${checks} checks. Screenshots in .test-artifacts/. No real Lumiverse instance or provider was used.`);
 } catch(error) { console.error(`Browser stopped after check ${checks}: ${lastCheck}`);for(const [i,page]of browser.contexts().flatMap(c=>c.pages()).entries())try{await page.screenshot({path:`.test-artifacts/failure-${i}.png`});}catch{}throw error;

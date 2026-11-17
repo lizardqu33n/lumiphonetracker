@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.18.11 - Requested font roles and App Store tiles
+
+- Cherry Bomb One titles and major headings, DynaPuff controls and small UI labels, Sour Gummy body and settings text. Shrikhand is bundled as an optional decorative font only.
+- App Store now shows app artwork and names with the supplied plus/minus control centered underneath each tile.
+- All four Google Fonts are bundled with their original SIL Open Font Licenses for sandbox-compatible loading.
+
+
 ## 0.18.10 - Google Fonts typography
 
 - Replaced Comic Sans and system body typography with Fredoka headings and Nunito body text in the phone and sidebar.

@@ -150,8 +150,8 @@
 
 /* Compact pastel stationery typography, with the protected toolbar intact. */
 .lpt-sidebar {
-  --lpt-side-font:"LPT Nunito","Verdana",sans-serif;
-  --lpt-side-heading-font:"LPT Fredoka","Arial Rounded MT Bold",sans-serif;
+  --lpt-side-font:"LPT Sour Gummy","Verdana",sans-serif;
+  --lpt-side-heading-font:"LPT Cherry Bomb One","Arial Rounded MT Bold",sans-serif;
   --lpt-side-font-size:12px;--lpt-side-gap:4px;--lpt-side-space:6px;
   --lpt-side-toolbar-icon:24px;--lpt-side-section-icon:18px;--lpt-side-app-icon:20px;
   --lpt-side-store-action-size:28px;
@@ -179,3 +179,25 @@
   .lpt-store-button {position:relative;}
   .lpt-store-button::after {content:"";position:absolute;inset:-8px 0;}
 }
+
+/* Matching font roles and app tiles, with the add/remove action beneath each app. */
+.lpt-sidebar {
+  --lpt-side-font:"LPT Sour Gummy",sans-serif;
+  --lpt-side-heading-font:"LPT Cherry Bomb One",sans-serif;
+  --lpt-side-ui-font:"LPT DynaPuff",sans-serif;
+  --lpt-side-decorative-font:"LPT Shrikhand",serif;
+  --lpt-side-app-icon:34px;
+}
+.lpt-side-heading {font-family:var(--lpt-side-heading-font);font-weight:400;font-size:14px;}
+.lpt-sidebar button,.lpt-toggle-chip,.lpt-side-legend,.lpt-store-name,.lpt-side-scope {
+  font-family:var(--lpt-side-ui-font);font-weight:400;
+}
+.lpt-sidebar input,.lpt-sidebar textarea,.lpt-sidebar select {font-family:var(--lpt-side-font);}
+.lpt-store-grid {grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;}
+.lpt-store-row {grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto;justify-items:center;align-content:start;gap:3px;padding:5px 2px;}
+.lpt-store-icon {grid-column:1;grid-row:1;display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:var(--lpt-side-btn-bg);box-shadow:0 2px 0 var(--lpt-side-outline);}
+.lpt-store-row .lpt-side-label {grid-column:1;grid-row:2;text-align:center;}
+.lpt-store-name {font-size:10px;line-height:1.4;}
+.lpt-store-button {grid-column:1;grid-row:3;justify-self:center;}
+@container (min-width:300px) {.lpt-store-grid {grid-template-columns:repeat(3,minmax(0,1fr));}}
+@container (max-width:229px) {.lpt-store-grid {grid-template-columns:repeat(2,minmax(0,1fr));}}

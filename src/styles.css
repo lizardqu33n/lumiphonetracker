@@ -1999,7 +1999,7 @@
 .lpt-scene-when .lpt-field-label {min-height:var(--lpt-action-image-size);padding-right:var(--lpt-contact-target);box-sizing:border-box;}
 .lpt-scene-when > .lpt-field-unit > .lpt-field-controls {top:0;bottom:auto;}
 
-.lpt-root {--lpt-heading-font:"LPT Fredoka","Arial Rounded MT Bold",sans-serif;--lpt-contact-font-size:13px;}
+.lpt-root {--lpt-heading-font:"LPT Cherry Bomb One","Arial Rounded MT Bold",sans-serif;--lpt-contact-font-size:13px;}
 .lpt-heading {font-family:var(--lpt-heading-font);}
 .lpt-contact-actions {display:flex;align-items:center;flex-wrap:wrap;gap:var(--lpt-space);}
 .lpt-contact-actions .lpt-merge-confirm {flex-basis:100%;}
@@ -2027,8 +2027,8 @@
 
 /* Pastel diary hierarchy for contact cards and note pages. */
 .lpt-root {
-  --lpt-font:"LPT Nunito","Verdana",sans-serif;
-  --lpt-heading-font:"LPT Fredoka","Arial Rounded MT Bold",sans-serif;
+  --lpt-font:"LPT Sour Gummy","Verdana",sans-serif;
+  --lpt-heading-font:"LPT Cherry Bomb One","Arial Rounded MT Bold",sans-serif;
   --lpt-title-size:20px;
   --lpt-contact-font:var(--lpt-font);
   --lpt-contact-label-size:11px;
@@ -2057,3 +2057,30 @@
 .lpt-marker {font-family:var(--lpt-font);font-weight:700;}
 
 .lpt-contact-extra > .lpt-field-controls .lpt-field-control-label {font-size:var(--lpt-contact-label-size);font-weight:700;letter-spacing:.06em;text-transform:uppercase;}
+
+/* Requested font roles. Decorative Shrikhand is available for custom accents only. */
+.lpt-root {
+  --lpt-font:"LPT Sour Gummy",sans-serif;
+  --lpt-heading-font:"LPT Cherry Bomb One",sans-serif;
+  --lpt-ui-font:"LPT DynaPuff",sans-serif;
+  --lpt-decorative-font:"LPT Shrikhand",serif;
+}
+.lpt-heading,.lpt-contact-name,.lpt-card-title,.lpt-section-title,.lpt-note-line {
+  font-family:var(--lpt-heading-font);font-weight:400;letter-spacing:0;
+}
+.lpt-root button,.lpt-app-label,.lpt-marker,.lpt-counter,.lpt-contact-chip,.lpt-present-name,
+.lpt-field-label,.lpt-contact-info-label,.lpt-note-part-label,.lpt-field-control-label {
+  font-family:var(--lpt-ui-font);font-weight:400;
+}
+.lpt-root .lpt-field-value,.lpt-contact-info-value,.lpt-note-part-value,
+.lpt-root .lpt-weather-description,.lpt-root .lpt-weather-condition-label,
+.lpt-card-subtitle,.lpt-description,.lpt-help,.lpt-story-strip,
+.lpt-email-summary,.lpt-text-body,.lpt-thread-preview {
+  font-family:var(--lpt-font);
+}
+.lpt-root .lpt-app-button .lpt-app-label {font-family:var(--lpt-ui-font);}
+.lpt-root input,.lpt-root textarea,.lpt-root select {font-family:var(--lpt-font);}
+
+.lpt-thread-name,.lpt-contact-list-title,.lpt-emoji-title {font-family:var(--lpt-heading-font);font-weight:400;}
+.lpt-root .lpt-weather-temperature {font-family:var(--lpt-font);}
+.lpt-email-unread,.lpt-text-sender,.lpt-status {font-family:var(--lpt-ui-font);}
