@@ -907,3 +907,9 @@ The existing spacing variables now default to 6px for --lpt-space and --lpt-cont
 ## Screenshot corrections in 0.18.6
 
 The root variables --lpt-header-button-size, --lpt-form-field-height and --lpt-contact-message-icon-size default to 32px. Header circles use a decorative pseudo-element inside the existing full-size button target. The shared .lpt-field-unit owns the location card border and lays out the value with its controls. Existing classes remain in place. Notes use .lpt-note-line for a wrapping title and .lpt-note-full for the detail and context, without repeating the title. Home artwork and contact action images use object-fit: contain to preserve their source proportions.
+
+## Annotated corrections in 0.18.7
+
+The supplied five action icons use .lpt-action-image inside .lpt-image-action. Visible image size comes from --lpt-action-image-size, default 32px. Targets keep --lpt-control-size. Artwork preserves the supplied transparent glow. The five embedded PNGs total 94,276 bytes. No external images are loaded.
+
+--lpt-heading-font uses Comic Sans MS, Chalkboard SE and the system cursive fallback. Contact detail text uses --lpt-contact-font-size, default 13px, and --lpt-contact-message-icon-size defaults to 40px. .lpt-contact-actions aligns Merge contacts and Message. .lpt-note-part, .lpt-note-part-label and .lpt-note-part-value group each displayed note field with its own control. Shared field units reserve room for corner controls. All prior class names remain available.

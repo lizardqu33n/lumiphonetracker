@@ -1,3 +1,4 @@
+import { ACTION_IMAGES } from "./action-images";
 import { WEATHER_CONDITIONS, WEATHER_SWITCHES, WEATHER_ALERT_ENDED, displayCondition, temperatureParts, type WeatherDetail } from "./weather-fields";
 import { WEATHER_ICONS } from "./weather-icons";
 import {showCopyableError} from "./copy-error";
@@ -58,8 +59,21 @@ export function icon(name: string): SVGSVGElement {
   }
   return svg;
 }
+function actionImage(name: keyof typeof ACTION_IMAGES): HTMLImageElement {
+  const image = el("img", "lpt-action-image");
+  image.src = ACTION_IMAGES[name]; image.alt = ""; image.draggable = false;
+  image.setAttribute("aria-hidden", "true"); return image;
+}
 function button(label: string, cls: string, fn: () => void): HTMLButtonElement {
-  const b = el("button", cls, label); b.type = "button"; b.addEventListener("click", fn); return b;
+  const action = label === "Back" ? "back" : label === "Edit" ? "edit" :
+    ["Delete", "Remove"].includes(label) ? "remove" :
+    label !== "Add to draft" && /^(?:\+ )?Add\b/.test(label) ? "add" : undefined;
+  const b = el("button", cls, action ? "" : label);
+  if (action) {
+    b.append(actionImage(action)); b.classList.add("lpt-image-action");
+    b.setAttribute("aria-label", label); b.title = label;
+  }
+  b.type = "button"; b.addEventListener("click", fn); return b;
 }
 function fieldActionButton(action: keyof typeof FIELD_ICONS, label: string, onClick: () => void): HTMLButtonElement {
   const control = button("", `lpt-button lpt-field-${action === "restore" ? "restore" : "lock"}`, onClick);
@@ -121,8 +135,8 @@ export class PhoneView {
     const launcherImage=el("img","lpt-launcher-image");
     launcherImage.src=LAUNCHER_ICON;launcherImage.alt="";launcherImage.setAttribute("aria-hidden","true");launcherImage.draggable=false;
     this.launcher.append(launcherImage);
-    this.back.setAttribute("aria-label", "Back to Home"); this.back.append(icon("Back"));
-    const close = button("", "lpt-close", () => this.close()); close.setAttribute("aria-label", "Close phone"); close.append(icon("Close"));
+    this.back.setAttribute("aria-label", "Back to Home"); this.back.append(actionImage("back")); this.back.title="Back to Home";
+    const close = button("", "lpt-close", () => this.close()); close.setAttribute("aria-label", "Close phone"); close.append(actionImage("close")); close.title="Close phone";
     const header = el("header", "lpt-header"); header.append(this.back, this.heading, close);
     const speaker = el("div", "lpt-speaker"); speaker.setAttribute("aria-hidden", "true");
     this.textNotice.setAttribute("role", "status"); this.textNotice.setAttribute("aria-live", "polite"); this.textNotice.hidden = true;
@@ -344,7 +358,7 @@ export class PhoneView {
   }
   private fieldControls(parent:HTMLElement,ref:FieldRef,label:string):void {
     const row=el("div","lpt-field-controls"),locked=this.doc?.fieldLocks?.[fieldKey(ref)]===true,epoch=this.chatEpoch;
-    if (!parent.classList.contains("lpt-field-unit") && !parent.classList.contains("lpt-weather-control-row") && !parent.classList.contains("lpt-contact-info-row")) row.append(el("span","lpt-field-control-label",ref.target === "note" ? label.replace(/^Note /, "") : label));
+    if (!parent.classList.contains("lpt-field-unit") && !parent.classList.contains("lpt-weather-control-row") && !parent.classList.contains("lpt-contact-info-row") && !parent.classList.contains("lpt-note-part")) row.append(el("span","lpt-field-control-label",ref.target === "note" ? label.replace(/^Note /, "") : label));
     const action = locked ? "unlock" : "lock";
     const control = fieldActionButton(action, `${locked ? "Unlock" : "Lock"} ${label}`, () => {
       if (epoch === this.chatEpoch && row.isConnected) void this.change({fieldControl:{...ref, action}});
@@ -466,7 +480,7 @@ export class PhoneView {
         button("Cancel", "lpt-cancel", () => row.remove())); b.replaceWith(row);
     }); parent.append(b);
   }
-  private contactIcon(key:keyof typeof CONTACT_ICONS):HTMLImageElement {const img=el("img","lpt-contact-action-icon");img.src=CONTACT_ICONS[key];img.alt="";img.setAttribute("aria-hidden","true");img.draggable=false;return img;}
+  private contactIcon(key:keyof typeof CONTACT_ICONS):HTMLImageElement {if(key==="addDetail")return actionImage("add");const img=el("img","lpt-contact-action-icon");img.src=CONTACT_ICONS[key];img.alt="";img.setAttribute("aria-hidden","true");img.draggable=false;return img;}
   private openContact(name:string,origin:"Contacts"|"Messages"="Contacts"):void {if(origin==="Contacts")this.contactScroll=this.content.scrollTop;this.selectedContact=normalize(name);this.contactOrigin=origin;this.navigate("Contacts");}
   private contacts(): void {
     const section=el("section","lpt-contacts");this.content.append(section);
@@ -487,8 +501,8 @@ export class PhoneView {
     if(this.doc!.settings.apps.Messages)line("Phone",info.phone,()=>{this.selectedContact=null;this.selectedText=normalize(c.name);this.navigate("Messages");this.markVisibleConversation();},"message");
     if(this.doc!.settings.apps.Email)line("Email",info.email,()=>{this.selectedContact=null;this.navigate("Email");},"email");
     line("Relationship type",info.relationship);for(const d of info.details)line(d.label,d.value);
-    const extra=el("div","lpt-contact-extra");for(const key of CONTACT_KEYS)if(key!=="roles"&&this.enabled(`contacts.${key}`)&&c.fields[key]&&(!c.player||["physical","position","attire"].includes(key))){const row=el("div","lpt-contact-info-row");row.append(el("span","lpt-contact-info-label",FIELD_NAMES[key]),el("span","lpt-contact-info-value",valueText(c.fields[key])));this.fieldControls(row,{target:"contact",name:c.name,field:key},FIELD_NAMES[key]);extra.append(row);}if(c.fields.roles&&!c.player)this.fieldControls(extra,{target:"contact",name:c.name,field:"roles"},"Roles");page.append(extra);this.mergeContactUI(page,c);
-    if(this.doc!.settings.apps.Messages&&!info.phone){const b=button("Message","lpt-button lpt-contact-link",()=>{this.selectedContact=null;this.selectedText=normalize(c.name);this.navigate("Messages");this.markVisibleConversation();});b.prepend(this.contactIcon("message"));page.append(b);}
+    const extra=el("div","lpt-contact-extra");for(const key of CONTACT_KEYS)if(key!=="roles"&&this.enabled(`contacts.${key}`)&&c.fields[key]&&(!c.player||["physical","position","attire"].includes(key))){const row=el("div","lpt-contact-info-row");row.append(el("span","lpt-contact-info-label",FIELD_NAMES[key]),el("span","lpt-contact-info-value",valueText(c.fields[key])));this.fieldControls(row,{target:"contact",name:c.name,field:key},FIELD_NAMES[key]);extra.append(row);}if(c.fields.roles&&!c.player)this.fieldControls(extra,{target:"contact",name:c.name,field:"roles"},"Roles");page.append(extra);const contactActions=el("div","lpt-contact-actions");page.append(contactActions);this.mergeContactUI(contactActions,c);
+    if(this.doc!.settings.apps.Messages&&!info.phone){const b=button("","lpt-button lpt-contact-link",()=>{this.selectedContact=null;this.selectedText=normalize(c.name);this.navigate("Messages");this.markVisibleConversation();});b.setAttribute("aria-label","Message");b.title="Message";b.prepend(this.contactIcon("message"));contactActions.append(b);}
   }
   private contactForm(parent:HTMLElement,contact?:Contact):void {
     if(this.editing)return;
@@ -584,9 +598,17 @@ export class PhoneView {
     if (note.by === "user" && (!note.addedByUser || note.updated)) summary.append(el("span", "lpt-marker", "edited by you"));
     if (note.updated) summary.append(el("span", "lpt-marker", "Updated"));
     const body = el("div", "lpt-card-body");
-    body.append(el("p", "lpt-note-full", [...new Set([note.detail, note.context].filter(value => value && value !== note.name))].join("\n")));
+    const full=el("div","lpt-note-full");
+    for(const field of ["detail","context"] as const) {
+      const part=el("section","lpt-note-part");
+      part.append(el("span","lpt-note-part-label",field==="detail"?"Detail":"Context"),
+        el("p","lpt-note-part-value",note[field]===note.name?"":note[field]));
+      this.fieldControls(part,{target:"note",section:key,name:note.name,field},`Note ${field}`);
+      full.append(part);
+    }
+    body.append(full);
     const actions = el("div", "lpt-actions"); actions.append(button("Edit", "lpt-button", () => this.noteForm(body, key, note)));
-    for(const field of ["detail","context",...(key==="plots"?["resolved"]:[])])this.fieldControls(body,{target:"note",section:key,name:note.name,field},`Note ${field}`);this.deleteAction(actions, { target: "note", section: key, name: note.name }); body.append(actions); card.append(summary, body); parent.append(card);
+    for(const field of (key==="plots"?["resolved"]:[]))this.fieldControls(body,{target:"note",section:key,name:note.name,field},`Note ${field}`);this.deleteAction(actions, { target: "note", section: key, name: note.name }); body.append(actions); card.append(summary, body); parent.append(card);
   }
   private noteForm(parent: HTMLElement, key: Section, note?: Note): void {
     if (!note && this.doc!.state.notes[key].filter(n => !n.resolved).length >= this.doc!.settings.notesPerSection) { this.setError("This section is full. Delete a note to make room."); return; }

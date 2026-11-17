@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.18.7 - Annotated screenshot corrections
+
+- Embedded the supplied Add, Remove/Delete, Edit, Back and Exit icons as icon-only phone controls with accessible names and tooltips.
+- Kept the key-bearing Unlock artwork. Enlarged the contact Message icon and aligned it with Merge contacts.
+- Added contact padding and a rounded system cursive heading font. Scene locks occupy consistent corners while Date has more text width.
+- Notes put each protection control beside its own Detail or Context. Centered thread header content, aligned composer controls and matched Email typography to the phone.
+
+
 ## 0.18.6 - Screenshot layout corrections
 
 - Header buttons use smaller visible circles and preserve their full click targets. Single-line form fields are slimmer.

@@ -714,7 +714,7 @@ try {
   await corrections.goto("http://127.0.0.1:"+server.port);await seed(corrections);await open(corrections,"Scene");
   const location=corrections.locator(".lpt-field-unit").filter({has:corrections.getByRole("button",{name:"Edit Location",exact:true})});
   check(await location.evaluate(n=>{const card=n.getBoundingClientRect(),button=n.querySelector(".lpt-field-lock")!.getBoundingClientRect();return button.left>=card.left&&button.right<=card.right&&button.top>=card.top&&button.bottom<=card.bottom;}),"Location control fits entirely inside its card container");
-  check(await corrections.locator(".lpt-close").evaluate(n=>getComputedStyle(n,"::before").width==="32px"&&n.getBoundingClientRect().width>=44),"Header artwork is 32px with a full click target");
+  check(await corrections.locator(".lpt-close").evaluate(n=>n.querySelector(".lpt-action-image")!==null&&n.getBoundingClientRect().width>=44),"Header uses supplied artwork with a full click target");
   await corrections.locator(".harness-widget").screenshot({path:".test-artifacts/corrections-scene.png"});
   await home(corrections);await open(corrections,"Notes");
   await corrections.locator(".lpt-note").first().evaluate(n=>{let p=n.parentElement;while(p){if(p instanceof HTMLDetailsElement)p.open=true;p=p.parentElement;} (n as HTMLDetailsElement).open=true;});
@@ -722,7 +722,7 @@ try {
   check(await corrections.locator(".lpt-note").first().evaluate(n=>{const title=n.querySelector(".lpt-note-line")!.textContent;return !n.querySelector(".lpt-note-full")!.textContent!.includes(title!);}),"Note body omits the repeated title");
   await corrections.locator(".harness-widget").screenshot({path:".test-artifacts/corrections-notes.png"});
   await home(corrections);await open(corrections,"Contacts");await corrections.locator(".lpt-contact-row").filter({hasText:"Ada"}).click();
-  check(await corrections.locator(".lpt-contact-link img").first().evaluate(n=>getComputedStyle(n).width==="32px"&&getComputedStyle(n).objectFit==="contain"&&getComputedStyle(n).flexShrink==="0"),"Contact message artwork is larger and cannot shrink or stretch");
+  check(await corrections.locator(".lpt-contact-link img").first().evaluate(n=>getComputedStyle(n).width==="40px"&&getComputedStyle(n).objectFit==="contain"&&getComputedStyle(n).flexShrink==="0"),"Contact message artwork is larger and cannot shrink or stretch");
   await corrections.locator(".harness-widget").screenshot({path:".test-artifacts/corrections-contact.png"});
   await home(corrections);await corrections.locator(".harness-widget").screenshot({path:".test-artifacts/corrections-home.png"});
   await section(corrections,"apps");
@@ -737,6 +737,22 @@ try {
   await corrections.evaluate(()=>(window as any).harness.activityStory('They reach the old apartment.<phone-state>loc: A very long apartment location beside the old railway station | Portland; Oregon\nseason: Late autumn\n</phone-state>'));
   await corrections.waitForTimeout(100);await corrections.setViewportSize({width:390,height:700});
   check(await corrections.locator(".lpt-scene").evaluate(n=>n.scrollWidth<=n.clientWidth&&Array.from(n.querySelectorAll(".lpt-field-unit")).every(unit=>{const box=unit.getBoundingClientRect();return Array.from(unit.querySelectorAll(".lpt-field-lock,.lpt-field-restore")).every(control=>{const r=control.getBoundingClientRect();return r.left>=box.left&&r.right<=box.right&&r.top>=box.top&&r.bottom<=box.bottom;});})),"All Scene targets fit their shared containers with long values at narrow width");
+
+  await corrections.setViewportSize({width:1100,height:850});await home(corrections);await open(corrections,"Contacts");
+  await corrections.locator(".lpt-contact-row").filter({hasText:"Ada"}).click();
+  await corrections.getByRole("button",{name:"Message",exact:true}).click();
+  check(await corrections.locator(".lpt-thread-header").evaluate(n=>{const items=Array.from(n.children).map(item=>item.getBoundingClientRect());return items.every(item=>Math.abs((item.y+item.height/2)-(items[0].y+items[0].height/2))<3);}),"Thread header actions and portrait share a centered baseline");
+  const draft=corrections.locator(".lpt-reply");
+  check(await draft.evaluate(n=>{const textarea=n.querySelector("textarea")!.getBoundingClientRect();return [".lpt-emoji-toggle",".lpt-add-draft"].every(selector=>Math.abs(n.querySelector(selector)!.getBoundingClientRect().bottom-textarea.bottom)<3);}),"Composer controls align with the reply input");
+  await corrections.locator(".harness-widget").screenshot({path:".test-artifacts/annotations-thread.png"});
+  await home(corrections);await open(corrections,"Notes");
+  check(await corrections.locator(".lpt-add").first().evaluate(n=>n.textContent===""&&!!n.getAttribute("aria-label")&&!!n.getAttribute("title")&&n.querySelector("img")?.getAttribute("src")?.startsWith("data:image/png;base64,")),"Add uses only an embedded icon and retains its accessible label and tooltip");
+
+  await section(corrections,"apps");await corrections.locator(".lpt-sidebar").getByRole("button",{name:"Add Email",exact:true}).click();
+  await corrections.waitForTimeout(100);await corrections.evaluate(()=>(window as any).harness.activityStory('<phone-email from="Ada" subject="Established meeting" time="Friday">A plain story email.</phone-email>'));
+  await corrections.waitForTimeout(100);await home(corrections);await open(corrections,"Email");
+  check(await corrections.locator(".lpt-email-summary").first().evaluate(n=>getComputedStyle(n).fontFamily===getComputedStyle(n.closest(".lpt-root")!).fontFamily&&getComputedStyle(n).fontSize==="14px"),"Email rows use the same readable typeface and body size as the phone");
+  await corrections.locator(".harness-widget").screenshot({path:".test-artifacts/annotations-email.png"});
   await corrections.close();
   console.log(`Browser UI verification passed: ${checks} checks. Screenshots in .test-artifacts/. No real Lumiverse instance or provider was used.`);
 } catch(error) { console.error(`Browser stopped after check ${checks}: ${lastCheck}`);for(const [i,page]of browser.contexts().flatMap(c=>c.pages()).entries())try{await page.screenshot({path:`.test-artifacts/failure-${i}.png`});}catch{}throw error;

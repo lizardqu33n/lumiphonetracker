@@ -1,4 +1,9 @@
-# Verification report - 0.18.6
+# Verification report - 0.18.7
+
+Checked November 17, 2026. 269 code tests and 11 focused browser checks passed, plus type checking and reproducible build/package validation. The focused command is bun scripts/test-ui.ts --screenshots-only. Reviewed contact, Scene, Notes, thread/composer and Email screenshots. Checked icon-only Add with its tooltip and accessible name, contact image proportions, centered thread header, aligned composer, corner target containment at narrow width and consistent Email typography. The previously documented full-suite sidebar/emoji failures remain outside this correction pass. No real Lumiverse install or mobile keyboard was available.
+
+## 0.18.6 - Screenshot corrections
+
 
 Checked November 17, 2026. 269 code tests, type checking and reproducible build/package validation passed. Seven focused browser checks passed through bun scripts/test-ui.ts --screenshots-only. Reviewed captures of Bank, Notes, Contacts, Home and Scene. Checks cover header artwork and full click targets, compact readable Bank inputs, wrapping note titles and nonduplicated title/body text, proportional Message artwork, location containment and all Scene targets with long text at narrow width.
 
