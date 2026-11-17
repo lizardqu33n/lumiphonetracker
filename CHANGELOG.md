@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.18.5 - Updated unlock artwork
+
+- Replaced the unlock icon with the supplied padlock-and-key image, embedded as a transparent 128px PNG using the existing display size.
+- Includes the current local compact layout and readable pastel control styling.
+
+
+## 0.18.4 - Compact buttons and readable pastel controls
+
+- Corrected inherited text colors overriding dark pastel-button and input text.
+- Text actions use 32px desktop heights and 44px touch heights. Notes headings and counters stay compact without splitting Add or counts.
+
+
 ## 0.18.3 - Compact Y2K layout
 
 - Reduced content spacing, contact card padding and portrait sizes while retaining pastel colors and pixel icons.

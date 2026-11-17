@@ -899,3 +899,7 @@ Condition states on the card are `.is-sunny`, `.is-clear-night`, `.is-partly-clo
 ## Compact layout in 0.18.3
 
 The existing spacing variables now default to 6px for --lpt-space and --lpt-contact-gap, with 8px contact padding. Contact list portraits default to 32px and detail portraits to 64px. Cards retain their opaque pastel theme surfaces. Existing class names remain usable. Contact detail labels and values share the first column, with field controls in the second. Contact list role summaries show up to two lines, with full roles on the contact page. Action icons remain 32px with 44px tap targets.
+
+## Action controls in 0.18.4
+
+--lpt-action-height defaults to 32px, --lpt-action-padding to 8px and --lpt-action-radius to 12px. Touch pointers retain --lpt-control-size. Buttons explicitly use --lpt-btn-text and input fields use --lpt-input-text to override inherited light text. Existing phone custom CSS can override these variables.

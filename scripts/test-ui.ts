@@ -699,6 +699,15 @@ try {
   await firstNote.locator("summary").click();
   check(await spacesPage.locator(".lpt-note .lpt-field-control-label").first().isVisible(),"Note protection controls have visible field labels");
   await spacesPage.close();
+
+  const buttonsPage=await browser.newPage({viewport:{width:1100,height:850}});
+  await buttonsPage.goto("http://127.0.0.1:"+server.port);await seed(buttonsPage);await open(buttonsPage,"Notes");
+  check(await buttonsPage.locator(".lpt-add").first().evaluate(n=>getComputedStyle(n).color==="rgb(66, 6, 66)" && n.getBoundingClientRect().height===32),"Pastel Add uses dark text and a compact desktop height");
+  check(await buttonsPage.locator(".lpt-counter").evaluateAll(nodes=>nodes.every(n=>n.scrollWidth<=n.clientWidth && getComputedStyle(n).whiteSpace==="nowrap")),"Notes counters stay on one line");
+  await buttonsPage.locator(".harness-widget").screenshot({path:".test-artifacts/compact-notes-buttons.png"});
+  await home(buttonsPage);await open(buttonsPage,"Weather");await buttonsPage.getByRole("button",{name:"Edit condition",exact:true}).click();
+  check(await buttonsPage.locator('.lpt-form select').evaluate(n=>getComputedStyle(n).color==="rgb(66, 6, 66)"),"Condition dropdown uses dark readable input text");
+  await buttonsPage.locator(".harness-widget").screenshot({path:".test-artifacts/compact-weather-buttons.png"});await buttonsPage.close();
   console.log(`Browser UI verification passed: ${checks} checks. Screenshots in .test-artifacts/. No real Lumiverse instance or provider was used.`);
 } catch(error) { console.error(`Browser stopped after check ${checks}: ${lastCheck}`);for(const [i,page]of browser.contexts().flatMap(c=>c.pages()).entries())try{await page.screenshot({path:`.test-artifacts/failure-${i}.png`});}catch{}throw error;
 } finally { await browser.close(); server.stop(true); }

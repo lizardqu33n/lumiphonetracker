@@ -1,4 +1,11 @@
-# Verification report - 0.18.3
+# Verification report - 0.18.5
+
+269 code tests, type checking, reproducible builds and package validation passed for the updated unlock asset. Lock and Restore assets were checked unchanged during replacement. The latest full browser run covered the preceding UI changes with 358 checks. No live Lumiverse install was used.
+
+## 0.18.4 - Compact buttons and readable controls
+
+Checked November 17, 2026. 269 code tests and 358 browser checks passed. Verified actual rendered dark foregrounds on pastel buttons and inputs, 32px desktop action height, unbroken Notes counters and reviewed Notes/Weather screenshots. Live Lumiverse and custom CSS overrides remain unverified.
+
 
 Checked November 17, 2026. 269 code tests and 355 browser checks passed, along with type checking and reproducible build/package validation. Reviewed Scene and Contact detail screenshots for spacing and readable value columns. Native Lumiverse and uploaded custom CSS combinations remain unverified.
 
