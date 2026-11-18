@@ -101,29 +101,35 @@ export class SetupWizard {
   const p=this.get(id,user,chat);
   if(p.running||p.data)throw new SetupError("This setup has already run. Review its preview or start again.");
   p.running=true;
-  const currentDoc=await this.current(p),source=await setupSources(this.api,chat,user);
-  if(source.text!==p.source)throw new SetupError("Sources changed. Review setup again.");
-  const chosen=setupConnection(currentDoc,await this.api.connections.list(user));
-  if(chosen.id!==p.connection||chosen.model!==p.model)throw new SetupError("Connection changed. Review setup again.");
-  await this.current(p);
-  const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;
-  // model is documented in raw-generation examples and used by the host, but omitted
-  // from GenerationRequestDTO 0.6.77. A structural subtype keeps the supported field.
-  const request={type:"raw" as const,connection_id:p.connection,model:p.model,userId:user,messages:p.messages,parameters:{max_tokens:2000},signal:controller.signal};
-  let stage:"request"|"state"|"validation"="request";
-  try{
-   const content=await Promise.race([checkedModelReply(()=>this.api.generate.raw(request)),new Promise<never>((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new SetupError("The request timed out. Try again. Nothing was saved.","timeout"));},90000);})]);
-   stage="state";const doc=await this.current(p);stage="validation";
-   const data=validateSetup(content,p.source,p.fields,doc.settings.fakeAddresses);
-   for(const c of data.contacts)if(normalize(c.name)===normalize(p.names[1]??"")){delete c.roles;delete c.mood;delete c.thoughts;}
-   const filtered=setupCandidates(doc,{...data,contacts:[]});p.data=withFakeAddresses(doc,{...filtered,contacts:setupReview(doc,data.contacts)},p.fields);return {id,data:p.data};
-  }catch(error){
-   if(error instanceof ModelCallError)throw new SetupError(`${error.message} Nothing was saved.`,error.category);
-   if(error instanceof SetupError){if(!error.category)throw new SetupError(error.message,error.message.startsWith("Setup returned invalid")?"invalid output":"validation rejected");throw error;}
-   if(stage==="state")throw new SetupError("Setup failed: Chat could not be rechecked. Nothing was saved.","state unavailable");
-   const category=failureCategory(error,stage==="validation"?"validation rejected":"provider error");
-   throw new SetupError(`Setup failed: ${failureLabel(category)}. Nothing was saved.`,category);
-  }finally{if(timer)clearTimeout(timer);}
+  try {
+   const currentDoc=await this.current(p),source=await setupSources(this.api,chat,user);
+   if(source.text!==p.source)throw new SetupError("Sources changed. Review setup again.");
+   const chosen=setupConnection(currentDoc,await this.api.connections.list(user));
+   if(chosen.id!==p.connection||chosen.model!==p.model)throw new SetupError("Connection changed. Review setup again.");
+   await this.current(p);
+   const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;
+   // model is documented in raw-generation examples and used by the host, but omitted
+   // from GenerationRequestDTO 0.6.77. A structural subtype keeps the supported field.
+   const request={type:"raw" as const,connection_id:p.connection,model:p.model,userId:user,messages:p.messages,parameters:{max_tokens:2000},signal:controller.signal};
+   let stage:"request"|"state"|"validation"="request";
+   try{
+    const content=await Promise.race([checkedModelReply(()=>this.api.generate.raw(request)),new Promise<never>((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new SetupError("The request timed out. Try again. Nothing was saved.","timeout"));},90000);})]);
+    stage="state";const doc=await this.current(p);stage="validation";
+    const data=validateSetup(content,p.source,p.fields,doc.settings.fakeAddresses);
+    for(const c of data.contacts)if(normalize(c.name)===normalize(p.names[1]??"")){delete c.roles;delete c.mood;delete c.thoughts;}
+    const filtered=setupCandidates(doc,{...data,contacts:[]});p.data=withFakeAddresses(doc,{...filtered,contacts:setupReview(doc,data.contacts)},p.fields);return {id,data:p.data};
+   }catch(error){
+    if(error instanceof ModelCallError)throw new SetupError(`${error.message} Nothing was saved.`,error.category);
+    if(error instanceof SetupError){if(!error.category)throw new SetupError(error.message,error.message.startsWith("Setup returned invalid")?"invalid output":"validation rejected");throw error;}
+    if(stage==="state")throw new SetupError("Setup failed: Chat could not be rechecked. Nothing was saved.","state unavailable");
+    const category=failureCategory(error,stage==="validation"?"validation rejected":"provider error");
+    throw new SetupError(`Setup failed: ${failureLabel(category)}. Nothing was saved.`,category);
+   }finally{if(timer)clearTimeout(timer);}
+  } catch(error) {
+    // Keep a small spent-ticket marker, never the failed request's story payload.
+    p.source=""; p.messages=[]; p.names=[]; p.fields=[]; p.data=undefined;
+    throw error;
+  }
  }
  async save(user:string,chat:string,id:string,decisions?:unknown):Promise<Document>{const p=this.get(id,user,chat);if(!p.data)throw new SetupError("Run setup and review its preview first.");if(p.saving)throw new SetupError("Setup is already being saved.");p.saving=true;try{const current=await this.current(p);try{resolveSetup(current,p.data,decisions);}catch{throw new SetupError("Choose Merge, or give the separate contact a different full name before choosing Keep both.");}const source=await setupSources(this.api,chat,user);if(source.text!==p.source)throw new SetupError("Sources changed. Nothing was saved.");const doc=await this.store.setupApply(user,chat,p.revision,p.data,p.names,decisions);this.plans.delete(id);return doc;}finally{p.saving=false;}}
 }

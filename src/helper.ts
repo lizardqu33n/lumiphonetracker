@@ -186,7 +186,7 @@ export class HelperAI {
   started(chatId:string,id:string):void { const set=this.active.get(chatId)??new Set(); set.add(id);this.active.set(chatId,set); }
   ended(userId:string|undefined, payload:{chatId:string;generationId:string;messageId?:string;content?:string;error?:string}):void {
     if(!payload.chatId||payload.chatId.length>256||!payload.generationId||payload.generationId.length>900)return;
-    this.active.get(payload.chatId)?.delete(payload.generationId);
+    this.finishActive(payload.chatId,payload.generationId);
     if(!userId&&!payload.error&&payload.messageId&&typeof payload.content==="string")void this.failure("",payload.chatId,"permission missing");
     if(userId && !payload.error && payload.messageId && typeof payload.content==="string") {
       const key=JSON.stringify([userId,payload.chatId,payload.generationId]);
@@ -198,7 +198,12 @@ export class HelperAI {
     }
     void this.drain(payload.chatId);
   }
-  stopped(chatId:string,id:string):void { this.active.get(chatId)?.delete(id);void this.drain(chatId); }
+  private finishActive(chatId:string,id:string):void {
+    const ids=this.active.get(chatId);
+    ids?.delete(id);
+    if(!ids?.size)this.active.delete(chatId);
+  }
+  stopped(chatId:string,id:string):void { this.finishActive(chatId,id);void this.drain(chatId); }
   cancel(chatId:string):void { this.running.get(chatId)?.abort();this.queues.delete(chatId); }
   cancelAll():void { for(const key of this.running.keys())this.cancel(key);this.queues.clear();this.active.clear(); }
   busy(chatId:string):boolean { return !!this.active.get(chatId)?.size || this.running.has(chatId) || this.draining.has(chatId); }

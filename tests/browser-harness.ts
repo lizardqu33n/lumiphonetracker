@@ -16,7 +16,7 @@ import { HelperAI, type HelperIO } from "../src/helper";
 
 const docs = new Map<string, string>(); const histories = new Map<string, StoryRow[]>();
 let portraitSources:unknown={characters:[]};
-let prefs: unknown = defaultPreferences(); let activeChat: string | null = "a"; let updateDelay = 0;
+let prefs: unknown = defaultPreferences(); let activeChat: string | null = "a"; let updateDelay = 0; let syncDelay=0;let syncCount=0;
 let onBackend: (p: unknown) => void = () => {}; const events = new Map<string, Set<(p: unknown) => void>>();
 const tagHandlers: { options: unknown; callback: (p: unknown) => void }[] = [];
 let cleanup: (() => void) | undefined; let tagCalls = 0; let granted = ["chats", "chat_mutation", "interceptor", "ui_panels"];
@@ -39,6 +39,7 @@ const wizardChoices=new Map<string,unknown>();
 const choiceStore=new SetupChoiceStore({authorize:async(u,c)=>u===`owner-${c}`,read:async(u,c)=>wizardChoices.get(`${u}/${c}`)??[],write:async(u,c,v)=>{wizardChoices.set(`${u}/${c}`,v);}});
 const sendToBackend = (payload: unknown) => {
   if (!isRecord(payload)) return;
+  if(payload.type==="phone_sync")syncCount++;
   const id = payload.requestId; const chat = payload.chatId===null?"":String(payload.chatId ?? activeChat ?? ""); const reply = onBackend;
   const run = async () => {
     try {
@@ -74,7 +75,7 @@ const sendToBackend = (payload: unknown) => {
       reply({ type: "phone_snapshot", requestId: id, chatId: chat, chatName:chat==="a"?"Lantern story":"Other story", snapshot, reads: await readStore.read("user",chat),helperBusy:helper.busy(chat) });
     } catch (e) { reply({ type: String(payload.type).startsWith("phone_setup_")?"phone_setup_error": payload.type === "phone_personal" ? "phone_personal_error" : payload.type === "phone_mark_read" ? "phone_reads_error" : "phone_error", requestId: id, chatId:chat, message: e instanceof Error ? e.message : "Failed" }); }
   };
-  setTimeout(() => { void run(); }, payload.type === "phone_update"||(payload.type==="phone_personal"&&isRecord(payload.change)&&payload.change.kind==="preset_apply") ? updateDelay : 0);
+  setTimeout(() => { void run(); }, payload.type === "phone_update"||(payload.type==="phone_personal"&&isRecord(payload.change)&&payload.change.kind==="preset_apply") ? updateDelay : payload.type==="phone_sync"?syncDelay:0);
 };
 const ctx = {
   components:{mountSwitch:(target:HTMLElement,options:{checked:boolean;disabled:boolean;ariaLabel:string;onChange:(v:boolean)=>void})=>{
@@ -158,7 +159,10 @@ const api = {
   composer: () => ({ ...composerState, focusCount, sendCalls }),
   setComposer(state: Partial<typeof composerState>) { composerState = { ...composerState, ...state }; },
   composerSupported(value: boolean) { ctx.host.capabilities["composer-v1"] = value ? 1 : 0; },
-  generationEvent(name:string,id:string){for(const fn of events.get(name)??[])fn({chatId:activeChat,generationId:id});},
+  syncTestDelay(ms:number){syncDelay=ms;syncCount=0;},
+  syncTestCount(){return syncCount;},
+  generationListenerCounts(){return ["GENERATION_STARTED","GENERATION_ENDED","GENERATION_STOPPED"].map(name=>events.get(name)?.size??0);},
+  generationEvent(name:string,id:string,error?:string){for(const fn of events.get(name)??[])fn({chatId:activeChat,generationId:id,error});},
   setupScenario(fact:string,output:string){setupFact=fact;setupOutput=output;},
   async addContact(name:string){let d=await store.sync(`owner-${activeChat}`,activeChat!);await store.update(`owner-${activeChat}`,activeChat!,d.revision,{edit:{target:"contact",name,value:{}}});onBackend({type:"phone_helper_changed",chatId:activeChat});},
   setupFinish(value:string){setupFinish=value;},

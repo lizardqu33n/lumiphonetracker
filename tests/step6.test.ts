@@ -174,3 +174,19 @@ describe("Part 2 safe refresh and Helper failures",()=>{
 });
 
 test("connection labels use an ASCII separator without mojibake",async()=>{const f=fixture();const result=await f.helper.connections("owner-a","a");expect(result.choices[0].label).toBe("Small saved connection - chosen-small-model");});
+
+test("failed and stopped Main AI generations release per-chat tracking sets",async()=>{
+  const f=fixture();
+  for(let i=0;i<1000;i++){
+    const chat="failed-chat-"+i,id="failed-"+i;
+    f.helper.started(chat,id);
+    if(i%2)f.helper.stopped(chat,id);
+    else f.helper.ended("owner",{chatId:chat,generationId:id,error:"Provider failed"});
+  }
+  await Promise.resolve();await Promise.resolve();
+  expect((f.helper as any).active.size).toBe(0);
+  expect((f.helper as any).queues.size).toBe(0);
+  expect((f.helper as any).draining.size).toBe(0);
+  expect((f.helper as any).running.size).toBe(0);
+  expect(f.calls).toHaveLength(0);
+});

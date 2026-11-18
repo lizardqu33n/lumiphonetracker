@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.18.12 - Generation failure cleanup
+
+- Coalesced frontend tracker refreshes into one pending request and at most one follow-up, preventing a burst of completion notifications from queueing a full-chat replay for every event. Pending state and its timer clear on responses, errors, chat switches and shutdown.
+- Removed empty backend generation sets after ended/stopped events.
+- Failed setup requests release their source text and model messages immediately while preserving the spent-ticket guard.
+- Added failure-burst, retention, concurrent setup, chat-switch and restart regression checks. No story data is deleted.
+
+
 ## 0.18.11 - Requested font roles and App Store tiles
 
 - Cherry Bomb One titles and major headings, DynaPuff controls and small UI labels, Sour Gummy body and settings text. Shrikhand is bundled as an optional decorative font only.

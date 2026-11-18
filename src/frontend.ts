@@ -24,6 +24,9 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   let activeChat: string | null = null;
   let epoch = 0;
   let pendingSync = "";
+  let syncQueued=false;
+  let syncTimer:ReturnType<typeof setTimeout>|undefined;
+
   let portraitRequest="",portraitChat:string|null=null;
   let current: PhoneDocument | null = null;
   let reads = emptyReads();
@@ -57,8 +60,23 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   disposers.push(removeHostStyle,ctx.dom.addStyle(sidebarCSS),ctx.dom.addStyle(fontCSS));
 
   const sendSync = () => {
+    if(disposed)return;
+    if(pendingSync){syncQueued=true;return;}
     pendingSync = crypto.randomUUID();
-    ctx.sendToBackend({ type: "phone_sync", requestId: pendingSync, chatId:activeChat });
+    syncTimer=setTimeout(()=>{
+      pendingSync="";syncQueued=false;syncTimer=undefined;
+      console.warn("Lumi Phone Tracker: tracker refresh timed out.");
+    },15000);
+    try {ctx.sendToBackend({ type: "phone_sync", requestId: pendingSync, chatId:activeChat });}
+    catch {
+      clearTimeout(syncTimer);syncTimer=undefined;pendingSync="";syncQueued=false;
+      console.warn("Lumi Phone Tracker: tracker refresh could not be requested.");
+    }
+  };
+  const finishSync = () => {
+    clearTimeout(syncTimer);syncTimer=undefined;pendingSync="";
+    const queued=syncQueued;syncQueued=false;
+    if(queued)queueMicrotask(sendSync);
   };
   // These attach before any asynchronous UI initialization or DOM work.
   for (const tagName of [TRACKER_TAG, TEXT_TAG,"phone-email"]) disposers.push(ctx.messages.registerTagInterceptor({ tagName, removeFromMessage: true }, payload => {
@@ -287,6 +305,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
       view?.receive(current,reads);view?.receiveReads(reads); backendBusy=payload.helperBusy===true;updateBusy(); edit.resolve(current); return;
     }
     if (payload.requestId !== pendingSync) return;
+    if (payload.type === "phone_error" || payload.type === "phone_snapshot") finishSync();
     if (payload.type === "phone_error") { view?.setError(String(payload.message)); return; }
     if (payload.type !== "phone_snapshot") return;
     if (activeChat && payload.chatId !== activeChat) return;
@@ -299,7 +318,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     backendBusy=payload.helperBusy===true;updateBusy();
   }));
   const switchChat = (chatId: string | null) => {
-    modelError="";clearTimeout(toolbarTimer);statuses.forEach(n=>{n.textContent="";});portraitChat=null;portraitRequest="";epoch++; refreshPending=false;refreshStatus.textContent="";openStatus.textContent="";backendBusy=false;pendingSync = ""; activeChat = chatId; current = null; reads = emptyReads(); view?.receive(null, reads);chatName="";sidebar?.receive(null,"");updateBusy();
+    modelError="";clearTimeout(toolbarTimer);statuses.forEach(n=>{n.textContent="";});portraitChat=null;portraitRequest="";epoch++; refreshPending=false;refreshStatus.textContent="";openStatus.textContent="";backendBusy=false;clearTimeout(syncTimer);syncTimer=undefined;syncQueued=false;pendingSync = ""; activeChat = chatId; current = null; reads = emptyReads(); view?.receive(null, reads);chatName="";sidebar?.receive(null,"");updateBusy();
     for (const [id, p] of readRequests) { clearTimeout(p.timer); p.reject(new Error("The chat changed.")); readRequests.delete(id); }
     for (const [id, p] of updates) { clearTimeout(p.timer); p.reject(new Error("The chat changed. Your original chat keeps its saved changes.")); updates.delete(id); }
     for(const [id,p]of helperRequests){clearTimeout(p.timer);p.reject(new Error("The chat changed."));helperRequests.delete(id);}
@@ -325,7 +344,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   void prefsChange().then(p => { if (disposed || initialAppearanceEpoch !== appearanceEpoch || p.revision < preferences.revision) return; preferences = p;sidebar?.preferences(p); view?.receivePreferences(p); try { view?.applyCSS(p.css);applySidebarStyle(p.sidebarCss??""); } catch { help.textContent = "Saved custom CSS could not be applied. Reset appearance to clear it."; } }).catch(() => { help.textContent = "Appearance could not be loaded. Default styles are in use."; });
   void ensureWidget();
   return () => {
-    disposed = true; epoch++;for(const r of setupRequests.values()){clearTimeout(r.timer);r.reject(Error("Phone closed."));}setupRequests.clear(); widgetResize?.disconnect(); view?.destroy(); widget?.destroy();
+    disposed = true; epoch++;clearTimeout(syncTimer);syncTimer=undefined;pendingSync="";syncQueued=false;streaming.clear();for(const r of setupRequests.values()){clearTimeout(r.timer);r.reject(Error("Phone closed."));}setupRequests.clear(); widgetResize?.disconnect(); view?.destroy(); widget?.destroy();
     for (const p of updates.values()) { clearTimeout(p.timer); p.reject(new Error("The phone closed before saving completed. Check the chat before trying again.")); }
     for (const p of prefsRequests.values()) { clearTimeout(p.timer); p.reject(new Error("The phone closed.")); }
     for (const p of readRequests.values()) { clearTimeout(p.timer); p.reject(new Error("The phone closed.")); }

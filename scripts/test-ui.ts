@@ -790,6 +790,35 @@ try {
   })),"App Store action icons sit centered below each app tile");
   await corrections.locator(".harness-drawer").screenshot({path:".test-artifacts/requested-fonts-app-store.png"});
   check(await corrections.locator(".lpt-heading").evaluate(n=>getComputedStyle(n).fontFamily.includes("Cherry Bomb One"))&&await corrections.locator(".lpt-store-name").first().evaluate(n=>getComputedStyle(n).fontFamily.includes("DynaPuff"))&&await corrections.locator(".lpt-sidebar").evaluate(n=>getComputedStyle(n).fontFamily.includes("Sour Gummy")),"Requested font roles apply across the phone and sidebar");
+
+  await corrections.waitForTimeout(150);
+  await corrections.evaluate(()=>{
+    const h=(window as any).harness;h.syncTestDelay(50);
+    for(let i=0;i<1000;i++){
+      h.generationEvent("GENERATION_STARTED","failure-"+i);
+      h.generationEvent("GENERATION_ENDED","failure-"+i,"Provider failed");
+    }
+  });
+  await corrections.waitForTimeout(350);
+  const syncCalls=await corrections.evaluate(()=>(window as any).harness.syncTestCount());
+  check(syncCalls>=1&&syncCalls<=2,"A thousand Main AI completion events produce at most one in-flight sync and one follow-up");
+
+  await corrections.evaluate(()=>{
+    const h=(window as any).harness;h.syncTestDelay(80);
+    h.generationEvent("GENERATION_STARTED","switch-failed");
+    h.generationEvent("GENERATION_ENDED","switch-failed","Provider failed");
+    h.switchChat("b");
+  });
+  await corrections.waitForTimeout(300);
+  check((await corrections.locator(".lpt-side-chat").innerText()).includes("Other story"),"An in-flight failure refresh cannot replace the newly selected chat");
+  await corrections.evaluate(()=>{
+    const h=(window as any).harness;
+    h.generationEvent("GENERATION_STARTED","reload-failed");
+    h.generationEvent("GENERATION_ENDED","reload-failed","Provider failed");h.reload();
+  });
+  await corrections.waitForTimeout(300);
+  check(await corrections.evaluate(()=>(window as any).harness.generationListenerCounts().every((count:number)=>count===1)),"Restart during a pending refresh leaves one listener per generation event");
+  await corrections.evaluate(()=>(window as any).harness.syncTestDelay(0));
   await corrections.close();
   console.log(`Browser UI verification passed: ${checks} checks. Screenshots in .test-artifacts/. No real Lumiverse instance or provider was used.`);
 } catch(error) { console.error(`Browser stopped after check ${checks}: ${lastCheck}`);for(const [i,page]of browser.contexts().flatMap(c=>c.pages()).entries())try{await page.screenshot({path:`.test-artifacts/failure-${i}.png`});}catch{}throw error;

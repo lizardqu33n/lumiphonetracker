@@ -6440,6 +6440,8 @@ function setup(ctx) {
   let activeChat = null;
   let epoch = 0;
   let pendingSync = "";
+  let syncQueued = false;
+  let syncTimer;
   let portraitRequest = "", portraitChat = null;
   let current = null;
   let reads = emptyReads();
@@ -6501,8 +6503,37 @@ function setup(ctx) {
   const removeHostStyle = ctx.dom.addStyle(styles_default);
   disposers.push(removeHostStyle, ctx.dom.addStyle(sidebar_default), ctx.dom.addStyle(fonts_default));
   const sendSync = () => {
+    if (disposed)
+      return;
+    if (pendingSync) {
+      syncQueued = true;
+      return;
+    }
     pendingSync = crypto.randomUUID();
-    ctx.sendToBackend({ type: "phone_sync", requestId: pendingSync, chatId: activeChat });
+    syncTimer = setTimeout(() => {
+      pendingSync = "";
+      syncQueued = false;
+      syncTimer = undefined;
+      console.warn("Lumi Phone Tracker: tracker refresh timed out.");
+    }, 15000);
+    try {
+      ctx.sendToBackend({ type: "phone_sync", requestId: pendingSync, chatId: activeChat });
+    } catch {
+      clearTimeout(syncTimer);
+      syncTimer = undefined;
+      pendingSync = "";
+      syncQueued = false;
+      console.warn("Lumi Phone Tracker: tracker refresh could not be requested.");
+    }
+  };
+  const finishSync = () => {
+    clearTimeout(syncTimer);
+    syncTimer = undefined;
+    pendingSync = "";
+    const queued = syncQueued;
+    syncQueued = false;
+    if (queued)
+      queueMicrotask(sendSync);
   };
   for (const tagName of [TRACKER_TAG, TEXT_TAG, "phone-email"])
     disposers.push(ctx.messages.registerTagInterceptor({ tagName, removeFromMessage: true }, (payload) => {
@@ -7044,6 +7075,8 @@ function setup(ctx) {
     }
     if (payload.requestId !== pendingSync)
       return;
+    if (payload.type === "phone_error" || payload.type === "phone_snapshot")
+      finishSync();
     if (payload.type === "phone_error") {
       view?.setError(String(payload.message));
       return;
@@ -7083,6 +7116,9 @@ function setup(ctx) {
     refreshStatus.textContent = "";
     openStatus.textContent = "";
     backendBusy = false;
+    clearTimeout(syncTimer);
+    syncTimer = undefined;
+    syncQueued = false;
     pendingSync = "";
     activeChat = chatId;
     current = null;
@@ -7168,6 +7204,11 @@ function setup(ctx) {
   return () => {
     disposed = true;
     epoch++;
+    clearTimeout(syncTimer);
+    syncTimer = undefined;
+    pendingSync = "";
+    syncQueued = false;
+    streaming.clear();
     for (const r of setupRequests.values()) {
       clearTimeout(r.timer);
       r.reject(Error("Phone closed."));

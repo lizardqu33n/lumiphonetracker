@@ -1091,52 +1091,61 @@ class SetupWizard {
     if (p.running || p.data)
       throw new SetupError("This setup has already run. Review its preview or start again.");
     p.running = true;
-    const currentDoc = await this.current(p), source = await setupSources(this.api, chat, user);
-    if (source.text !== p.source)
-      throw new SetupError("Sources changed. Review setup again.");
-    const chosen = setupConnection(currentDoc, await this.api.connections.list(user));
-    if (chosen.id !== p.connection || chosen.model !== p.model)
-      throw new SetupError("Connection changed. Review setup again.");
-    await this.current(p);
-    const controller = new AbortController;
-    let timer;
-    const request = { type: "raw", connection_id: p.connection, model: p.model, userId: user, messages: p.messages, parameters: { max_tokens: 2000 }, signal: controller.signal };
-    let stage = "request";
     try {
-      const content = await Promise.race([checkedModelReply(() => this.api.generate.raw(request)), new Promise((_, reject) => {
-        timer = setTimeout(() => {
-          controller.abort();
-          reject(new SetupError("The request timed out. Try again. Nothing was saved.", "timeout"));
-        }, 90000);
-      })]);
-      stage = "state";
-      const doc = await this.current(p);
-      stage = "validation";
-      const data = validateSetup(content, p.source, p.fields, doc.settings.fakeAddresses);
-      for (const c of data.contacts)
-        if (normalize(c.name) === normalize(p.names[1] ?? "")) {
-          delete c.roles;
-          delete c.mood;
-          delete c.thoughts;
+      const currentDoc = await this.current(p), source = await setupSources(this.api, chat, user);
+      if (source.text !== p.source)
+        throw new SetupError("Sources changed. Review setup again.");
+      const chosen = setupConnection(currentDoc, await this.api.connections.list(user));
+      if (chosen.id !== p.connection || chosen.model !== p.model)
+        throw new SetupError("Connection changed. Review setup again.");
+      await this.current(p);
+      const controller = new AbortController;
+      let timer;
+      const request = { type: "raw", connection_id: p.connection, model: p.model, userId: user, messages: p.messages, parameters: { max_tokens: 2000 }, signal: controller.signal };
+      let stage = "request";
+      try {
+        const content = await Promise.race([checkedModelReply(() => this.api.generate.raw(request)), new Promise((_, reject) => {
+          timer = setTimeout(() => {
+            controller.abort();
+            reject(new SetupError("The request timed out. Try again. Nothing was saved.", "timeout"));
+          }, 90000);
+        })]);
+        stage = "state";
+        const doc = await this.current(p);
+        stage = "validation";
+        const data = validateSetup(content, p.source, p.fields, doc.settings.fakeAddresses);
+        for (const c of data.contacts)
+          if (normalize(c.name) === normalize(p.names[1] ?? "")) {
+            delete c.roles;
+            delete c.mood;
+            delete c.thoughts;
+          }
+        const filtered = setupCandidates(doc, { ...data, contacts: [] });
+        p.data = withFakeAddresses(doc, { ...filtered, contacts: setupReview(doc, data.contacts) }, p.fields);
+        return { id, data: p.data };
+      } catch (error) {
+        if (error instanceof ModelCallError)
+          throw new SetupError(`${error.message} Nothing was saved.`, error.category);
+        if (error instanceof SetupError) {
+          if (!error.category)
+            throw new SetupError(error.message, error.message.startsWith("Setup returned invalid") ? "invalid output" : "validation rejected");
+          throw error;
         }
-      const filtered = setupCandidates(doc, { ...data, contacts: [] });
-      p.data = withFakeAddresses(doc, { ...filtered, contacts: setupReview(doc, data.contacts) }, p.fields);
-      return { id, data: p.data };
-    } catch (error) {
-      if (error instanceof ModelCallError)
-        throw new SetupError(`${error.message} Nothing was saved.`, error.category);
-      if (error instanceof SetupError) {
-        if (!error.category)
-          throw new SetupError(error.message, error.message.startsWith("Setup returned invalid") ? "invalid output" : "validation rejected");
-        throw error;
+        if (stage === "state")
+          throw new SetupError("Setup failed: Chat could not be rechecked. Nothing was saved.", "state unavailable");
+        const category = failureCategory(error, stage === "validation" ? "validation rejected" : "provider error");
+        throw new SetupError(`Setup failed: ${failureLabel(category)}. Nothing was saved.`, category);
+      } finally {
+        if (timer)
+          clearTimeout(timer);
       }
-      if (stage === "state")
-        throw new SetupError("Setup failed: Chat could not be rechecked. Nothing was saved.", "state unavailable");
-      const category = failureCategory(error, stage === "validation" ? "validation rejected" : "provider error");
-      throw new SetupError(`Setup failed: ${failureLabel(category)}. Nothing was saved.`, category);
-    } finally {
-      if (timer)
-        clearTimeout(timer);
+    } catch (error) {
+      p.source = "";
+      p.messages = [];
+      p.names = [];
+      p.fields = [];
+      p.data = undefined;
+      throw error;
     }
   }
   async save(user, chat, id, decisions) {
@@ -2884,7 +2893,7 @@ class HelperAI {
   ended(userId, payload) {
     if (!payload.chatId || payload.chatId.length > 256 || !payload.generationId || payload.generationId.length > 900)
       return;
-    this.active.get(payload.chatId)?.delete(payload.generationId);
+    this.finishActive(payload.chatId, payload.generationId);
     if (!userId && !payload.error && payload.messageId && typeof payload.content === "string")
       this.failure("", payload.chatId, "permission missing");
     if (userId && !payload.error && payload.messageId && typeof payload.content === "string") {
@@ -2900,8 +2909,14 @@ class HelperAI {
     }
     this.drain(payload.chatId);
   }
+  finishActive(chatId, id) {
+    const ids = this.active.get(chatId);
+    ids?.delete(id);
+    if (!ids?.size)
+      this.active.delete(chatId);
+  }
   stopped(chatId, id) {
-    this.active.get(chatId)?.delete(id);
+    this.finishActive(chatId, id);
     this.drain(chatId);
   }
   cancel(chatId) {

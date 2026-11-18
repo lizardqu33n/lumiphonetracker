@@ -51,3 +51,34 @@ test("a stopped setup reply cannot create a preview or save a valid-looking part
   await expect(f.wizard.run("u","a",plan.id)).rejects.toThrow("already run");
   expect(f.docs).toEqual(before);expect(requests).toBe(1);
 });
+
+test("failed setup releases source and request data without making a spent ticket runnable",async()=>{
+  const f=fixture();
+  f.api.generate.raw=async()=>{throw Error("429 rate limited");};
+  for(let i=0;i<20;i++){
+    const plan=await f.wizard.prepare("u","a",["contacts.phone"]) as any;
+    const before=new Map(f.docs);
+    await expect(f.wizard.run("u","a",plan.id)).rejects.toThrow("Nothing was saved");
+    const retained=(f.wizard as any).plans.get(plan.id);
+    expect(retained.source).toBe("");expect(retained.messages).toEqual([]);
+    expect(retained.names).toEqual([]);expect(retained.fields).toEqual([]);
+    await expect(f.wizard.run("u","a",plan.id)).rejects.toThrow("already run");
+    expect(f.docs).toEqual(before);
+  }
+});
+test("preflight setup failure releases payload but a concurrent duplicate cannot clear a running request",async()=>{
+  const f=fixture();
+  const bad=await f.wizard.prepare("u","a",["contacts.phone"]) as any;
+  f.setSource("Changed source.");
+  await expect(f.wizard.run("u","a",bad.id)).rejects.toThrow("Sources changed");
+  expect((f.wizard as any).plans.get(bad.id).messages).toEqual([]);
+  f.setSource(description);
+  f.setResponse(JSON.stringify({contacts:[{name:"Bea",phone:"555123",quote:description}]}));
+  const plan=await f.wizard.prepare("u","a",["contacts.phone"]) as any;
+  let release!:()=>void;f.setGate(new Promise<void>(resolve=>{release=resolve;}));
+  const running=f.wizard.run("u","a",plan.id);
+  for(let i=0;i<100&&!f.generated.length;i++)await Bun.sleep(1);
+  await expect(f.wizard.run("u","a",plan.id)).rejects.toThrow("already run");
+  expect((f.wizard as any).plans.get(plan.id).messages.length).toBe(2);
+  release();await running;
+});

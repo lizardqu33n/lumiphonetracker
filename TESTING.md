@@ -1,4 +1,17 @@
-# Verification report - 0.18.11
+# Verification report - 0.18.12
+
+Checked November 18, 2026. 272 code tests (2,241 assertions), 23 focused browser checks, type checking and reproducible build/package validation passed.
+
+- Reproduced the cleanup defects against the previously published HelperAI and SetupWizard source. The new generation-map and failed-setup-payload tests fail before the patch and pass after it.
+- A thousand failed/stopped generation cycles across distinct chats leave zero active sets, queues, draining tasks or running model calls. Main AI makes no provider request in this test.
+- Browser stress sends a thousand Main AI generation completion notifications with an error field while delaying the host reply. Only one or two sync requests are dispatched. The previous frontend dispatched one for each event. This verifies bounded outstanding refresh work under the tested response timing, rather than measuring heap bytes.
+- Chat switching rejects old snapshots. Restarting during a pending refresh retains one listener per generation event. Failure cleanup does not make spent setup tickets runnable, clear a different running request or save story data on failure.
+- Frontend request maps have timeouts and disposal cleanup. Store serial queues clean up after completion. The existing helper provider timer and abort listener use finally cleanup. Spent setup metadata, preview plans and automatic-attempt journals remain for their existing deduplication/preview behavior. No old story data or attempt history was purged.
+
+No real Lumiverse browser/server heap was profiled. These confirmed retention and refresh-backlog issues may contribute to memory growth but do not establish the cause of the reported normal Main AI symptom. A provider or host that ignores cancellation, host events that never arrive, the native model connection and server memory behavior remain unverified. Previously documented full-suite UI limitations remain.
+
+## 0.18.11 - Font roles
+
 
 269 code tests and 20 focused browser checks passed with type checking and reproducible builds/package validation. All four Google Fonts are explicitly loaded and checked through document.fonts. Computed font checks cover phone titles, App Store labels and sidebar body text. App tile geometry verifies centered actions below the artwork and names. Reviewed phone and sidebar captures. Prior full-suite limitations remain documented below. A real Lumiverse install and mobile device were not used.
 
