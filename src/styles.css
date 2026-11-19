@@ -2084,3 +2084,7 @@
 .lpt-thread-name,.lpt-contact-list-title,.lpt-emoji-title {font-family:var(--lpt-heading-font);font-weight:400;}
 .lpt-root .lpt-weather-temperature {font-family:var(--lpt-font);}
 .lpt-email-unread,.lpt-text-sender,.lpt-status {font-family:var(--lpt-ui-font);}
+
+/* Per-chat tracking switch, separate from App Store membership. */
+.lpt-root .lpt-chat-toggle { margin:0 0 var(--lpt-space); max-width:100%; }
+.lpt-root .lpt-chat-off { margin:0; }

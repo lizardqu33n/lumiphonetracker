@@ -9,7 +9,7 @@ import { formatMacro } from "../src/phone-macros";
 const row=(id:number,content="Rain falls. Ada stands at the Station."):StoryRow=>({id:`m${id}`,chat_id:"a",index_in_chat:id,role:"assistant",swipe_id:0,content});
 function fixture(timeoutMs=90000) {
   const saved=new Map<string,string>();const rows=new Map<string,StoryRow[]>([["a",[row(0)]],["b",[{...row(0,"Other story."),chat_id:"b"}]]]);
-  const io:PhoneIO={authorize:async(c,u)=>u===`owner-${c}`,read:async c=>saved.get(c)??"",write:async(c,s)=>{saved.set(c,s);},history:async c=>structuredClone(rows.get(c)??[]),player:async()=>"Player"};
+  const io:PhoneIO={authorize:async(c,u)=>u===`owner-${c}`,read:async c=>saved.get(c)??JSON.stringify(emptyDocument(c)),write:async(c,s)=>{saved.set(c,s);},history:async c=>structuredClone(rows.get(c)??[]),player:async()=>"Player"};
   const store=new PhoneStore(io);const calls:Parameters<HelperIO["generate"]>[0][]=[];const logs:string[]=[];const changes:string[]=[];
   let profiles=[{id:"small",name:"Small saved connection",model:"chosen-small-model"}];let allowed=true;let output='weather: Rain';let responder:HelperIO["generate"]|null=null;
   const helperIO:HelperIO={allowed:()=>allowed,connections:async()=>structuredClone(profiles),generate:async input=>{if(!input.model?.trim())throw Error("Provider rejected request: model is required");calls.push(input);return responder?responder(input):{content:output,finish_reason:"stop"};},changed:(_,c)=>{changes.push(c);},warn:s=>logs.push(s)};

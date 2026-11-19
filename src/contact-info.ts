@@ -11,11 +11,11 @@ export function readContactInfo(value:unknown,name:string):ContactInfo {
 }
 export const phoneKey=(s:string)=>s.replace(/[ ()\-.]/g,"").trim();
 export const addressKey=(s:string)=>s.trim().toLocaleLowerCase("en-US");
-export function contactMatch(doc:Pick<Document,"contactInfo"> & Partial<Pick<Document,"edits">>,value:string,mode:"phone"|"email"="phone"):string|undefined {
+export function contactMatch(doc:Pick<Document,"contactInfo"> & Partial<Pick<Document,"edits">> & {contactRenames?:Pick<Document["edits"][number],"target"|"name"|"rename">[]},value:string,mode:"phone"|"email"="phone"):string|undefined {
  const key=mode==="phone"?phoneKey(value):addressKey(value);if(!key)return;
  const matches=Object.values(doc.contactInfo??{}).filter(c=>{const addresses=[c[mode],...(mode==="phone"?c.alternatePhones??[]:c.alternateEmails??[])];return addresses.some(address=>!!address&&(mode==="phone"?phoneKey(address):addressKey(address))===key);});
  if(matches.length===1)return matches[0].name;if(matches.length>1)return; // Never choose between duplicate addresses.
- let name=value;for(const e of doc.edits??[])if(e.target==="contact"&&e.rename&&normalize(e.name??"")===normalize(name))name=e.rename;
+ let name=value;for(const e of doc.contactRenames??doc.edits??[])if(e.target==="contact"&&e.rename&&normalize(e.name??"")===normalize(name))name=e.rename;
  return Object.values(doc.contactInfo??{}).find(c=>normalize(c.name)===normalize(name)||(c.aliases??[]).some(n=>normalize(n)===normalize(name)))?.name;
 }
 export function contactDuplicates(info:Record<string,ContactInfo>):boolean {

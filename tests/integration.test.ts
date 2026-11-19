@@ -23,7 +23,7 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
   const fake = {
     registerMacro: (definition: {name:string;handler:(ctx:Record<string,unknown>)=>Promise<string>}) => { macros.set(definition.name,definition.handler); },
     variables: { chat: {
-      get: async (chat: string, key: string) => { if(failReads)throw new Error("PRIVATE story/field value"); return String(persisted.get(`${chat}/${key}`) ?? ""); },
+      get: async (chat: string, key: string) => { if(failReads)throw new Error("PRIVATE story/field value"); return String(persisted.get(`${chat}/${key}`) ?? JSON.stringify(emptyDocument(chat))); },
       set: async (chat: string, key: string, value: string) => { persisted.set(`${chat}/${key}`, value); },
     } },
     macros: { resolve: async (_text:string, options?:{userId?:string;commit?:boolean}) => { scoped(options?.userId,"macros.resolve"); expect(options?.commit).toBe(false); return { text: "Player", diagnostics: [] }; } },
@@ -237,6 +237,17 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     expect(((await request({type:"phone_setup_choices",chatId:"a"},"u")).result as any).choices).toEqual([]);
     expect(((await request({type:"phone_setup_choices",chatId:"shared"},"u")).result as any).choices).toEqual(["contacts.roles"]);
     const callCount=calls.length;receive({type:"phone_personal",requestId:"spoof",userId:"u",chatId:"a"},undefined as never);await Bun.sleep(5);expect(calls.length).toBe(callCount);
+    const enabledBefore=await request({type:"phone_sync",chatId:"a"},"u");
+    const off=await request({type:"phone_update",chatId:"a",revision:(enabledBefore.snapshot as any).revision,trackingEnabled:false},"u");
+    expect((off.snapshot as any).trackingEnabled).toBe(false);
+    expect(await nativePull("a","u")).toBe("");
+    expect(await interceptor!(input,{chatId:"a",userId:"u"} as never)).toBe(input);
+    expect(await processor!({...base,origin:"render"})).toEqual({content:"Story"});
+    const modelBefore=generations.length;
+    const on=await request({type:"phone_update",chatId:"a",revision:(off.snapshot as any).revision,trackingEnabled:true},"u");
+    expect((on.snapshot as any).trackingEnabled).toBe(true);
+    expect(generations.length).toBe(modelBefore);
+    expect(await nativePull("a","u")).not.toBe("");
   } finally { (globalThis as unknown as { spindle?: unknown }).spindle = prior; }
 });
 

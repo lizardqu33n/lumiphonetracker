@@ -56,4 +56,4 @@ export class PersonalStore {
  });}
 }
 
-export interface PersonalReply {personal:PersonalSettings;templates:Record<WordingTarget,string>;preview?:{text:string;characters:number;tokenEstimate:number;warning:string};snapshot?:import("./model").Document}
+export interface PersonalReply {personal:PersonalSettings;templates:Record<WordingTarget,string>;preview?:{text:string;characters:number;tokenEstimate:number;warning:string};snapshot?:import("./ui-snapshot").PhoneSnapshot}

@@ -33,7 +33,7 @@ test("avatar calls use trusted userId and optional grants; same-chat persona dat
  grants=new Set(["images","personas"]);expect((await loadPortraitSources(api as never,"shared","u","Wrong name")).persona).toBeUndefined();
 });
 test("custom portraits are authorized shared chat data; survive rebuild, rename, removal and cannot enter AI output",async()=>{
- let disk="";const history=[row(0,'<phone-state>present: Ada\nc: Ada | roles=Friend</phone-state>')];
+ let disk=JSON.stringify(emptyDocument("c"));const history=[row(0,'<phone-state>present: Ada\nc: Ada | roles=Friend</phone-state>')];
  const io={authorize:async(c:string,u:string)=>c==="c"&&["u","v"].includes(u),read:async()=>disk,write:async(c:string,v:string)=>{disk=v;},history:async()=>history,player:async()=>"Player"};const store=new PhoneStore(io);
  let d=await store.sync("u","c");const beforeFormat=formatMacro(d);d=await store.update("u","c",d.revision,{portrait:{name:"Ada",data:png}});d=await new PhoneStore(io).sync("v","c");expect(d.portraits?.ada).toBe(png);expect(formatMacro(d)).toBe(beforeFormat);
  expect(formatMacro(d)).not.toContain("base64");expect(JSON.stringify(helperInput({doc:d,recent:history,history:""}))).not.toContain("base64");

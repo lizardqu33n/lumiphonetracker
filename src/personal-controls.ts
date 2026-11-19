@@ -1,5 +1,5 @@
 import {emptyPersonal,builtInPresets,readPersonal,validWording,SYNTAX_TOKEN,type PersonalReply,type WordingTarget} from "./personal-settings";
-import type {Document} from "./model";
+import type {PhoneSnapshot as Document} from "./ui-snapshot";
 const el=<K extends keyof HTMLElementTagNameMap>(tag:K,cls:string,text?:string)=>{const n=document.createElement(tag);n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 export class PersonalControls {
  readonly presets=el("div","lpt-personal-presets");readonly wording=el("details","lpt-wording");

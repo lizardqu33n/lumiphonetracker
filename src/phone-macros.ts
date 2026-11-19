@@ -23,6 +23,7 @@ const fieldStatus=(doc:Document,r:FieldRef)=>doc.fieldLocks?.[fieldKey(r)]?" [lo
 const recordStatus=(doc:Document,ref:Omit<FieldRef,"field">,fields:string[])=>{const locked=fields.filter(field=>doc.fieldLocks?.[fieldKey({...ref,field})]),edited=fields.filter(field=>!locked.includes(field)&&doc.state.userVersions?.[fieldKey({...ref,field})]);return (locked.length?` [locked: ${locked.join("/")}]`:"")+(edited.length?` [user-edited: ${edited.join("/")}]`:"");};
 function presentNames(doc: Document): string[] { const v = doc.state.scene.present?.value; return Array.isArray(v) ? v : []; }
 export function sceneMacro(doc: Document): string {
+  if(doc.trackingEnabled===false)return "";
   const contactsOn=doc.settings.apps.Contacts&&doc.settings.enabled["scene.present"];
   doc=effectiveDocument(doc);
   const lines: string[] = [];
@@ -38,6 +39,7 @@ export function sceneMacro(doc: Document): string {
   return lines.join("\n");
 }
 export function locationsMacro(doc: Document): string {
+  if(doc.trackingEnabled===false)return "";
   doc=effectiveDocument(doc);
   if (!doc.settings.enabled.locations) return "";
   const v = doc.state.scene.location?.value; const current = v && typeof v === "object" && "name" in v ? v.name : "";
@@ -51,6 +53,7 @@ export function locationsMacro(doc: Document): string {
   return result.join("\n");
 }
 export function notesMacro(doc: Document): string {
+  if(doc.trackingEnabled===false)return "";
   doc=effectiveDocument(doc);
   const result: string[] = [];
   for (const section of ["rules", "plots", "people", "items", "misc"] as const) {
@@ -64,17 +67,20 @@ export function notesMacro(doc: Document): string {
   return result.join("\n");
 }
 export function messagesMacro(doc: Document): string {
+  if(doc.trackingEnabled===false)return "";
   doc=effectiveDocument(doc);
   if (!doc.settings.enabled.messages) return "";
   return doc.state.messages.slice(-6).map(m => `${m.direction === "outgoing" ? "Sent" : "Received"}: ${clip(m.from, 60)}${m.group?` [${clip(m.group,60)}]`:""}${m.to ? ` → ${clip(m.to, 60)}` : ""}${m.time ? ` (${clip(m.time, 40)})` : ""}: ${clip(m.text)}`).join("\n");
 }
 export function activitiesMacro(name:"phone_calls"|"phone_email"|"phone_bank",doc:Document):string {
+  if(doc.trackingEnabled===false)return "";
  doc=effectiveDocument(doc);const enabled=doc.settings.enabled;
  if(name==="phone_calls")return enabled.calls?doc.state.calls.slice(-3).map(c=>`${clip(c.name,60)} | ${c.direction}${c.time?` | ${clip(c.time,60)}`:""}${(c.count??1)>1?` | x${c.count}`:""}`).join("\n"):"";
  if(name==="phone_email")return enabled.email&&doc.personalReads?.available!==false?doc.state.emails.filter(e=>e.direction==="incoming"&&activityUnread(e,doc.personalReads?.seen??{})).slice(-3).map(e=>`${clip(e.from,60)} | ${clip(e.subject,120)}`).join("\n"):"";
  return [...(enabled["bank.balance"]?doc.state.bank.map(b=>`${clip(b.name,60)} | last stated ${clip(b.balance,80)}${b.time?` | as of ${clip(b.time,60)}`:""}${b.by==="user"?" [edited by you]":""}${recordStatus(doc,{target:"bank",name:b.name},["balance","time"])}`):[]),...(enabled["bank.transactions"]?doc.state.transactions.slice(-2).map(t=>`${clip(t.description,80)} | ${clip(t.amount,60)}${t.time?` | ${clip(t.time,40)}`:""}`):[])].join("\n");
 }
 function weatherMacro(doc:Document):string {
+  if(doc.trackingEnabled===false)return "";
   const condition=doc.settings.enabled.weather&&doc.state.weather?cellText(doc.state.weather)+fieldStatus(doc,{target:"weather",field:"weather"}):"";
   const extra=WEATHER_DETAILS.flatMap(field=>{
     const cell=doc.state.weatherDetails?.[field];
@@ -86,6 +92,7 @@ function weatherMacro(doc:Document):string {
 }
 /** One shared shorthand contract for Main AI and Helper AI. */
 export function trackerInstructions(doc: Document, helper=false): string[] {
+  if(doc.trackingEnabled===false)return [];
   doc=effectiveDocument(doc);
   const s=doc.settings;const lines=[
     helper?"Return only <phone-state>changed lines</phone-state>; empty=no change.":"End each reply with <phone-state>changed lines</phone-state>; empty=no change.",
@@ -126,6 +133,7 @@ export function trackerInstructions(doc: Document, helper=false): string[] {
   return lines;
 }
 export function formatMacro(doc: Document, wording?:string, warn:(s:string)=>void=()=>{}): string {
+  if(doc.trackingEnabled===false)return "";
   const scene=sceneMacro(doc);
   doc=effectiveDocument(doc);
   const s=doc.settings;
@@ -147,6 +155,7 @@ export function formatMacro(doc: Document, wording?:string, warn:(s:string)=>voi
   return [...continuity,composeWording(doc,"main",lines,wording,warn).text].filter(Boolean).join("\n");
 }
 export function renderMacro(name: PhoneMacro, doc: Document, wording?:string, warn:(s:string)=>void=()=>{}): string {
+  if(doc.trackingEnabled===false)return "";
   if(name==="phone_scene")return sceneMacro(doc);
   if(name==="phone_format")return formatMacro(doc,wording,warn);
   doc=effectiveDocument(doc);
@@ -158,7 +167,7 @@ export function renderMacro(name: PhoneMacro, doc: Document, wording?:string, wa
   return formatMacro(doc,wording,warn);
 }
 export function defaultWordingTemplate(doc:Document, helper=false):string {
- const all=structuredClone(doc);all.settings.source="main";all.state.scene={};all.state.weather=undefined;all.state.weatherDetails=undefined;all.state.contacts=[];all.state.locations=[];all.state.messages=[];all.state.calls=[];all.state.emails=[];all.state.bank=[];all.state.transactions=[];for(const key of SECTIONS)all.state.notes[key]=[];
+ const all=structuredClone(doc);all.trackingEnabled=true;all.settings.source="main";all.state.scene={};all.state.weather=undefined;all.state.weatherDetails=undefined;all.state.contacts=[];all.state.locations=[];all.state.messages=[];all.state.calls=[];all.state.emails=[];all.state.bank=[];all.state.transactions=[];for(const key of SECTIONS)all.state.notes[key]=[];
  for(const key of Object.keys(all.settings.apps))all.settings.apps[key as keyof typeof all.settings.apps]=true;
  for(const key of Object.keys(all.settings.enabled))all.settings.enabled[key]=true;
  return templateFromLines(helper?trackerInstructions(all,true):formatMacro(all).split("\n"));
@@ -177,6 +186,7 @@ async function resolvePhoneMacro(api: SpindleAPI, load: PhoneLoader, name: Phone
       warning(api,name,"extension setting"); return "";
     }
     const doc = await load(chatId,userId);
+    if(doc.trackingEnabled===false)return "";
     let custom:string|undefined;try{if(name==="phone_format")custom=await wording?.(userId);}catch{try{api.log.warn("Lumi Phone Tracker: prompt wording unavailable; using Default.");}catch{}}
     const text = renderMacro(name,doc,custom,s=>{try{api.log.warn(s);}catch{}});
     if (!text && name === "phone_format") warning(api,name,doc.settings.source === "helper" ? "Helper AI mode" : "all items off");

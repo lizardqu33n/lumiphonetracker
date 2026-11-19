@@ -8,7 +8,7 @@ import {scanTags,transformTags} from "../src/tags";
 const row=(content:string,swipe=0):StoryRow=>({id:"m",chat_id:"a",index_in_chat:0,role:"assistant",content,swipe_id:swipe});
 function fixture(){
  let rows=[row("The scene is at Gate.<phone-state>loc: Gate</phone-state>")];
- let raw="";let player="Player";let names=["Ada"];
+ let raw=JSON.stringify(emptyDocument("a"));let player="Player";let names=["Ada"];
  const store=new PhoneStore({authorize:async(c,u)=>c==="a"&&["u","v"].includes(u),read:async()=>raw,write:async(_,value)=>{raw=value;},history:async()=>structuredClone(rows),player:async(_c,u)=>u==="v"?"Other player":player,names:async()=>names as any});
  return {store,rows:()=>rows,setRows:(value:StoryRow[])=>{rows=value;},setRaw:(value:string)=>{raw=value;},setPlayer:(value:string)=>{player=value;},setNames:(value:any[])=>{names=value;}};
 }

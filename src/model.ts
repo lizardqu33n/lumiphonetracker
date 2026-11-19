@@ -64,6 +64,7 @@ export interface ManualEdit {
 }
 export interface Accepted { bankProof?:BankData[];at: Origin; patch: Patch; emails?:EmailData[]; texts: TextData[]; role: "user" | "assistant"; name?: string; prose: string }
 export interface Document {
+  trackingEnabled?:boolean; // Missing on existing chats means enabled; fresh stores opt in explicitly.
   fieldLocks?:Record<string,boolean>;userEditAdmissions?:string[];
   contactMerges?:Record<string,{from:string;into:string;after:string|null;index:number}>;
   mergeArchive?:unknown[];
@@ -123,7 +124,7 @@ export function readSettings(input: unknown): Settings {
   if(input.apps===undefined)for(const app of CORE_APPS)out.apps[app]=app==="Weather"&&typeof out.enabled.weather==="boolean"&&isRecord(input.enabled)&&input.enabled["weather.temperature"]===undefined?out.enabled.weather:APP_FIELDS[app].some(k=>out.enabled[k]);
   return out;
 }
-export function effectiveDocument(doc:Document):Document {
+export function effectiveDocument<T extends {settings:Settings}>(doc:T):T {
   const enabled={...doc.settings.enabled};for(const app of ALL_APPS)if(!doc.settings.apps[app])for(const key of APP_FIELDS[app])enabled[key]=false;
   return {...doc,settings:{...doc.settings,enabled}};
 }

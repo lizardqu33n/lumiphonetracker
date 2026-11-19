@@ -50,7 +50,7 @@ export function fieldAllows(doc:Document,r:FieldRef,value:unknown,at:Origin,pros
  typeof value==="boolean"?/resolved|completed|fulfilled|done|reopened|pending/i.test(evidence):!!changed.length&&changed.every(v=>normalize(evidence).includes(normalize(v.includes("\u0001")?v.slice(v.indexOf("\u0001")+1):v)));
  if(accepted&&!doc.userEditAdmissions?.includes(admission))(doc.userEditAdmissions??=[]).push(admission);return accepted;
 }
-export function restorable(doc:Document,r:FieldRef):boolean {const own=doc.state.userVersions?.[fieldKey(r)];return !!own&&JSON.stringify(own.value)!==JSON.stringify(fieldValue(doc.state,r));}
+export function restorable(doc:Pick<Document,"state">,r:FieldRef):boolean {const own=doc.state.userVersions?.[fieldKey(r)];return !!own&&JSON.stringify(own.value)!==JSON.stringify(fieldValue(doc.state,r));}
 export function restoreEdit(doc:Document,r:FieldRef,useCurrent=false):Partial<ManualEdit>{
  const own=useCurrent?{value:fieldValue(doc.state,r)}:doc.state.userVersions?.[fieldKey(r)];if(!own||own.value===undefined)throw Error("No saved value for this field.");
  const value=own.value;

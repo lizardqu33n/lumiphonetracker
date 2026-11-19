@@ -1,5 +1,10 @@
 # Install Lumi Phone Tracker
 
+## Turn tracking on for a chat
+
+New chats start off. Open the phone and choose **Turn on for this chat** on Home. Existing tracked chats stay on. **Turn off for this chat** keeps all saved data and settings, stops tracker macros and automatic extraction, and disables Refresh/setup. This choice is shared by everyone in the chat. Turning back on rebuilds from saved messages without making a model request; saved tags from while it was off can be included. Appearance and Reset still work. Keep the preset line `{{phone_format}}`; it returns nothing while off. Old tags stay hidden visually; prompt processing passes through unchanged while off.
+
+
 Version 0.17.1 includes the built files. You do not need to build or upload anything yourself.
 
 ## Install or update
@@ -262,3 +267,5 @@ limits, and [Contacts and setup](docs/PART-6.md) for source access details.
 For a failed setup or refresh request, read the message and use Copy if you need
 to share it. The displayed message can include the provider's explanation after
 credential and header filtering. A stopped or cut-off reply saves no tracker data.
+
+Refreshes now avoid rebuilding unchanged controls and keep internal history journals on the server. Connections load when you open their section (or need Custom connection validation); portraits load when you open Contacts or Messages. Your existing appearance and saved entries are unchanged.

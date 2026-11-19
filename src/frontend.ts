@@ -5,7 +5,7 @@ import {prepareSidebarCSS} from "./custom-css";
 import type {PersonalReply} from "./personal-settings";
 import {UI_ICONS,type UIIconName} from "./ui-icons";
 import type { SpindleFrontendContext } from "lumiverse-spindle-types";
-import type { Document as PhoneDocument } from "./model";
+import type { PhoneSnapshot as PhoneDocument } from "./ui-snapshot";
 import { EXTENSION_NAME, isRecord, TEXT_TAG, TRACKER_TAG } from "./shared";
 import { PhoneView } from "./phone-view";
 import { defaultPreferences, readPreferences, type Preferences } from "./preferences";
@@ -80,10 +80,14 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   };
   // These attach before any asynchronous UI initialization or DOM work.
   for (const tagName of [TRACKER_TAG, TEXT_TAG,"phone-email"]) disposers.push(ctx.messages.registerTagInterceptor({ tagName, removeFromMessage: true }, payload => {
-    if (disposed || payload.isStreaming !== false || !payload.chatId || !payload.messageId || payload.chatId !== activeChat) return;
+    if (disposed || payload.isStreaming !== false || !payload.chatId || !payload.messageId || payload.chatId !== activeChat || current?.trackingEnabled===false) return;
     if (payload.isUser === false || ([TEXT_TAG,"phone-email"].includes(tagName) && payload.isUser === true)) sendSync();
   }));
 
+  const requestPortraits=()=>{
+    if(disposed||!activeChat||!current||current.trackingEnabled===false||portraitChat===activeChat)return;
+    portraitChat=activeChat;portraitRequest=crypto.randomUUID();ctx.sendToBackend({type:"phone_portraits",requestId:portraitRequest,chatId:activeChat});
+  };
   const prefsChange = (change?: { css?: string; sidebarCss?:string; dismiss?: import("./preferences").App|"Home"|"Draft hint" }): Promise<Preferences> => {
     const requestId = crypto.randomUUID();
     if (change?.css !== undefined||change?.sidebarCss!==undefined) { appearanceEpoch++; preferences = { ...preferences, ...(change.css!==undefined?{css:change.css}:{}),...(change.sidebarCss!==undefined?{sidebarCss:change.sidebarCss}:{}) }; }
@@ -160,7 +164,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   };
   const decorate=(button:HTMLButtonElement,name:UIIconName,label:string,short:string)=>{button.classList.add("lpt-toolbar-button");button.setAttribute("aria-label",label);button.replaceChildren();const image=document.createElement("img");image.className="lpt-toolbar-icon";image.src=UI_ICONS[name];image.alt="";image.setAttribute("aria-hidden","true");image.draggable=false;const caption=document.createElement("span");caption.className="lpt-toolbar-label";caption.textContent=short;const tooltip=document.createElement("span");tooltip.className="lpt-toolbar-tooltip";tooltip.id=`lpt-tip-${crypto.randomUUID()}`;tooltip.setAttribute("role","tooltip");tooltip.textContent=label;button.setAttribute("aria-describedby",tooltip.id);button.append(image,caption,tooltip);return tooltip;};
   decorate(open,"open-phone","Open phone","Open");const refreshTooltip=decorate(refreshButton,"refresh","Refresh tracker","Refresh");decorate(resetButton,"reset","Reset appearance","Reset");
-  const updateBusy=()=>{refreshButton.disabled=!activeChat||!current||busy()||refreshPending;refreshTooltip.textContent=current?.settings.source==="helper"?"Refresh tracker. Requests may cost money depending on the model chosen.":"Refresh tracker. Main AI makes no model request.";};
+  const updateBusy=()=>{refreshButton.disabled=!activeChat||!current||current.trackingEnabled===false||busy()||refreshPending;refreshTooltip.textContent=current?.settings.source==="helper"?"Refresh tracker. Requests may cost money depending on the model chosen.":"Refresh tracker. Main AI makes no model request.";};
   refreshButton.addEventListener("click",()=>{
     const origin=epoch;
     portraitChat=null;
@@ -216,9 +220,9 @@ export function setup(ctx: SpindleFrontendContext): () => void {
       const base = document.createElement("style"); base.textContent = css;
       const custom = document.createElement("style"); shadow.append(base, custom);
       viewport.append(island); transport.append(viewport); widget.root.append(placementStyle, transport);
-      view = new PhoneView(shadow, custom, { update, preferences: prefsChange, markRead,
+      view = new PhoneView(shadow, custom, { update, portraits:requestPortraits, preferences: prefsChange, markRead,
         draft: (chatId, to, text,group) => {
-          if (disposed || activeChat !== chatId || current?.chatId !== chatId || (!current.settings.apps.Messages||!current.settings.enabled.messages)) throw new Error("The chat changed. Reopen the original conversation.");
+          if (disposed || activeChat !== chatId || current?.chatId !== chatId || current.trackingEnabled===false || (!current.settings.apps.Messages||!current.settings.enabled.messages)) throw new Error("The chat changed. Reopen the original conversation.");
           return addReplyDraft(ctx, chatId, current.currentPlayer ?? "", to, text,group);
         }, size: (width, height) => {
         if (!widget || disposed) return;
@@ -256,7 +260,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
 
     if (disposed || !isRecord(payload)) return;
     if(payload.type==="phone_model_failure"){if(activeChat&&payload.chatId===activeChat)showModelError(typeof payload.message==="string"?safeModelMessage(payload.message):"");return;}
-    if(payload.type==="phone_helper_changed") { if(activeChat && payload.chatId===activeChat)sendSync();return; }
+    if(payload.type==="phone_helper_changed") { if(activeChat && payload.chatId===activeChat && current?.trackingEnabled!==false)sendSync();return; }
     if(typeof payload.requestId!=="string")return;
     const sr=setupRequests.get(payload.requestId);if(sr&&["phone_setup_result","phone_setup_error"].includes(String(payload.type))){clearTimeout(sr.timer);setupRequests.delete(payload.requestId);if(sr.epoch!==epoch||sr.chat!==activeChat||payload.chatId!==activeChat){sr.reject(Error("The chat changed. Reopen setup in the original chat."));return;}if(payload.type==="phone_setup_error"){sr.reject(Error(typeof payload.message==="string"?payload.message:"Setup failed. Nothing was saved."));return;}if(!isRecord(payload.result)){sr.reject(Error("Invalid setup response."));return;}if(isRecord(payload.result.snapshot)&&payload.result.snapshot.chatId===activeChat){current=payload.result.snapshot as unknown as PhoneDocument;sidebar?.receive(current,chatName);view?.receive(current,reads);}sr.resolve(payload.result);return;}
     const pr=personalRequests.get(payload.requestId);
@@ -314,7 +318,6 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     try { const value = readState(payload.reads); if (value.revision >= reads.revision) reads = value; } catch { /* Keep known read state. */ }
     chatName=typeof payload.chatName==="string"?payload.chatName:"";sidebar?.receive(current,chatName);
     view?.receive(current, reads);
-    if(current&&portraitChat!==activeChat){portraitChat=activeChat;portraitRequest=crypto.randomUUID();ctx.sendToBackend({type:"phone_portraits",requestId:portraitRequest,chatId:activeChat});}
     backendBusy=payload.helperBusy===true;updateBusy();
   }));
   const switchChat = (chatId: string | null) => {
@@ -333,7 +336,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     const ids=streaming.get(payload.chatId)??new Set<string>();
     if(name==="GENERATION_STARTED")ids.add(payload.generationId);else ids.delete(payload.generationId);
     if(ids.size)streaming.set(payload.chatId,ids);else streaming.delete(payload.chatId);
-    if(payload.chatId===activeChat){updateBusy();if(name!=="GENERATION_STARTED")sendSync();}
+    if(payload.chatId===activeChat){updateBusy();if(name!=="GENERATION_STARTED"&&current?.trackingEnabled!==false)sendSync();}
   }));
   const fit = () => view?.fit(); window.addEventListener("resize", fit); window.visualViewport?.addEventListener("resize", fit);
   disposers.push(() => { window.removeEventListener("resize", fit); window.visualViewport?.removeEventListener("resize", fit); });

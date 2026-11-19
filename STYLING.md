@@ -1,5 +1,15 @@
 # Style your phone
 
+## Per-chat activation
+
+| Class | Purpose |
+| --- | --- |
+| `lpt-chat-toggle` | Home button to turn tracking on or off for this chat. Uses the existing button fonts/colors and gap variable. |
+| `lpt-chat-off` | Short off-state explanation. |
+
+No new color, font or size variables. Existing surfaces and protected sidebar controls are unchanged.
+
+
 Version 0.12.0 keeps the compact story views and adds the read-only story strip plus a protected icon toolbar and compact sidebar. Existing phone custom CSS still overrides the defaults.
 
 Version 0.10.1 bundles the supplied styles(1).css and sidebar.css as the default look: pastel tiles, plum outlines, heart markers and solid dark story surfaces. This default does not use the custom CSS character limit. Class names, navigation and tracker behavior are unchanged.

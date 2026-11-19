@@ -959,7 +959,7 @@ function contactMatch(doc, value, mode = "phone") {
   if (matches.length > 1)
     return;
   let name = value;
-  for (const e of doc.edits ?? [])
+  for (const e of doc.contactRenames ?? doc.edits ?? [])
     if (e.target === "contact" && e.rename && normalize(e.name ?? "") === normalize(name))
       name = e.rename;
   return Object.values(doc.contactInfo ?? {}).find((c) => normalize(c.name) === normalize(name) || (c.aliases ?? []).some((n) => normalize(n) === normalize(name)))?.name;
@@ -1400,6 +1400,8 @@ var isUnread = (m, reads) => m.direction === "incoming" && reads.seen[m.id] !== 
 var threadKey = (m) => m.group ? JSON.stringify(["group", normalize(m.group)]) : m.direction === "incoming" ? normalize(m.from) : m.to ? normalize(m.to) : "";
 function conversations(messages, reads) {
   const groups = new Map;
+  const lastIndex = new Map;
+  let index = 0;
   for (const m of messages) {
     const key = threadKey(m);
     const group = groups.get(key) ?? { key, name: m.group ?? (m.direction === "incoming" ? m.from : m.to ?? "Your texts"), ...m.group ? { group: true } : {}, messages: [], unread: 0 };
@@ -1407,8 +1409,9 @@ function conversations(messages, reads) {
     if (isUnread(m, reads))
       group.unread++;
     groups.set(key, group);
+    lastIndex.set(key, index++);
   }
-  return [...groups.values()].sort((a, b) => messages.lastIndexOf(b.messages.at(-1)) - messages.lastIndexOf(a.messages.at(-1)));
+  return [...groups.values()].sort((a, b) => lastIndex.get(b.key) - lastIndex.get(a.key));
 }
 var escape = (text) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");
 function replyTag(from, to, text, group) {
@@ -1548,6 +1551,8 @@ class PhoneView {
   prefs = defaultPreferences();
   app = "Home";
   openState = false;
+  renderDirty = true;
+  displayKey = "";
   editing = false;
   busy = false;
   observer;
@@ -1613,15 +1618,27 @@ class PhoneView {
     this.setOpen(false);
   }
   receive(doc, reads) {
+    const key = JSON.stringify([doc?.chatId, doc?.trackingEnabled, doc?.settings, doc?.state, doc?.fieldLocks, doc?.contactInfo, doc?.portraits, doc?.currentPlayer, doc?.playerNames]);
+    const displayChanged = key !== this.displayKey;
+    this.displayKey = key;
     const changedChat = doc?.chatId !== this.doc?.chatId;
+    if (!displayChanged) {
+      this.doc = doc;
+      if (reads && reads.revision > this.reads.revision)
+        this.receiveReads(reads);
+      return;
+    }
     const oldActivities = new Set([...this.doc?.state.calls ?? [], ...this.doc?.state.emails ?? []].map((e) => activityReceipt(e)));
     const previous = new Set(this.doc?.state.messages.filter((m) => m.direction === "incoming").map((m) => JSON.stringify([m.id, receipt(m)])) ?? []);
-    const arrived = !changedChat && this.doc && doc?.settings.apps.Messages && doc.settings.enabled.messages ? doc.state.messages.filter((m) => m.direction === "incoming" && !previous.has(JSON.stringify([m.id, receipt(m)]))) : [];
+    const arrived = doc?.trackingEnabled !== false && !changedChat && this.doc && doc?.settings.apps.Messages && doc.settings.enabled.messages ? doc.state.messages.filter((m) => m.direction === "incoming" && !previous.has(JSON.stringify([m.id, receipt(m)]))) : [];
     this.doc = doc;
+    if (doc?.trackingEnabled === false)
+      this.app = "Home";
     if (this.app !== "Home" && !doc?.settings.apps[this.app])
       this.app = "Home";
     if (changedChat) {
       this.modelError = "";
+      this.portraitValidation.clear();
       this.selectedContact = null;
       this.contactOrigin = "Contacts";
       this.contactScroll = 0;
@@ -1639,15 +1656,19 @@ class PhoneView {
       this.selectedText = null;
     } else if (reads && reads.revision >= this.reads.revision)
       this.reads = reads;
-    if (!doc?.settings.apps.Messages || !doc.settings.enabled.messages)
+    if (doc?.trackingEnabled === false || !doc?.settings.apps.Messages || !doc.settings.enabled.messages)
       this.clearTextNotice();
     else if (arrived.length)
       this.showTextNotice(arrived.length === 1 ? `New text from ${arrived[0].from}` : `${arrived.length} new texts`);
-    if (!this.editing || changedChat)
-      this.render();
-    else
+    if (displayChanged) {
+      this.renderDirty = true;
+      if (this.openState && (!this.editing || changedChat))
+        this.render();
+      else
+        this.refreshBadges();
+    } else if (reads)
       this.refreshBadges();
-    if (!changedChat && doc) {
+    if (!changedChat && doc && doc.trackingEnabled !== false) {
       const arrived = [...doc.state.calls.filter((c) => c.direction === "missed" && doc.settings.apps.Calls && doc.settings.enabled.calls), ...doc.state.emails.filter((e) => e.direction === "incoming" && doc.settings.apps.Email && doc.settings.enabled.email)].filter((e) => !oldActivities.has(activityReceipt(e)) && activityUnread(e, this.reads.seen));
       if (arrived.length)
         this.showTextNotice(arrived.length === 1 ? "subject" in arrived[0] ? `New email from ${arrived[0].from}` : `Missed call from ${arrived[0].name}` : `${arrived.length} new calls or emails`);
@@ -1697,9 +1718,11 @@ class PhoneView {
     if (chat !== this.chatEpoch || epoch !== this.portraitEpoch)
       return;
     this.portraitSources = sources;
-    if (!this.editing)
+    this.renderDirty = true;
+    if (this.openState && !this.editing)
       this.render();
   }
+  portraitValidation = new Map;
   portrait(name, player = false, group = false, custom) {
     const node = el("span", `lpt-portrait lpt-portrait-tone-${initialTone(name)}`);
     node.setAttribute("role", "img");
@@ -1709,7 +1732,12 @@ class PhoneView {
     const source = group ? undefined : portraitSource(name, custom ?? this.doc?.portraits ?? {}, this.portraitSources, player);
     if (source)
       try {
-        portraitBytes(source);
+        if (this.portraitValidation.get(name) !== source) {
+          portraitBytes(source);
+          if (this.portraitValidation.size >= 32)
+            this.portraitValidation.clear();
+          this.portraitValidation.set(name, source);
+        }
         const img = el("img", "lpt-portrait-image");
         img.alt = "";
         img.setAttribute("aria-hidden", "true");
@@ -1729,7 +1757,9 @@ class PhoneView {
   setModelError(message) {
     if (this.modelError !== message) {
       this.modelError = message;
-      this.render();
+      this.renderDirty = true;
+      if (this.openState)
+        this.render();
     }
   }
   setError(message) {
@@ -1769,10 +1799,15 @@ class PhoneView {
     clearTimeout(this.noticeTimer);
     this.chatEpoch++;
     this.observer.disconnect();
+    this.portraitValidation.clear();
     this.root.remove();
   }
   setOpen(open) {
     this.openState = open;
+    if (open && this.renderDirty)
+      this.render();
+    if (open && (this.app === "Contacts" || this.app === "Messages"))
+      this.actions.portraits?.();
     this.root.dataset.open = String(open);
     this.frame.hidden = !open;
     this.launcher.hidden = open;
@@ -1801,9 +1836,12 @@ class PhoneView {
     this.editing = false;
     this.render();
     this.content.scrollTop = 0;
+    if (app === "Contacts" || app === "Messages")
+      this.actions.portraits?.();
     this.markVisibleActivity();
   }
   render() {
+    this.renderDirty = false;
     if (this.app === "Contacts" && this.selectedContact === null && this.content.querySelector(".lpt-contact-row"))
       this.contactScroll = this.content.scrollTop;
     if (this.app === "Messages" && this.selectedText !== null && (!this.enabled("messages") || !this.doc || !this.doc.state.messages.some((m) => threadKey(m) === this.selectedText) && !this.doc.state.contacts.some((c) => normalize(c.name) === this.selectedText)))
@@ -1836,6 +1874,20 @@ class PhoneView {
       this.frame.insertBefore(this.storyStrip, header);
     this.back.hidden = this.app === "Home" || this.app === "Contacts" && this.selectedContact !== null || this.app === "Messages" && this.selectedText !== null;
     if (this.app === "Home") {
+      if (this.doc) {
+        const on = this.doc.trackingEnabled !== false;
+        const toggle = button(on ? "Turn off for this chat" : "Turn on for this chat", "lpt-button lpt-chat-toggle", () => {
+          this.change({ trackingEnabled: !on });
+        });
+        toggle.setAttribute("aria-pressed", String(on));
+        this.content.append(toggle);
+        if (!on) {
+          this.content.append(el("p", "lpt-chat-off lpt-help", "Tracking is off for this chat. Saved data is kept."));
+          this.refreshBadges();
+          this.measure();
+          return;
+        }
+      }
       const home = el("div", "lpt-home");
       for (const app of APPS.filter((a) => this.doc?.settings.apps[a])) {
         const b = button("", "lpt-app-button", () => this.navigate(app));
@@ -1954,8 +2006,9 @@ class PhoneView {
     try {
       const doc = await this.actions.update(change, revision);
       this.editing = false;
-      this.doc = doc;
-      this.render();
+      this.receive(doc);
+      if (this.renderDirty && this.openState)
+        this.render();
       this.setStatus("Saved.");
     } catch (e) {
       this.setStatus("");
@@ -5158,6 +5211,10 @@ var styles_default = `/* =======================================================
 .lpt-thread-name,.lpt-contact-list-title,.lpt-emoji-title {font-family:var(--lpt-heading-font);font-weight:400;}
 .lpt-root .lpt-weather-temperature {font-family:var(--lpt-font);}
 .lpt-email-unread,.lpt-text-sender,.lpt-status {font-family:var(--lpt-ui-font);}
+
+/* Per-chat tracking switch, separate from App Store membership. */
+.lpt-root .lpt-chat-toggle { margin:0 0 var(--lpt-space); max-width:100%; }
+.lpt-root .lpt-chat-off { margin:0; }
 `;
 
 // src/message-reads.ts
@@ -5198,6 +5255,7 @@ class SetupView {
   request;
   root = el2("section", "lpt-setup is-open");
   doc = null;
+  settingsKey = "";
   chat = null;
   epoch = 0;
   busy = false;
@@ -5213,6 +5271,9 @@ class SetupView {
     this.render();
   }
   receive(doc) {
+    const key = JSON.stringify([doc?.chatId, doc?.trackingEnabled, doc?.settings]);
+    const unchanged = key === this.settingsKey;
+    this.settingsKey = key;
     this.doc = doc;
     if (this.chat !== (doc?.chatId ?? null)) {
       this.chat = doc?.chatId ?? null;
@@ -5228,7 +5289,8 @@ class SetupView {
       if (doc)
         this.loadChoices(this.epoch);
     }
-    this.render();
+    if (!unchanged)
+      this.render();
   }
   async loadChoices(epoch) {
     try {
@@ -5812,6 +5874,9 @@ class Sidebar {
   alive = true;
   info = { available: false, choices: [], note: "Loading connections..." };
   helperChoice = false;
+  settingsKey = "";
+  connectionsRequested = false;
+  connectionsPending = false;
   status = node("p", "lpt-side-status");
   constructor(parent, actions, prefs) {
     this.actions = actions;
@@ -5823,6 +5888,9 @@ class Sidebar {
     this.render();
   }
   receive(doc, name) {
+    const key = JSON.stringify([doc?.chatId, doc?.trackingEnabled, doc?.settings, name]);
+    const unchanged = key === this.settingsKey;
+    this.settingsKey = key;
     const changed = doc?.chatId !== this.doc?.chatId;
     if (this.doc?.settings.source === "helper" && doc?.settings.source === "main")
       this.helperChoice = false;
@@ -5830,15 +5898,18 @@ class Sidebar {
     this.personal.receive(doc);
     this.setup.receive(doc);
     this.name = name;
-    if (changed) {
+    if (changed || doc?.trackingEnabled !== false && this.info.note === "Tracking is off.") {
       this.epoch++;
+      this.connectionsRequested = false;
+      this.connectionsPending = false;
       this.saving = false;
       this.helperChoice = false;
-      this.info = { available: false, choices: [], note: "Loading connections..." };
-      if (doc)
+      this.info = { available: false, choices: [], note: doc?.trackingEnabled === false ? "Tracking is off." : "Loading connections..." };
+      if (doc && doc.trackingEnabled !== false && (doc.settings.source === "helper" || this.open.has("source")))
         this.connections();
     }
-    this.render();
+    if (!unchanged)
+      this.render();
   }
   preferences(prefs) {
     this.prefs = prefs;
@@ -5912,6 +5983,10 @@ class Sidebar {
     });
   }
   async connections() {
+    if (this.connectionsRequested || this.connectionsPending || !this.doc || this.doc.trackingEnabled === false)
+      return;
+    this.connectionsRequested = true;
+    this.connectionsPending = true;
     const epoch = this.epoch;
     try {
       const info = await this.actions.connections();
@@ -5923,6 +5998,7 @@ class Sidebar {
         return;
       this.info = { available: false, choices: [], note: "Connections unavailable. Main AI still works." };
     }
+    this.connectionsPending = false;
     this.render();
   }
   async save(settings) {
@@ -5967,6 +6043,8 @@ class Sidebar {
       if (!details.isConnected)
         return;
       if (details.open) {
+        if (key === "source")
+          this.connections();
         this.open.clear();
         this.open.add(key);
         for (const other of Array.from(this.root.querySelectorAll(".lpt-side-section")))
@@ -6028,10 +6106,28 @@ class Sidebar {
     row.append(label, input);
     parent.append(row);
   }
+  appearance() {
+    const appearance = this.section("appearance", "Appearance", "All my chats");
+    const cssFold = node("details", "lpt-side-css-collapse");
+    cssFold.open = this.cssOpen;
+    cssFold.append(node("summary", "lpt-side-css-summary", "Upload CSS files"));
+    cssFold.addEventListener("toggle", () => {
+      if (cssFold.isConnected)
+        this.cssOpen = cssFold.open;
+    });
+    this.styleUpload(cssFold, "css", "Phone styles (styles.css)");
+    this.styleUpload(cssFold, "sidebarCss", "Sidebar styles (sidebar.css)");
+    appearance.append(cssFold, node("p", "lpt-side-help", "Choose UTF-8 .css files, up to 256 KB each. Applies to all your chats. Sidebar styles affect the settings content only; the toolbar stays protected. Reset appearance above clears both files."));
+  }
   render() {
     const origin = this.epoch;
     this.root.replaceChildren();
     this.root.append(node("p", "lpt-side-chat", this.doc ? `Settings for this chat: ${this.name || "Unnamed chat"}` : "Open a chat to change tracker settings"));
+    if (this.doc?.trackingEnabled === false) {
+      this.root.append(node("p", "lpt-side-help", "Tracking is off. Open the phone and choose Turn on for this chat."));
+      this.appearance();
+      return;
+    }
     const apps = this.section("apps", "App Store", "This chat");
     apps.append(node("p", "lpt-side-help", "Choose which apps are on the phone. Removing an app only hides it. Your data comes back when you add it again."));
     const grid = node("div", "lpt-store-grid");
@@ -6113,6 +6209,8 @@ class Sidebar {
         if (origin !== this.epoch || !select.isConnected)
           return;
         this.helperChoice = select.value === "helper";
+        if (this.helperChoice)
+          this.connections();
         if (!this.helperChoice)
           this.save({ source: "main" });
         else if (this.doc.settings.connection_id && this.info.available)
@@ -6164,17 +6262,7 @@ class Sidebar {
       }
     }
     setup.append(this.setup.root);
-    const appearance = this.section("appearance", "Appearance", "All my chats");
-    const cssFold = node("details", "lpt-side-css-collapse");
-    cssFold.open = this.cssOpen;
-    cssFold.append(node("summary", "lpt-side-css-summary", "Upload CSS files"));
-    cssFold.addEventListener("toggle", () => {
-      if (cssFold.isConnected)
-        this.cssOpen = cssFold.open;
-    });
-    this.styleUpload(cssFold, "css", "Phone styles (styles.css)");
-    this.styleUpload(cssFold, "sidebarCss", "Sidebar styles (sidebar.css)");
-    appearance.append(cssFold, node("p", "lpt-side-help", "Choose UTF-8 .css files, up to 256 KB each. Applies to all your chats. Sidebar styles affect the settings content only; the toolbar stays protected. Reset appearance above clears both files."));
+    this.appearance();
     const presets = this.section("presets", "Settings profiles", "All my chats");
     presets.append(this.personal.presets);
     const advanced = this.section("advanced", "Advanced", "This chat");
@@ -6542,11 +6630,18 @@ function setup(ctx) {
   };
   for (const tagName of [TRACKER_TAG, TEXT_TAG, "phone-email"])
     disposers.push(ctx.messages.registerTagInterceptor({ tagName, removeFromMessage: true }, (payload) => {
-      if (disposed || payload.isStreaming !== false || !payload.chatId || !payload.messageId || payload.chatId !== activeChat)
+      if (disposed || payload.isStreaming !== false || !payload.chatId || !payload.messageId || payload.chatId !== activeChat || current?.trackingEnabled === false)
         return;
       if (payload.isUser === false || [TEXT_TAG, "phone-email"].includes(tagName) && payload.isUser === true)
         sendSync();
     }));
+  const requestPortraits = () => {
+    if (disposed || !activeChat || !current || current.trackingEnabled === false || portraitChat === activeChat)
+      return;
+    portraitChat = activeChat;
+    portraitRequest = crypto.randomUUID();
+    ctx.sendToBackend({ type: "phone_portraits", requestId: portraitRequest, chatId: activeChat });
+  };
   const prefsChange = (change) => {
     const requestId = crypto.randomUUID();
     if (change?.css !== undefined || change?.sidebarCss !== undefined) {
@@ -6727,7 +6822,7 @@ function setup(ctx) {
   const refreshTooltip = decorate(refreshButton, "refresh", "Refresh tracker", "Refresh");
   decorate(resetButton, "reset", "Reset appearance", "Reset");
   const updateBusy = () => {
-    refreshButton.disabled = !activeChat || !current || busy() || refreshPending;
+    refreshButton.disabled = !activeChat || !current || current.trackingEnabled === false || busy() || refreshPending;
     refreshTooltip.textContent = current?.settings.source === "helper" ? "Refresh tracker. Requests may cost money depending on the model chosen." : "Refresh tracker. Main AI makes no model request.";
   };
   refreshButton.addEventListener("click", () => {
@@ -6854,10 +6949,11 @@ function setup(ctx) {
       widget.root.append(placementStyle, transport);
       view = new PhoneView(shadow, custom, {
         update,
+        portraits: requestPortraits,
         preferences: prefsChange,
         markRead,
         draft: (chatId, to, text, group) => {
-          if (disposed || activeChat !== chatId || current?.chatId !== chatId || (!current.settings.apps.Messages || !current.settings.enabled.messages))
+          if (disposed || activeChat !== chatId || current?.chatId !== chatId || current.trackingEnabled === false || (!current.settings.apps.Messages || !current.settings.enabled.messages))
             throw new Error("The chat changed. Reopen the original conversation.");
           return addReplyDraft(ctx, chatId, current.currentPlayer ?? "", to, text, group);
         },
@@ -6926,7 +7022,7 @@ function setup(ctx) {
       return;
     }
     if (payload.type === "phone_helper_changed") {
-      if (activeChat && payload.chatId === activeChat)
+      if (activeChat && payload.chatId === activeChat && current?.trackingEnabled !== false)
         sendSync();
       return;
     }
@@ -7100,11 +7196,6 @@ function setup(ctx) {
     chatName = typeof payload.chatName === "string" ? payload.chatName : "";
     sidebar?.receive(current, chatName);
     view?.receive(current, reads);
-    if (current && portraitChat !== activeChat) {
-      portraitChat = activeChat;
-      portraitRequest = crypto.randomUUID();
-      ctx.sendToBackend({ type: "phone_portraits", requestId: portraitRequest, chatId: activeChat });
-    }
     backendBusy = payload.helperBusy === true;
     updateBusy();
   }));
@@ -7174,7 +7265,7 @@ function setup(ctx) {
         streaming.delete(payload.chatId);
       if (payload.chatId === activeChat) {
         updateBusy();
-        if (name !== "GENERATION_STARTED")
+        if (name !== "GENERATION_STARTED" && current?.trackingEnabled !== false)
           sendSync();
       }
     }));

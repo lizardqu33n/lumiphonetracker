@@ -10,13 +10,14 @@ export const threadKey = (m: SavedMessage): string => m.group?JSON.stringify(["g
 export interface Conversation { key: string; name: string; messages: SavedMessage[]; unread: number; group?:boolean }
 export function conversations(messages: SavedMessage[], reads: ReadState): Conversation[] {
   const groups = new Map<string, Conversation>();
+  const lastIndex=new Map<string,number>();let index=0;
   for (const m of messages) {
     const key = threadKey(m);
     const group = groups.get(key) ?? { key, name:m.group??(m.direction === "incoming" ? m.from : m.to ?? "Your texts"),...(m.group?{group:true}:{}), messages: [], unread: 0 };
     group.messages.push(m); if (isUnread(m, reads)) group.unread++;
-    groups.set(key, group);
+    groups.set(key, group);lastIndex.set(key,index++);
   }
-  return [...groups.values()].sort((a,b)=>messages.lastIndexOf(b.messages.at(-1)!)-messages.lastIndexOf(a.messages.at(-1)!));
+  return [...groups.values()].sort((a,b)=>lastIndex.get(b.key)!-lastIndex.get(a.key)!);
 }
 const escape = (text: string) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");
 export function replyTag(from: string, to: string, text: string, group?:string): string {

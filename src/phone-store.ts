@@ -32,6 +32,7 @@ export function readDocument(raw: string, chatId: string): Document {
   if (!isRecord(value) || value.schema !== 2 || value.chatId !== chatId || !Number.isSafeInteger(value.revision) ||
     !Array.isArray(value.accepted) || !Array.isArray(value.edits)) throw new Error("Invalid saved data");
   const doc = emptyDocument(chatId); doc.revision = value.revision as number;
+  if(value.trackingEnabled!==undefined){if(typeof value.trackingEnabled!=="boolean")throw Error("Invalid tracking state");doc.trackingEnabled=value.trackingEnabled;}
   if (value.rejected !== undefined && (!Array.isArray(value.rejected) || value.rejected.some(x => typeof x !== "string"))) throw new Error("Invalid rejection data");
   if(value.contactInfo!==undefined){if(!isRecord(value.contactInfo))throw Error("Invalid contact details");doc.contactInfo=Object.create(null);for(const [key,raw]of Object.entries(value.contactInfo)){if(!isRecord(raw)||typeof raw.name!=="string"||normalize(raw.name)!==key)throw Error("Invalid contact details");doc.contactInfo![key]=readContactInfo(raw,raw.name);}}
   doc.rejected = value.rejected as string[] ?? [];
@@ -107,13 +108,23 @@ export function validateEdit(value: unknown): ManualEdit {
 }
 export class PhoneStore {
   private queues = new Map<string, Promise<unknown>>();
-  private pendingReads=new Map<string,{task:Promise<Document>;started:boolean}>();
-  private readOperation(kind:"sync"|"preview",userId:string,chatId:string,action:()=>Promise<Document>):Promise<Document> {
-    const key=JSON.stringify([kind,userId,chatId]);
+  private pendingReads=new Map<string,{task:Promise<Document>;started:boolean;persist:boolean}>();
+  private readOperation(kind:"sync"|"preview",userId:string,chatId:string):Promise<Document> {
+    const key=JSON.stringify([userId,chatId]);
     const prior=this.pendingReads.get(key);
-    if(prior&&!prior.started&&this.queues.get(chatId)===prior.task)return prior.task.then(doc=>structuredClone(doc));
-    const entry={started:false,task:undefined as unknown as Promise<Document>};
-    entry.task=this.serial(chatId,()=>{entry.started=true;return action();});
+    if(prior&&!prior.started&&this.queues.get(chatId)===prior.task){prior.persist ||= kind==="sync";return prior.task.then(doc=>structuredClone(doc));}
+    const entry={started:false,persist:kind==="sync",task:undefined as unknown as Promise<Document>};
+    entry.task=this.serial(chatId,async()=>{
+      entry.started=true;
+      if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");
+      const {doc}=await this.build(chatId,userId);
+      if(entry.persist&&doc.trackingEnabled!==false){
+        const raw=await this.io.read(chatId);
+        const comparable={...doc,revision:raw?JSON.parse(raw).revision:0};
+        if(JSON.stringify(comparable)!==raw){doc.revision=comparable.revision+1;await this.io.write(chatId,JSON.stringify(doc));}
+      }
+      return doc;
+    });
     this.pendingReads.set(key,entry);
     const cleanup=()=>{if(this.pendingReads.get(key)===entry)this.pendingReads.delete(key);};
     void entry.task.then(cleanup,cleanup);
@@ -131,10 +142,11 @@ export class PhoneStore {
   private async build(chatId: string, userId: string): Promise<{ doc: Document; rows: StoryRow[] }> {
     if (!chatId || chatId.length > 256) throw new Error("Missing chat");
     const raw = await this.io.read(chatId);
+    const legacy=!raw&&this.io.legacy?await this.io.legacy(userId,chatPath(chatId)):null;
+    if((!raw&&!legacy)||(raw&&JSON.parse(raw).trackingEnabled===false)){const value=raw?JSON.parse(raw):null;const doc=emptyDocument(chatId);if(value){if(value.schema!==2||value.chatId!==chatId||!Number.isSafeInteger(value.revision)||value.revision<0)throw Error("Invalid saved data");doc.revision=value.revision;doc.settings=readSettings(value.settings);}doc.trackingEnabled=false;return {doc,rows:[]};}
     const rows = await this.io.history(chatId);
     const player = await this.io.player(chatId, userId);
     const names=await this.io.names?.(chatId,userId)??[];
-    const legacy=!raw&&this.io.legacy?await this.io.legacy(userId,chatPath(chatId)):null;
     // Validate every input afresh. There is no time-based or timestamp-only cache hit.
     const proof=JSON.stringify([chatId,userId,raw,rows.map(rowSignature),player,names,legacy]);
     const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(proof));
@@ -167,35 +179,37 @@ export class PhoneStore {
       const value:unknown=JSON.parse(raw);
       if(!isRecord(value)||value.schema!==2||value.chatId!==chatId)throw Error("Invalid saved data");
       const settings=readSettings(value.settings);
-      return {source:settings.source,...(typeof value.helperOwner==="string"?{owner:value.helperOwner}:{})};
+      return {source:value.trackingEnabled===false?"main":settings.source,...(typeof value.helperOwner==="string"?{owner:value.helperOwner}:{})};
     });
   }
   /** Read-only preview with a trusted user and an authorized chat. Never writes. */
-  preview(chatId: string, userId: string): Promise<Document> {
-    return this.readOperation("preview",userId,chatId, async () => {
-      if (!userId || !(await this.io.authorize(chatId, userId))) throw new Error("Chat unavailable");
-      return (await this.build(chatId, userId)).doc;
-    });
-  }
-  sync(userId: string, chatId: string): Promise<Document> {
-    return this.readOperation("sync",userId,chatId, async () => {
-      if (!userId || !(await this.io.authorize(chatId, userId))) throw new Error("Chat unavailable");
-      const { doc } = await this.build(chatId, userId);
-      const raw = await this.io.read(chatId);
-      const comparable = { ...doc, revision: raw ? (JSON.parse(raw) as Document).revision : 0 };
-      if (JSON.stringify(comparable) !== raw) {
-        doc.revision = comparable.revision + 1; await this.io.write(chatId, JSON.stringify(doc));
-      }
+  preview(chatId:string,userId:string):Promise<Document>{return this.readOperation("preview",userId,chatId);}
+  sync(userId:string,chatId:string):Promise<Document>{return this.readOperation("sync",userId,chatId);}
+  /** Authorized routing/settings only: no history, persona expansion or replay. */
+  settingsPreview(userId:string,chatId:string):Promise<Document>{
+    return this.serial(chatId,async()=>{
+      if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");
+      const raw=await this.io.read(chatId),doc=emptyDocument(chatId);
+      if(!raw){doc.trackingEnabled=false;return doc;}
+      const value:unknown=JSON.parse(raw);
+      if(!isRecord(value)||value.schema!==2||value.chatId!==chatId||!Number.isSafeInteger(value.revision)||Number(value.revision)<0||value.trackingEnabled!==undefined&&typeof value.trackingEnabled!=="boolean")throw Error("Invalid saved data");
+      doc.settings=readSettings(value.settings);doc.revision=Number(value.revision);doc.trackingEnabled=value.trackingEnabled as boolean|undefined;
+      if(typeof value.helperOwner==="string")doc.helperOwner=value.helperOwner;
       return doc;
     });
   }
   /** Step 4's controls will use this same validated, chat-authorized operation. */
-  update(userId: string, chatId: string, expectedRevision: number, update: { settings?: unknown; edit?: unknown; dismissNotice?: unknown;portrait?:unknown;contactInfo?:unknown;fieldControl?:unknown;mergeContacts?:unknown }): Promise<Document> {
+  update(userId: string, chatId: string, expectedRevision: number, update: { trackingEnabled?:unknown; settings?: unknown; edit?: unknown; dismissNotice?: unknown;portrait?:unknown;contactInfo?:unknown;fieldControl?:unknown;mergeContacts?:unknown }): Promise<Document> {
     return this.serial(chatId, async () => {
       if (!userId || !(await this.io.authorize(chatId, userId))) throw new Error("Chat unavailable");
       const raw = await this.io.read(chatId); const saved = readDocument(raw, chatId);
       if (saved.revision !== expectedRevision) throw new Error("The tracker changed. Reopen it and try again.");
+      if(update.trackingEnabled!==undefined){
+        if(typeof update.trackingEnabled!=="boolean"||Object.keys(update).some(k=>k!=="trackingEnabled"&&update[k as keyof typeof update]!==undefined))throw Error("Invalid tracking state");
+        const next={...(raw?JSON.parse(raw):saved),trackingEnabled:update.trackingEnabled,revision:saved.revision+1};await this.io.write(chatId,JSON.stringify(next));this.replayCache=undefined;return {...saved,trackingEnabled:next.trackingEnabled,revision:next.revision};
+      }
       let { doc, rows } = await this.build(chatId, userId);
+      if(doc.trackingEnabled===false)throw Error("Turn on the tracker for this chat first.");
       if (JSON.stringify(doc.accepted,canonicalKeys) !== JSON.stringify(saved.accepted,canonicalKeys) && raw) throw new Error("The story changed. Reopen the tracker and try again.");
       if (update.settings !== undefined) {
         if (!isRecord(update.settings)) throw new Error("Invalid settings");
@@ -246,7 +260,7 @@ export class PhoneStore {
   }
   setupApply(userId:string,chatId:string,revision:number,input:SetupData,names:string[],decisions?:unknown):Promise<Document>{
     return this.serial(chatId,async()=>{
-      if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");const raw=await this.io.read(chatId),saved=readDocument(raw,chatId);if(saved.revision!==revision)throw Error("The tracker changed. Nothing was saved.");let {doc,rows}=await this.build(chatId,userId);if(JSON.stringify(doc.accepted,canonicalKeys)!==JSON.stringify(saved.accepted,canonicalKeys))throw Error("The story changed. Nothing was saved.");const data=setupCandidates(doc,resolveSetup(doc,input,decisions)),last=[...rows].sort((a,b)=>a.index_in_chat-b.index_in_chat).at(-1);
+      if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");const raw=await this.io.read(chatId),saved=readDocument(raw,chatId);if(saved.revision!==revision)throw Error("The tracker changed. Nothing was saved.");let {doc,rows}=await this.build(chatId,userId);if(doc.trackingEnabled===false)throw Error("Turn on the tracker for this chat first.");if(JSON.stringify(doc.accepted,canonicalKeys)!==JSON.stringify(saved.accepted,canonicalKeys))throw Error("The story changed. Nothing was saved.");const data=setupCandidates(doc,resolveSetup(doc,input,decisions)),last=[...rows].sort((a,b)=>a.index_in_chat-b.index_in_chat).at(-1);
       const add=(target:ManualEdit["target"],name:string,value:unknown,section?:Section)=>doc.edits.push(validateEdit({id:crypto.randomUUID(),target,name,value,source:"setup",...(target==="contact"?{playerAtEdit:doc.playerNames.some(n=>normalize(n)===normalize(name))}:{}),...(section?{section}:{}),after:last?.id??null,index:last?.index_in_chat??-1}));
       for(const c of data.contacts){const old=doc.state.contacts.find(x=>normalize(x.name)===normalize(c.name));const values=Object.fromEntries(CONTACT_KEYS.filter(k=>c[k]!==undefined).map(k=>[k,c[k]]));if(!old||Object.keys(values).length)add("contact",c.name,values);const prior=doc.contactInfo?.[normalize(c.name)]??old?.info??emptyContactInfo(c.name);const fields=Object.keys(c).filter(k=>["phone","email","relationship","details"].includes(k));const info=readContactInfo({...prior,...c,fakeFields:[...new Set([...(prior.fakeFields??[]),...(c.fakeFields??[])])],kind:prior.locked?prior.kind:names.some(n=>normalize(n)===normalize(c.name))?"Main":prior.kind,confirmed:[...new Set([...(prior.confirmed??[]),...fields])]},c.name);(doc.contactInfo??=Object.create(null))[normalize(c.name)]=info;}
       for(const n of data.notes)add("note",n.name,{detail:n.detail,context:n.context,...(n.section==="misc"?{sendToAI:false}:{})},n.section);
@@ -261,7 +275,7 @@ export class PhoneStore {
     return this.serial(chatId, async () => {
       if (!userId || !(await this.io.authorize(chatId,userId))) throw new Error("Chat unavailable");
       const { doc, rows } = await this.build(chatId,userId);
-      if (doc.settings.source !== "helper" || doc.helperOwner !== userId || doc.helperAttempts.includes(attempt)) return null;
+      if (doc.trackingEnabled===false || doc.settings.source !== "helper" || doc.helperOwner !== userId || doc.helperAttempts.includes(attempt)) return null;
       if(!Object.entries(effectiveDocument(doc).settings.enabled).some(([key,on])=>on&&key!=="messages"&&key!=="email"&&key!=="notes.misc"))return null;
       if (expected && !rows.some(r => r.id === expected.id && r.role === "assistant" && r.content === expected.content)) return null;
       const recent = [...rows].sort((a,b)=>a.index_in_chat-b.index_in_chat).filter(r=>r.role !== "system").slice(-doc.settings.helperMessages);
@@ -282,7 +296,7 @@ export class PhoneStore {
       if (!(await this.io.authorize(chatId,userId))) throw new Error("Chat unavailable");
       const raw = await this.io.read(chatId); const saved = readDocument(raw,chatId);
       const { doc, rows } = await this.build(chatId,userId);
-      if (saved.revision !== ticket.doc.revision || doc.settings.source !== "helper" || doc.helperOwner !== userId ||
+      if (doc.trackingEnabled===false || saved.revision !== ticket.doc.revision || doc.settings.source !== "helper" || doc.helperOwner !== userId ||
         doc.settings.connection_id !== ticket.doc.settings.connection_id || JSON.stringify(rows.map(rowSignature)) !== ticket.history) return null;
       validateExpanded(values);
       const last = ticket.recent.at(-1)!;
@@ -295,7 +309,9 @@ export class PhoneStore {
   helperNotice(userId: string, chatId: string, text: string | null, fallback = false): Promise<void> {
     return this.serial(chatId,async()=>{
       if (!(await this.io.authorize(chatId,userId))) return;
-      const raw = await this.io.read(chatId); const { doc } = await this.build(chatId,userId);
+      const raw=await this.io.read(chatId);if(!raw)return;
+      const value:unknown=JSON.parse(raw);if(!isRecord(value)||value.schema!==2||value.chatId!==chatId||!Number.isSafeInteger(value.revision)||!Array.isArray(value.notices)||value.notices.some(n=>typeof n!=="string"))throw Error("Invalid saved data");
+      const doc=value as unknown as Document;readSettings(doc.settings);if(doc.trackingEnabled===false)return;
       const old=JSON.stringify(doc.notices);
       doc.notices=doc.notices.filter(n=>!isHelperNotice(n));
       if(text)doc.notices.push(text);

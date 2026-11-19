@@ -154,7 +154,8 @@ export class HelperAI {
   async connections(userId:string,chatId:string):Promise<ConnectionsInfo> {
     try {
       if(!userId)throw new HelperFailure("permission missing");
-      const doc=await this.store.sync(userId,chatId); // Authorize before listing profiles.
+      const doc=await this.store.settingsPreview(userId,chatId); // Authorize without replay before listing profiles.
+      if(doc.trackingEnabled===false)return {available:false,choices:[],note:"Turn on the tracker for this chat first."};
       if(!this.io.allowed()) {
         if(doc.settings.source==="helper"&&doc.helperOwner===userId)await this.failure(userId,chatId,"permission missing",true);
         return {available:false,choices:[],note:"Allow generation permission in Extensions to use a custom connection."};
@@ -173,10 +174,10 @@ export class HelperAI {
     try {
       if(!userId)throw new HelperFailure("permission missing");
       if(this.busy(chatId))throw new HelperFailure("validation rejected");
-      const doc=await this.store.preview(chatId,userId);
+      const doc=await this.store.sync(userId,chatId);
       if(this.active.get(chatId)?.size)throw new HelperFailure("validation rejected");
+      if(doc.trackingEnabled===false)return {ok:false,category:"validation rejected"};
       if(doc.settings.source==="main") {
-        await this.store.sync(userId,chatId);
         await this.store.helperNotice(userId,chatId,null);this.notify(userId,chatId);return {ok:true};
       }
       if(doc.helperOwner!==userId)throw new HelperFailure("permission missing");
@@ -258,7 +259,7 @@ export class HelperAI {
       const input=helperInput(ticket,wording,this.io.warn);
       const current=await preparing(this.store.preview(chatId,userId));
       if(!this.io.allowed())throw new HelperFailure("permission missing");
-      if(controller.signal.aborted||this.active.get(chatId)?.size||current.settings.source!=="helper"||current.helperOwner!==userId||current.revision!==ticket.doc.revision)throw new HelperFailure("validation rejected");
+      if(controller.signal.aborted||this.active.get(chatId)?.size||current.trackingEnabled===false||current.settings.source!=="helper"||current.helperOwner!==userId||current.revision!==ticket.doc.revision)throw new HelperFailure("validation rejected");
       // Passing signal is documented. Racing it also bounds providers that ignore cancellation.
       modelStarted=true;
       const content=await Promise.race([checkedModelReply(()=>this.io.generate({model:connection.model,messages:input.messages,connection_id:connection.id,userId,parameters:{max_tokens:2400},signal:controller.signal})),aborted]);

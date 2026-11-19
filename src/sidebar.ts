@@ -1,10 +1,11 @@
+import type {PhoneSnapshot as Document} from "./ui-snapshot";
 import { ACTION_IMAGES } from "./action-images";
 import {SetupView,type SetupRequest} from "./setup-view";
 import {CONTACT_ICONS} from "./contact-icons";
 import {PersonalControls} from "./personal-controls";
 import type {PersonalReply} from "./personal-settings";
 import {UI_ICONS,type UIIconName} from "./ui-icons";
-import { ALL_APPS, APP_FIELDS, type Document, type Settings } from "./model";
+import { ALL_APPS, APP_FIELDS, type Settings } from "./model";
 import { DESCRIPTIONS, appImage } from "./phone-view";
 import type { Preferences } from "./preferences";
 import type { ConnectionsInfo } from "./helper";
@@ -35,25 +36,29 @@ export class Sidebar {
     private alive=true;
     private info: ConnectionsInfo = { available: false, choices: [], note: "Loading connections..." };
     private helperChoice = false;
+    private settingsKey="";
+    private connectionsRequested=false;
+    private connectionsPending=false;
     private status = node("p", "lpt-side-status");
 
     constructor(parent: HTMLElement, private actions: SidebarActions, prefs: Preferences) { this.setup=new SetupView((a,d)=>this.actions.setup?this.actions.setup(a,d):Promise.reject(Error("Setup is unavailable.")));this.personal=new PersonalControls((change,revision)=>this.actions.personal?this.actions.personal(change,revision):Promise.reject(Error("Unavailable")));this.prefs = prefs; parent.append(this.root); this.personal.receive(null);this.render(); }
     receive(doc: Document | null, name: string): void {
+        const key=JSON.stringify([doc?.chatId,doc?.trackingEnabled,doc?.settings,name]);const unchanged=key===this.settingsKey;this.settingsKey=key;
         const changed = doc?.chatId !== this.doc?.chatId;
         if (this.doc?.settings.source === "helper" && doc?.settings.source === "main")
             this.helperChoice = false;
         this.doc = doc;
         this.personal.receive(doc);this.setup.receive(doc);
         this.name = name;
-        if (changed) {
-            this.epoch++;
+        if (changed || doc?.trackingEnabled!==false && this.info.note==="Tracking is off.") {
+            this.epoch++;this.connectionsRequested=false;this.connectionsPending=false;
             this.saving = false;
             this.helperChoice = false;
-            this.info = { available: false, choices: [], note: "Loading connections..." };
-            if (doc)
+            this.info = { available: false, choices: [], note: doc?.trackingEnabled===false?"Tracking is off.":"Loading connections..." };
+            if (doc && doc.trackingEnabled!==false && (doc.settings.source==="helper"||this.open.has("source")))
                 void this.connections();
         }
-        this.render();
+        if(!unchanged)this.render();
     }
     preferences(prefs: Preferences): void {this.prefs=prefs;this.fileStatus();}
     reset(): void {this.fileEpoch.css++;this.fileEpoch.sidebarCss++;this.prefs={...this.prefs,css:"",sidebarCss:""};for(const input of Array.from(this.root.querySelectorAll<HTMLInputElement>(".lpt-css-file")))input.value="";this.fileStatus();}
@@ -69,7 +74,7 @@ export class Sidebar {
         try{const prefs=await this.actions.css({[key]:text});if(!this.alive||epoch!==this.fileEpoch[key])return;this.prefs=prefs;this.fileStatus();this.status.textContent="Appearance saved.";}catch{if(this.alive&&epoch===this.fileEpoch[key])this.status.textContent="Applied for now. Could not save; try again.";}
       })().catch(error=>{if(this.alive&&epoch===this.fileEpoch[key])this.status.textContent=error instanceof Error?error.message:"Could not read this CSS file.";});});
     }
-    private async connections(): Promise<void> { const epoch = this.epoch; try {
+    private async connections(): Promise<void> { if(this.connectionsRequested||this.connectionsPending||!this.doc||this.doc.trackingEnabled===false)return;this.connectionsRequested=true;this.connectionsPending=true;const epoch = this.epoch; try {
         const info = await this.actions.connections();
         if (epoch !== this.epoch)
             return;
@@ -79,7 +84,7 @@ export class Sidebar {
         if (epoch !== this.epoch)
             return;
         this.info = { available: false, choices: [], note: "Connections unavailable. Main AI still works." };
-    } this.render(); }
+    } this.connectionsPending=false;this.render(); }
     private async save(settings: unknown): Promise<void> { if (!this.doc || this.saving)
         return; const epoch = this.epoch, revision = this.doc.revision; this.saving = true; this.render(); try {
         const doc = await this.actions.update(settings, revision);
@@ -109,7 +114,7 @@ export class Sidebar {
         const summary=node("summary","lpt-side-summary");
         const icon=node("img","lpt-side-icon");icon.src=key==="setup"?CONTACT_ICONS.wizard:key==="presets"?CONTACT_ICONS.profile:UI_ICONS[({apps:"apps",tracking:"track",source:"helper",appearance:"look",advanced:"advanced"} as Record<string,UIIconName>)[key]??"advanced"];icon.alt="";icon.setAttribute("aria-hidden","true");icon.draggable=false;
         summary.append(icon,node("span","lpt-side-heading",title),node("small","lpt-side-scope",scope));details.append(summary);
-        details.addEventListener("toggle",()=>{if(!details.isConnected)return;if(details.open){this.open.clear();this.open.add(key);for(const other of Array.from(this.root.querySelectorAll<HTMLDetailsElement>(".lpt-side-section")))if(other!==details)other.open=false;}else this.open.delete(key);});
+        details.addEventListener("toggle",()=>{if(!details.isConnected)return;if(details.open){if(key==="source")void this.connections();this.open.clear();this.open.add(key);for(const other of Array.from(this.root.querySelectorAll<HTMLDetailsElement>(".lpt-side-section")))if(other!==details)other.open=false;}else this.open.delete(key);});
         this.root.append(details);
         return details;
     }
@@ -139,10 +144,17 @@ export class Sidebar {
         row.append(label, input);
         parent.append(row);
     }
+    private appearance():void {
+        const appearance = this.section("appearance", "Appearance", "All my chats");
+        const cssFold=node("details","lpt-side-css-collapse");cssFold.open=this.cssOpen;cssFold.append(node("summary","lpt-side-css-summary","Upload CSS files"));cssFold.addEventListener("toggle",()=>{if(cssFold.isConnected)this.cssOpen=cssFold.open;});
+        this.styleUpload(cssFold,"css","Phone styles (styles.css)");this.styleUpload(cssFold,"sidebarCss","Sidebar styles (sidebar.css)");
+        appearance.append(cssFold,node("p","lpt-side-help","Choose UTF-8 .css files, up to 256 KB each. Applies to all your chats. Sidebar styles affect the settings content only; the toolbar stays protected. Reset appearance above clears both files."));
+    }
     private render(): void {
         const origin=this.epoch;
         this.root.replaceChildren();
         this.root.append(node("p", "lpt-side-chat", this.doc ? `Settings for this chat: ${this.name || "Unnamed chat"}` : "Open a chat to change tracker settings"));
+        if(this.doc?.trackingEnabled===false){this.root.append(node("p","lpt-side-help","Tracking is off. Open the phone and choose Turn on for this chat."));this.appearance();return;}
         const apps = this.section("apps", "App Store", "This chat");
         apps.append(node("p", "lpt-side-help", "Choose which apps are on the phone. Removing an app only hides it. Your data comes back when you add it again."));
         const grid=node("div","lpt-store-grid");apps.append(grid);
@@ -205,7 +217,7 @@ export class Sidebar {
             select.value = this.doc.settings.source === "helper" || this.helperChoice ? "helper" : "main";
             select.disabled = this.saving;
             select.addEventListener("change", () => {
-                if(origin!==this.epoch||!select.isConnected)return; this.helperChoice = select.value === "helper"; if (!this.helperChoice)
+                if(origin!==this.epoch||!select.isConnected)return; this.helperChoice = select.value === "helper"; if(this.helperChoice)void this.connections(); if (!this.helperChoice)
                 void this.save({ source: "main" });
             else if (this.doc!.settings.connection_id && this.info.available)
                 void this.save({ source: "helper" });
@@ -238,10 +250,7 @@ export class Sidebar {
         if(this.doc){this.toggle(setup,"fakeAddresses","Make up phone/email (fake)","Made-up phone numbers and emails are fake. Don't assume they belong to the character or to any real person.",this.doc.settings.fakeAddresses,on=>({fakeAddresses:on}));
           if(this.doc.settings.fakeAddresses){const label=node("label","lpt-side-label lpt-fake-domain-label","Made-up email domain"),domain=node("input","lpt-input lpt-fake-domain");domain.type="text";domain.maxLength=150;domain.value=this.doc.settings.fakeDomain;domain.disabled=this.saving;domain.setAttribute("aria-label","Made-up email domain");domain.addEventListener("change",()=>{if(origin===this.epoch&&domain.isConnected)void this.save({fakeDomain:domain.value.trim()});});label.append(domain);setup.append(label);}
         }setup.append(this.setup.root);
-        const appearance = this.section("appearance", "Appearance", "All my chats");
-        const cssFold=node("details","lpt-side-css-collapse");cssFold.open=this.cssOpen;cssFold.append(node("summary","lpt-side-css-summary","Upload CSS files"));cssFold.addEventListener("toggle",()=>{if(cssFold.isConnected)this.cssOpen=cssFold.open;});
-        this.styleUpload(cssFold,"css","Phone styles (styles.css)");this.styleUpload(cssFold,"sidebarCss","Sidebar styles (sidebar.css)");
-        appearance.append(cssFold,node("p","lpt-side-help","Choose UTF-8 .css files, up to 256 KB each. Applies to all your chats. Sidebar styles affect the settings content only; the toolbar stays protected. Reset appearance above clears both files."));
+        this.appearance();
         const presets=this.section("presets","Settings profiles","All my chats");presets.append(this.personal.presets);
         const advanced = this.section("advanced", "Advanced", "This chat");
         if (this.doc) {

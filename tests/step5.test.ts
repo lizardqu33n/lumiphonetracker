@@ -9,7 +9,7 @@ import { PhoneStore } from "../src/phone-store";
 const message = (id: string, from = "Ada", more: Partial<SavedMessage> = {}): SavedMessage => ({ id, from, text:`Actual text ${id}`, direction:"incoming", at:{id,index:0,variant:"0"}, ...more });
 describe("Step 5 saved texts, read status and draft safety", () => {
   test("sending a named user text does not falsely block subsequent Settings saves", async () => {
-    let saved = "";
+    let saved = JSON.stringify(emptyDocument("a"));
     const rows:StoryRow[] = [{id:"u",chat_id:"a",index_in_chat:0,role:"user",name:"Player",swipe_id:0,content:replyTag("Player","Ada","Hello")}];
     const store = new PhoneStore({authorize:async()=>true,read:async()=>saved,write:async(_,v)=>{saved=v;},history:async()=>structuredClone(rows),player:async()=>"Player"});
     const doc = await store.sync("user","a");

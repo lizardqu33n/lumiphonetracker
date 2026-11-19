@@ -70,7 +70,7 @@ test("legacy IDs, read receipts, edits and admitted cap slots survive migration"
 });
 
 test("a real Helper runner journals the establishing message and repeated refreshes do not duplicate its call",async()=>{
- const rows=[row(0,"Ada has three missed calls at 3 PM."),row(1,"The group sits."),row(2,"The group waits.")];let disk="";
+ const rows=[row(0,"Ada has three missed calls at 3 PM."),row(1,"The group sits."),row(2,"The group waits.")];let disk=JSON.stringify(emptyDocument("c"));
  const store=new PhoneStore({authorize:async(c,u)=>c==="c"&&u==="trusted",read:async()=>disk,write:async(c,v)=>{disk=v;},history:async()=>rows,player:async()=>"Player"});
  let d=await store.sync("trusted","c");d=await store.update("trusted","c",d.revision,{settings:{source:"helper",connection_id:"small",apps:{Calls:true}}});let requests=0;
  const helper=new HelperAI(store,{allowed:()=>true,connections:async u=>{expect(u).toBe("trusted");return [{id:"small",name:"Small",model:"Small"}];},generate:async input=>{requests++;expect(input.userId).toBe("trusted");return {content:call+' | x3 ~ '+JSON.stringify({source:"m0",quote:rows[0].content}),finish_reason:"stop"};},changed:()=>{},warn:()=>{}});

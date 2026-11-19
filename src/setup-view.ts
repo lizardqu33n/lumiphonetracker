@@ -1,15 +1,15 @@
 import {showCopyableError} from "./copy-error";
-import type {Document} from "./model";
+import type {PhoneSnapshot as Document} from "./ui-snapshot";
 import type {SetupData} from "./setup-wizard";
 import {SETUP_GROUPS,SETUP_FIELD_IDS,type SetupField} from "./setup-fields";
 import type {SetupDecision} from "./setup-review";
 const el=<K extends keyof HTMLElementTagNameMap>(tag:K,cls:string,text?:string)=>{const n=document.createElement(tag);n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 export type SetupRequest=(action:"prepare"|"run"|"save"|"choices"|"choices_save",data:Record<string,unknown>)=>Promise<Record<string,unknown>>;
 export class SetupView {
- readonly root=el("section","lpt-setup is-open");private doc:Document|null=null;private chat:string|null=null;private epoch=0;private busy=false;private chosen=new Set<SetupField>();private loadingChoices=false;private error=false;
+ readonly root=el("section","lpt-setup is-open");private doc:Document|null=null;private settingsKey="";private chat:string|null=null;private epoch=0;private busy=false;private chosen=new Set<SetupField>();private loadingChoices=false;private error=false;
  private plan:{id:string;charactersRead:number;messagesRead:number;requests:number}|null=null;private preview:SetupData|null=null;private message="";private decisions=new Map<number,SetupDecision>();
  constructor(private request:SetupRequest){this.render();}
- receive(doc:Document|null):void {this.doc=doc;if(this.chat!==(doc?.chatId??null)){this.chat=doc?.chatId??null;this.epoch++;this.chosen.clear();this.plan=null;this.preview=null;this.decisions.clear();this.busy=false;this.message="";this.error=false;this.loadingChoices=!!doc;if(doc)void this.loadChoices(this.epoch);}this.render();}
+ receive(doc:Document|null):void {const key=JSON.stringify([doc?.chatId,doc?.trackingEnabled,doc?.settings]);const unchanged=key===this.settingsKey;this.settingsKey=key;this.doc=doc;if(this.chat!==(doc?.chatId??null)){this.chat=doc?.chatId??null;this.epoch++;this.chosen.clear();this.plan=null;this.preview=null;this.decisions.clear();this.busy=false;this.message="";this.error=false;this.loadingChoices=!!doc;if(doc)void this.loadChoices(this.epoch);}if(!unchanged)this.render();}
  private async loadChoices(epoch:number):Promise<void>{
   try{const result=await this.request("choices",{});if(epoch===this.epoch&&Array.isArray(result.choices))this.chosen=new Set(result.choices.filter(field=>SETUP_FIELD_IDS.includes(field)));}
   catch{if(epoch===this.epoch){this.error=true;this.message="Could not read saved setup choices.";}}

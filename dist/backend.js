@@ -1,4 +1,15 @@
 // @bun
+// src/ui-snapshot.ts
+function phoneSnapshot(doc) {
+  const { schema, trackingEnabled, chatId, revision, settings, state, playerNames, currentPlayer, fieldLocks, contactInfo, portraits } = doc;
+  const contactRenames = doc.edits.filter((e) => e.target === "contact" && e.rename).map(({ target, name, rename }) => ({ target, name, rename }));
+  return { contactRenames, schema, trackingEnabled, chatId, revision, settings, state, playerNames, currentPlayer, fieldLocks, contactInfo, portraits };
+}
+function snapshotReads(reads, doc) {
+  const active = new Set([...doc.state.messages, ...doc.state.calls, ...doc.state.emails].map((m) => m.id));
+  return { revision: reads.revision, seen: Object.fromEntries(Object.entries(reads.seen).filter(([id]) => active.has(id))) };
+}
+
 // src/shared.ts
 var normalSpaces = (text) => text.replaceAll("\u2800", " ");
 var EXTENSION_NAME = "Lumi Phone Tracker";
@@ -688,7 +699,7 @@ function contactMatch(doc, value, mode = "phone") {
   if (matches.length > 1)
     return;
   let name = value;
-  for (const e of doc.edits ?? [])
+  for (const e of doc.contactRenames ?? doc.edits ?? [])
     if (e.target === "contact" && e.rename && normalize(e.name ?? "") === normalize(name))
       name = e.rename;
   return Object.values(doc.contactInfo ?? {}).find((c) => normalize(c.name) === normalize(name) || (c.aliases ?? []).some((n) => normalize(n) === normalize(name)))?.name;
@@ -1334,6 +1345,8 @@ class SetupWizard {
     if (!SETUP_PERMISSIONS.every((k) => this.api.permissions.has(k)))
       throw new SetupError("Allow generation, character/persona and lorebook access in Extensions first.");
     const d = await this.store.preview(p.chat, p.user);
+    if (d.trackingEnabled === false)
+      throw new SetupError("Turn on the tracker for this chat first.");
     if (d.revision !== p.revision)
       throw new SetupError("The tracker changed. Review setup again.");
     return d;
@@ -1345,6 +1358,8 @@ class SetupWizard {
       throw new SetupError("Choose one or more setup fields.");
     const fields = [...new Set(choices)];
     const doc = await this.store.preview(chat, user);
+    if (doc.trackingEnabled === false)
+      throw new SetupError("Turn on the tracker for this chat first.");
     const apps = fields.map((f) => f.startsWith("contacts.") ? "Contacts" : f.startsWith("notes.") ? "Notes" : "Locations");
     if (apps.some((a) => !doc.settings.apps[a]))
       throw new SetupError("Add the selected app in the sidebar App Store first.");
@@ -2004,6 +2019,8 @@ function presentNames(doc) {
   return Array.isArray(v) ? v : [];
 }
 function sceneMacro(doc) {
+  if (doc.trackingEnabled === false)
+    return "";
   const contactsOn = doc.settings.apps.Contacts && doc.settings.enabled["scene.present"];
   doc = effectiveDocument(doc);
   const lines = [];
@@ -2026,6 +2043,8 @@ function sceneMacro(doc) {
 `);
 }
 function locationsMacro(doc) {
+  if (doc.trackingEnabled === false)
+    return "";
   doc = effectiveDocument(doc);
   if (!doc.settings.enabled.locations)
     return "";
@@ -2041,6 +2060,8 @@ function locationsMacro(doc) {
 `);
 }
 function notesMacro(doc) {
+  if (doc.trackingEnabled === false)
+    return "";
   doc = effectiveDocument(doc);
   const result = [];
   for (const section of ["rules", "plots", "people", "items", "misc"]) {
@@ -2057,6 +2078,8 @@ function notesMacro(doc) {
 `);
 }
 function messagesMacro(doc) {
+  if (doc.trackingEnabled === false)
+    return "";
   doc = effectiveDocument(doc);
   if (!doc.settings.enabled.messages)
     return "";
@@ -2064,6 +2087,8 @@ function messagesMacro(doc) {
 `);
 }
 function activitiesMacro(name, doc) {
+  if (doc.trackingEnabled === false)
+    return "";
   doc = effectiveDocument(doc);
   const enabled = doc.settings.enabled;
   if (name === "phone_calls")
@@ -2076,6 +2101,8 @@ function activitiesMacro(name, doc) {
 `);
 }
 function weatherMacro(doc) {
+  if (doc.trackingEnabled === false)
+    return "";
   const condition = doc.settings.enabled.weather && doc.state.weather ? cellText(doc.state.weather) + fieldStatus(doc, { target: "weather", field: "weather" }) : "";
   const extra = WEATHER_DETAILS.flatMap((field) => {
     const cell = doc.state.weatherDetails?.[field];
@@ -2088,6 +2115,8 @@ function weatherMacro(doc) {
 `);
 }
 function trackerInstructions(doc, helper = false) {
+  if (doc.trackingEnabled === false)
+    return [];
   doc = effectiveDocument(doc);
   const s = doc.settings;
   const lines = [
@@ -2148,6 +2177,8 @@ function trackerInstructions(doc, helper = false) {
   return lines;
 }
 function formatMacro(doc, wording, warn = () => {}) {
+  if (doc.trackingEnabled === false)
+    return "";
   const scene = sceneMacro(doc);
   doc = effectiveDocument(doc);
   const s = doc.settings;
@@ -2182,6 +2213,8 @@ ${value}`);
 `);
 }
 function renderMacro(name, doc, wording, warn = () => {}) {
+  if (doc.trackingEnabled === false)
+    return "";
   if (name === "phone_scene")
     return sceneMacro(doc);
   if (name === "phone_format")
@@ -2201,6 +2234,7 @@ function renderMacro(name, doc, wording, warn = () => {}) {
 }
 function defaultWordingTemplate(doc, helper = false) {
   const all = structuredClone(doc);
+  all.trackingEnabled = true;
   all.settings.source = "main";
   all.state.scene = {};
   all.state.weather = undefined;
@@ -2241,6 +2275,8 @@ async function resolvePhoneMacro(api, load, name, userId, chatId, wording) {
       return "";
     }
     const doc = await load(chatId, userId);
+    if (doc.trackingEnabled === false)
+      return "";
     let custom;
     try {
       if (name === "phone_format")
@@ -3005,7 +3041,9 @@ class HelperAI {
     try {
       if (!userId)
         throw new HelperFailure("permission missing");
-      const doc = await this.store.sync(userId, chatId);
+      const doc = await this.store.settingsPreview(userId, chatId);
+      if (doc.trackingEnabled === false)
+        return { available: false, choices: [], note: "Turn on the tracker for this chat first." };
       if (!this.io.allowed()) {
         if (doc.settings.source === "helper" && doc.helperOwner === userId)
           await this.failure(userId, chatId, "permission missing", true);
@@ -3029,11 +3067,12 @@ class HelperAI {
         throw new HelperFailure("permission missing");
       if (this.busy(chatId))
         throw new HelperFailure("validation rejected");
-      const doc = await this.store.preview(chatId, userId);
+      const doc = await this.store.sync(userId, chatId);
       if (this.active.get(chatId)?.size)
         throw new HelperFailure("validation rejected");
+      if (doc.trackingEnabled === false)
+        return { ok: false, category: "validation rejected" };
       if (doc.settings.source === "main") {
-        await this.store.sync(userId, chatId);
         await this.store.helperNotice(userId, chatId, null);
         this.notify(userId, chatId);
         return { ok: true };
@@ -3178,7 +3217,7 @@ class HelperAI {
       const current = await preparing(this.store.preview(chatId, userId));
       if (!this.io.allowed())
         throw new HelperFailure("permission missing");
-      if (controller.signal.aborted || this.active.get(chatId)?.size || current.settings.source !== "helper" || current.helperOwner !== userId || current.revision !== ticket.doc.revision)
+      if (controller.signal.aborted || this.active.get(chatId)?.size || current.trackingEnabled === false || current.settings.source !== "helper" || current.helperOwner !== userId || current.revision !== ticket.doc.revision)
         throw new HelperFailure("validation rejected");
       modelStarted = true;
       const content = await Promise.race([checkedModelReply(() => this.io.generate({ model: connection.model, messages: input.messages, connection_id: connection.id, userId, parameters: { max_tokens: 2400 }, signal: controller.signal })), aborted]);
@@ -4008,6 +4047,11 @@ function readDocument(raw, chatId) {
     throw new Error("Invalid saved data");
   const doc = emptyDocument(chatId);
   doc.revision = value.revision;
+  if (value.trackingEnabled !== undefined) {
+    if (typeof value.trackingEnabled !== "boolean")
+      throw Error("Invalid tracking state");
+    doc.trackingEnabled = value.trackingEnabled;
+  }
   if (value.rejected !== undefined && (!Array.isArray(value.rejected) || value.rejected.some((x) => typeof x !== "string")))
     throw new Error("Invalid rejection data");
   if (value.contactInfo !== undefined) {
@@ -4187,15 +4231,28 @@ class PhoneStore {
   io;
   queues = new Map;
   pendingReads = new Map;
-  readOperation(kind, userId, chatId, action) {
-    const key = JSON.stringify([kind, userId, chatId]);
+  readOperation(kind, userId, chatId) {
+    const key = JSON.stringify([userId, chatId]);
     const prior = this.pendingReads.get(key);
-    if (prior && !prior.started && this.queues.get(chatId) === prior.task)
+    if (prior && !prior.started && this.queues.get(chatId) === prior.task) {
+      prior.persist ||= kind === "sync";
       return prior.task.then((doc) => structuredClone(doc));
-    const entry = { started: false, task: undefined };
-    entry.task = this.serial(chatId, () => {
+    }
+    const entry = { started: false, persist: kind === "sync", task: undefined };
+    entry.task = this.serial(chatId, async () => {
       entry.started = true;
-      return action();
+      if (!userId || !await this.io.authorize(chatId, userId))
+        throw Error("Chat unavailable");
+      const { doc } = await this.build(chatId, userId);
+      if (entry.persist && doc.trackingEnabled !== false) {
+        const raw = await this.io.read(chatId);
+        const comparable = { ...doc, revision: raw ? JSON.parse(raw).revision : 0 };
+        if (JSON.stringify(comparable) !== raw) {
+          doc.revision = comparable.revision + 1;
+          await this.io.write(chatId, JSON.stringify(doc));
+        }
+      }
+      return doc;
     });
     this.pendingReads.set(key, entry);
     const cleanup = () => {
@@ -4225,10 +4282,22 @@ class PhoneStore {
     if (!chatId || chatId.length > 256)
       throw new Error("Missing chat");
     const raw = await this.io.read(chatId);
+    const legacy = !raw && this.io.legacy ? await this.io.legacy(userId, chatPath(chatId)) : null;
+    if (!raw && !legacy || raw && JSON.parse(raw).trackingEnabled === false) {
+      const value = raw ? JSON.parse(raw) : null;
+      const doc = emptyDocument(chatId);
+      if (value) {
+        if (value.schema !== 2 || value.chatId !== chatId || !Number.isSafeInteger(value.revision) || value.revision < 0)
+          throw Error("Invalid saved data");
+        doc.revision = value.revision;
+        doc.settings = readSettings(value.settings);
+      }
+      doc.trackingEnabled = false;
+      return { doc, rows: [] };
+    }
     const rows = await this.io.history(chatId);
     const player = await this.io.player(chatId, userId);
     const names = await this.io.names?.(chatId, userId) ?? [];
-    const legacy = !raw && this.io.legacy ? await this.io.legacy(userId, chatPath(chatId)) : null;
     const proof = JSON.stringify([chatId, userId, raw, rows.map(rowSignature), player, names, legacy]);
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(proof));
     const key = Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
@@ -4268,27 +4337,32 @@ class PhoneStore {
       if (!isRecord(value) || value.schema !== 2 || value.chatId !== chatId)
         throw Error("Invalid saved data");
       const settings = readSettings(value.settings);
-      return { source: settings.source, ...typeof value.helperOwner === "string" ? { owner: value.helperOwner } : {} };
+      return { source: value.trackingEnabled === false ? "main" : settings.source, ...typeof value.helperOwner === "string" ? { owner: value.helperOwner } : {} };
     });
   }
   preview(chatId, userId) {
-    return this.readOperation("preview", userId, chatId, async () => {
-      if (!userId || !await this.io.authorize(chatId, userId))
-        throw new Error("Chat unavailable");
-      return (await this.build(chatId, userId)).doc;
-    });
+    return this.readOperation("preview", userId, chatId);
   }
   sync(userId, chatId) {
-    return this.readOperation("sync", userId, chatId, async () => {
+    return this.readOperation("sync", userId, chatId);
+  }
+  settingsPreview(userId, chatId) {
+    return this.serial(chatId, async () => {
       if (!userId || !await this.io.authorize(chatId, userId))
-        throw new Error("Chat unavailable");
-      const { doc } = await this.build(chatId, userId);
-      const raw = await this.io.read(chatId);
-      const comparable = { ...doc, revision: raw ? JSON.parse(raw).revision : 0 };
-      if (JSON.stringify(comparable) !== raw) {
-        doc.revision = comparable.revision + 1;
-        await this.io.write(chatId, JSON.stringify(doc));
+        throw Error("Chat unavailable");
+      const raw = await this.io.read(chatId), doc = emptyDocument(chatId);
+      if (!raw) {
+        doc.trackingEnabled = false;
+        return doc;
       }
+      const value = JSON.parse(raw);
+      if (!isRecord(value) || value.schema !== 2 || value.chatId !== chatId || !Number.isSafeInteger(value.revision) || Number(value.revision) < 0 || value.trackingEnabled !== undefined && typeof value.trackingEnabled !== "boolean")
+        throw Error("Invalid saved data");
+      doc.settings = readSettings(value.settings);
+      doc.revision = Number(value.revision);
+      doc.trackingEnabled = value.trackingEnabled;
+      if (typeof value.helperOwner === "string")
+        doc.helperOwner = value.helperOwner;
       return doc;
     });
   }
@@ -4300,7 +4374,17 @@ class PhoneStore {
       const saved = readDocument(raw, chatId);
       if (saved.revision !== expectedRevision)
         throw new Error("The tracker changed. Reopen it and try again.");
+      if (update.trackingEnabled !== undefined) {
+        if (typeof update.trackingEnabled !== "boolean" || Object.keys(update).some((k) => k !== "trackingEnabled" && update[k] !== undefined))
+          throw Error("Invalid tracking state");
+        const next = { ...raw ? JSON.parse(raw) : saved, trackingEnabled: update.trackingEnabled, revision: saved.revision + 1 };
+        await this.io.write(chatId, JSON.stringify(next));
+        this.replayCache = undefined;
+        return { ...saved, trackingEnabled: next.trackingEnabled, revision: next.revision };
+      }
       let { doc, rows } = await this.build(chatId, userId);
+      if (doc.trackingEnabled === false)
+        throw Error("Turn on the tracker for this chat first.");
       if (JSON.stringify(doc.accepted, canonicalKeys) !== JSON.stringify(saved.accepted, canonicalKeys) && raw)
         throw new Error("The story changed. Reopen the tracker and try again.");
       if (update.settings !== undefined) {
@@ -4441,6 +4525,8 @@ class PhoneStore {
       if (saved.revision !== revision)
         throw Error("The tracker changed. Nothing was saved.");
       let { doc, rows } = await this.build(chatId, userId);
+      if (doc.trackingEnabled === false)
+        throw Error("Turn on the tracker for this chat first.");
       if (JSON.stringify(doc.accepted, canonicalKeys) !== JSON.stringify(saved.accepted, canonicalKeys))
         throw Error("The story changed. Nothing was saved.");
       const data = setupCandidates(doc, resolveSetup(doc, input, decisions)), last = [...rows].sort((a, b) => a.index_in_chat - b.index_in_chat).at(-1);
@@ -4479,7 +4565,7 @@ class PhoneStore {
       if (!userId || !await this.io.authorize(chatId, userId))
         throw new Error("Chat unavailable");
       const { doc, rows } = await this.build(chatId, userId);
-      if (doc.settings.source !== "helper" || doc.helperOwner !== userId || doc.helperAttempts.includes(attempt))
+      if (doc.trackingEnabled === false || doc.settings.source !== "helper" || doc.helperOwner !== userId || doc.helperAttempts.includes(attempt))
         return null;
       if (!Object.entries(effectiveDocument(doc).settings.enabled).some(([key, on]) => on && key !== "messages" && key !== "email" && key !== "notes.misc"))
         return null;
@@ -4508,7 +4594,7 @@ class PhoneStore {
       const raw = await this.io.read(chatId);
       const saved = readDocument(raw, chatId);
       const { doc, rows } = await this.build(chatId, userId);
-      if (saved.revision !== ticket.doc.revision || doc.settings.source !== "helper" || doc.helperOwner !== userId || doc.settings.connection_id !== ticket.doc.settings.connection_id || JSON.stringify(rows.map(rowSignature)) !== ticket.history)
+      if (doc.trackingEnabled === false || saved.revision !== ticket.doc.revision || doc.settings.source !== "helper" || doc.helperOwner !== userId || doc.settings.connection_id !== ticket.doc.settings.connection_id || JSON.stringify(rows.map(rowSignature)) !== ticket.history)
         return null;
       validateExpanded(values);
       const last = ticket.recent.at(-1);
@@ -4531,7 +4617,15 @@ class PhoneStore {
       if (!await this.io.authorize(chatId, userId))
         return;
       const raw = await this.io.read(chatId);
-      const { doc } = await this.build(chatId, userId);
+      if (!raw)
+        return;
+      const value = JSON.parse(raw);
+      if (!isRecord(value) || value.schema !== 2 || value.chatId !== chatId || !Number.isSafeInteger(value.revision) || !Array.isArray(value.notices) || value.notices.some((n) => typeof n !== "string"))
+        throw Error("Invalid saved data");
+      const doc = value;
+      readSettings(doc.settings);
+      if (doc.trackingEnabled === false)
+        return;
       const old = JSON.stringify(doc.notices);
       doc.notices = doc.notices.filter((n) => !isHelperNotice(n));
       if (text)
@@ -4553,14 +4647,22 @@ function canonicalKeys(_key, value) {
 function trimPhoneHistory(messages, settings, document2) {
   const history = messages.map((m, i) => ({ m, i })).filter((x) => x.m.__isChatHistory === true);
   const indexed = history.every((x) => Number.isInteger(x.m.sourceIndexInChat));
-  const last = Math.max(-1, ...history.map((x) => x.m.sourceIndexInChat ?? x.i));
-  const unique = [];
+  let last = -1;
+  for (const { m, i } of history)
+    last = Math.max(last, m.sourceIndexInChat ?? i);
+  const unique = new Map;
   for (const { m, i } of history) {
     const id = m.sourceMessageId ?? `part:${i}`;
-    if (!unique.includes(id))
-      unique.push(id);
+    if (!unique.has(id))
+      unique.set(id, unique.size);
   }
-  const recent = (m, index, n) => n > 0 && (indexed ? (m.sourceIndexInChat ?? -1) > last - n : unique.indexOf(m.sourceMessageId ?? `part:${index}`) >= unique.length - n);
+  const recent = (m, index, n) => n > 0 && (indexed ? (m.sourceIndexInChat ?? -1) > last - n : (unique.get(m.sourceMessageId ?? `part:${index}`) ?? -1) >= unique.size - n);
+  const admittedTexts = new Set;
+  const textKey = (source, from, body, to) => JSON.stringify([source, normalize(from), body, to]);
+  for (const t of document2?.state.messages ?? []) {
+    admittedTexts.add(textKey("id:" + t.at.id, t.from, t.text, t.to ?? ""));
+    admittedTexts.add(textKey("index:" + t.at.index, t.from, t.text, t.to ?? ""));
+  }
   return messages.map((message, index) => {
     if (!message.__isChatHistory)
       return message;
@@ -4575,7 +4677,8 @@ function trimPhoneHistory(messages, settings, document2) {
         else if (span.name === "phone-text") {
           const attrs = parseAttributes(span.header);
           const body = decodeEntities(span.body).trim();
-          const admitted = !!attrs && !!document2?.state.messages.some((t) => (message.sourceMessageId ? t.at.id === message.sourceMessageId : Number.isInteger(message.sourceIndexInChat) && t.at.index === message.sourceIndexInChat) && normalize(t.from) === normalize(attrs.from ?? "") && t.text === body && (t.to ?? "") === (attrs.to ?? ""));
+          const source = message.sourceMessageId ? "id:" + message.sourceMessageId : Number.isInteger(message.sourceIndexInChat) ? "index:" + message.sourceIndexInChat : null;
+          const admitted = !!attrs && source !== null && admittedTexts.has(textKey(source, attrs.from ?? "", body, attrs.to ?? ""));
           keep = keep && settings.apps.Messages && settings.enabled.messages && recent(message, index, settings.keepTexts) && admitted;
         } else
           keep = false;
@@ -4753,6 +4856,8 @@ var store = new PhoneStore({
 });
 async function loadPhoneDocument(chatId, userId) {
   const doc = await store.preview(chatId, userId);
+  if (doc.trackingEnabled === false)
+    return doc;
   if (doc.settings.source === "helper") {
     let usable = false;
     if (spindle.permissions.has("generation") && doc.helperOwner === userId)
@@ -4763,7 +4868,8 @@ async function loadPhoneDocument(chatId, userId) {
       doc.settings = { ...doc.settings, source: "main" };
   }
   try {
-    doc.personalReads = await messageReads.read(userId, chatId);
+    if (doc.settings.apps.Email && doc.settings.enabled.email)
+      doc.personalReads = await messageReads.read(userId, chatId);
   } catch {
     doc.personalReads = { seen: {}, available: false };
     warn("Lumi Phone Tracker: unread status unavailable; email continuity omitted.");
@@ -4804,20 +4910,14 @@ function registerHooks() {
       if (typeof payload.chatId !== "string" || typeof payload.generationId !== "string")
         return;
       helper.started(payload.chatId, payload.generationId);
-      if (userId)
-        spindle.sendToFrontend({ type: "phone_helper_changed", chatId: payload.chatId }, userId);
     }), spindle.on("GENERATION_ENDED", (payload, userId) => {
       if (typeof payload.chatId !== "string" || typeof payload.generationId !== "string")
         return;
       helper.ended(userId, payload);
-      if (userId)
-        spindle.sendToFrontend({ type: "phone_helper_changed", chatId: payload.chatId }, userId);
     }), spindle.on("GENERATION_STOPPED", (payload, userId) => {
       if (typeof payload.chatId !== "string" || typeof payload.generationId !== "string")
         return;
       helper.stopped(payload.chatId, payload.generationId);
-      if (userId)
-        spindle.sendToFrontend({ type: "phone_helper_changed", chatId: payload.chatId }, userId);
     }));
   } else if (!spindle.permissions.has("generation") && helperHooks.length) {
     helperHooks.forEach((fn) => fn());
@@ -4841,6 +4941,8 @@ function registerHooks() {
           return messages;
         }
         const document2 = await store.preview(context.chatId, context.userId);
+        if (document2.trackingEnabled === false)
+          return messages;
         return trimPhoneHistory(messages, document2.settings, document2);
       } catch {
         warn("Lumi Phone Tracker: prompt processing failed; prompt unchanged.");
@@ -4882,7 +4984,7 @@ spindle.onFrontendMessage((payload, userId) => {
         else {
           if (payload.confirm !== true)
             throw new SetupError("Confirm the setup preview before saving.");
-          result = { snapshot: await setupWizard.save(userId, chat, payload.id, payload.decisions) };
+          result = { snapshot: phoneSnapshot(await setupWizard.save(userId, chat, payload.id, payload.decisions)) };
           helper.cancel(chat);
         }
       }
@@ -4896,10 +4998,10 @@ spindle.onFrontendMessage((payload, userId) => {
   if (isRecord(payload) && payload.type === "phone_personal" && typeof payload.requestId === "string" && payload.requestId.length <= 100) {
     (async () => {
       const chatId = typeof payload.chatId === "string" && payload.chatId.length <= 256 ? payload.chatId : null;
-      let doc = chatId ? (requireReadPermissions(), await loadPhoneDocument(chatId, userId)) : null;
+      const change = payload.change;
+      let doc = chatId ? (requireReadPermissions(), isRecord(change) && change.kind === "preview" && change.target === "main" ? await loadPhoneDocument(chatId, userId) : await store.settingsPreview(userId, chatId)) : null;
       let value = await personal.read(userId);
       let snapshot;
-      const change = payload.change;
       if (isRecord(change) && change.kind === "preset_apply") {
         if (!doc || change.confirm !== true)
           throw Error("Confirm applying to this chat.");
@@ -4931,15 +5033,20 @@ spindle.onFrontendMessage((payload, userId) => {
         preview = { text: output, characters: output.length, tokenEstimate: Math.ceil(output.length / 4), warning: note };
       }
       const base = doc ?? emptyDocument("");
-      spindle.sendToFrontend({ type: "phone_personal_result", requestId: payload.requestId, chatId, personal: value, templates: { main: defaultWordingTemplate(base), helper: defaultWordingTemplate(base, true) }, snapshot, preview }, userId);
+      spindle.sendToFrontend({ type: "phone_personal_result", requestId: payload.requestId, chatId, personal: value, templates: { main: defaultWordingTemplate(base), helper: defaultWordingTemplate(base, true) }, snapshot: snapshot ? phoneSnapshot(snapshot) : undefined, preview }, userId);
     })().catch(() => spindle.sendToFrontend({ type: "phone_personal_error", requestId: payload.requestId, message: "Could not save. Check the name, limits and current chat; then try again." }, userId));
     return;
   }
   if (isRecord(payload) && payload.type === "phone_portraits" && typeof payload.chatId === "string" && payload.chatId.length <= 256 && typeof payload.requestId === "string" && payload.requestId.length <= 100) {
     (async () => {
       requireReadPermissions();
-      const doc = await store.preview(payload.chatId, userId);
-      const sources = await loadPortraitSources(spindle, doc.chatId, userId, doc.currentPlayer);
+      const doc = await store.settingsPreview(userId, payload.chatId);
+      if (doc.trackingEnabled === false) {
+        spindle.sendToFrontend({ type: "phone_portraits_result", requestId: payload.requestId, chatId: doc.chatId, sources: { characters: [] } }, userId);
+        return;
+      }
+      const player = await spindle.macros.resolve("{{user}}", { chatId: doc.chatId, userId, commit: false });
+      const sources = await loadPortraitSources(spindle, doc.chatId, userId, !player.diagnostics.length ? player.text.trim() : undefined);
       spindle.sendToFrontend({ type: "phone_portraits_result", requestId: payload.requestId, chatId: doc.chatId, sources }, userId);
     })().catch(() => spindle.sendToFrontend({ type: "phone_portraits_result", requestId: payload.requestId, chatId: payload.chatId, sources: { characters: [] } }, userId));
     return;
@@ -4947,7 +5054,7 @@ spindle.onFrontendMessage((payload, userId) => {
   if (isRecord(payload) && ["phone_connections", "phone_helper_now"].includes(String(payload.type)) && typeof payload.requestId === "string" && payload.requestId.length <= 100 && typeof payload.chatId === "string" && payload.chatId.length <= 256) {
     (async () => {
       requireReadPermissions();
-      await store.preview(payload.chatId, userId);
+      await store.settingsPreview(userId, payload.chatId);
       if (payload.type === "phone_connections") {
         const info = await helper.connections(userId, payload.chatId);
         spindle.sendToFrontend({ type: "phone_connections_result", requestId: payload.requestId, chatId: payload.chatId, info }, userId);
@@ -4965,9 +5072,11 @@ spindle.onFrontendMessage((payload, userId) => {
   if (isRecord(payload) && payload.type === "phone_mark_read" && typeof payload.requestId === "string" && payload.requestId.length <= 100 && typeof payload.chatId === "string" && payload.chatId.length <= 256 && typeof payload.key === "string" && payload.key.length <= 400 && Array.isArray(payload.observed) && payload.observed.length <= 1e5 && payload.observed.every((m) => isRecord(m) && typeof m.id === "string" && m.id.length <= 2000 && typeof m.receipt === "string" && m.receipt.length <= 20000)) {
     (async () => {
       requireReadPermissions();
-      const snapshot = await store.sync(userId, payload.chatId);
+      const snapshot = await store.preview(payload.chatId, userId);
+      if (snapshot.trackingEnabled === false)
+        throw Error("Tracking is off.");
       const reads = await messageReads.mark(userId, snapshot.chatId, payload.key, payload.observed, snapshot.state.messages, snapshot.state);
-      spindle.sendToFrontend({ type: "phone_reads_result", requestId: payload.requestId, chatId: snapshot.chatId, reads }, userId);
+      spindle.sendToFrontend({ type: "phone_reads_result", requestId: payload.requestId, chatId: snapshot.chatId, reads: snapshotReads(reads, phoneSnapshot(snapshot)) }, userId);
     })().catch(() => spindle.sendToFrontend({ type: "phone_reads_error", requestId: payload.requestId, chatId: payload.chatId }, userId));
     return;
   }
@@ -4988,17 +5097,20 @@ spindle.onFrontendMessage((payload, userId) => {
       spindle.sendToFrontend({ type: "phone_snapshot", requestId, chatId: null }, userId);
       return;
     }
-    let snapshot = payload.type === "phone_update" ? await store.update(userId, chatId, typeof payload.revision === "number" ? payload.revision : -1, { settings: payload.settings, edit: payload.edit, dismissNotice: payload.dismissNotice, portrait: payload.portrait, contactInfo: payload.contactInfo, fieldControl: payload.fieldControl, mergeContacts: payload.mergeContacts }) : await store.sync(userId, chatId);
+    let snapshot = payload.type === "phone_update" ? await store.update(userId, chatId, typeof payload.revision === "number" ? payload.revision : -1, { trackingEnabled: payload.trackingEnabled, settings: payload.settings, edit: payload.edit, dismissNotice: payload.dismissNotice, portrait: payload.portrait, contactInfo: payload.contactInfo, fieldControl: payload.fieldControl, mergeContacts: payload.mergeContacts }) : await store.sync(userId, chatId);
     if (payload.type === "phone_update") {
-      helper.cancel(chatId);
-      if (snapshot.settings.source === "helper" && snapshot.helperOwner === userId) {
-        await helper.connections(userId, chatId);
+      if (payload.trackingEnabled === true)
         snapshot = await store.sync(userId, chatId);
+      helper.cancel(chatId);
+      if (snapshot.trackingEnabled !== false && snapshot.settings.source === "helper" && snapshot.helperOwner === userId) {
+        await helper.connections(userId, chatId);
+        if ((await store.settingsPreview(userId, chatId)).revision !== snapshot.revision)
+          snapshot = await store.sync(userId, chatId);
       }
     }
-    const reads = await messageReads.read(userId, chatId);
+    const reads = snapshot.trackingEnabled === false ? emptyReads() : await messageReads.read(userId, chatId);
     const chatName = (await spindle.chats.get(chatId, userId))?.name ?? "";
-    spindle.sendToFrontend({ type: "phone_snapshot", requestId, chatId, chatName, snapshot, reads, helperBusy: helper.busy(chatId) }, userId);
+    spindle.sendToFrontend({ type: "phone_snapshot", requestId, chatId, chatName, snapshot: phoneSnapshot(snapshot), reads: snapshotReads(reads, phoneSnapshot(snapshot)), helperBusy: helper.busy(chatId) }, userId);
   })().catch((error) => {
     const reason = error instanceof Error ? error.message : "";
     const known = ["Invalid contact details", "Reopen this contact.", "Outgoing player entries need", "This app is full.", "An account with that name", "The tracker changed.", "The story changed.", "This section is full.", "Contacts is full", "Locations is full", "A contact with that name", "A place with that name", "A note with that name"];

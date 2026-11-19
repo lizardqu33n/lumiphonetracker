@@ -1,5 +1,7 @@
 # Lumi Phone Tracker
 
+New chats start with tracking off. Open the phone and choose **Turn on for this chat**. Existing tracked chats remain on. Turning it off keeps saved data.
+
 A small phone for keeping track of story facts. Each chat has its own Scene, Weather, Locations, Notes, Contacts and Messages, plus optional Calls, Email and Bank. The existing Phone sidebar tab controls apps, tracking and appearance.
 
 **Version 0.17.1: all six build steps are delivered.** Source, manifest, built frontend/backend, tests and guides are included. The new Helper AI has been tested with mocks, not a real paid connection.

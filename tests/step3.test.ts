@@ -299,7 +299,7 @@ describe("macros and persistent isolation", () => {
     const saved = new Map<string, string>(); const histories = new Map<string, StoryRow[]>();
     let writes = 0;
     const io: PhoneIO = { authorize: async (chat, user) => user === `owner-${chat}`,
-      read: async chat => saved.get(chat) ?? "", write: async (chat, value) => { writes++; saved.set(chat, value); },
+      read: async chat => saved.get(chat) ?? JSON.stringify(emptyDocument(chat)), write: async (chat, value) => { writes++; saved.set(chat, value); },
       history: async chat => structuredClone(histories.get(chat) ?? []), player: async () => "Player" };
     return { saved, histories, io, store: new PhoneStore(io), writes: () => writes };
   }
@@ -364,6 +364,7 @@ describe("macros and persistent isolation", () => {
     const f = fixture();
     const oldRow = row(0, {}, "", { content: '<phone-state>\nlocation="Home"\nnotes=["Bring the map"]\n</phone-state>' });
     const old = rebuild("a", [oldRow]); const saved = JSON.stringify(old);
+    f.io.read = async chat => f.saved.get(chat) ?? "";
     f.io.legacy = async () => structuredClone(old);
     f.histories.set("a", [{ ...oldRow, content: "<phone-state>broken</phone-state>" }]);
     const doc = await f.store.sync("owner-a", "a");

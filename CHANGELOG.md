@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.18.14 - Per-chat tracking and lighter refreshes
+
+- Added Turn on/Turn off for this chat on Home. Existing tracked chats stay on; new chats start off. Turning off keeps story data, settings and portraits.
+- Shared mixed preview/sync batches with a fresh follow-up and mutation barriers, while preserving user authorization and independent results. Removed redundant generation-status refresh notifications.
+- Send a typed display-only snapshot to the frontend; replay journals stay on the backend. Transport omits stale read receipts without deleting stored personal history. Contact rename matching stays intact.
+- Preserve unchanged phone/sidebar controls and focused inputs. Defer closed-phone rendering, connection loading and portraits until needed. Bound portrait-validation reuse.
+- Connection listing and normal profile/wording loading authorize through saved settings without history replay. Main Refresh reads history once. Helper notices update metadata without replay or replacing story data.
+- Indexed prompt retention and conversation ordering. Kept artwork, fonts, saved text history and all existing safety checks.
+- Added regression tests and a synthetic benchmark. 295 code tests and 40 focused browser checks passed; real-server RAM and multi-user timing still need server testing.
+
 ## 0.18.13 - History and generation performance
 
 - Coalesced backend sync/preview bursts and skipped Helper history preparation in Main AI mode.

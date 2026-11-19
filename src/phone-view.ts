@@ -1,3 +1,4 @@
+import type {PhoneSnapshot as PhoneDocument} from "./ui-snapshot";
 import { ACTION_IMAGES } from "./action-images";
 import { WEATHER_CONDITIONS, WEATHER_SWITCHES, WEATHER_ALERT_ENDED, displayCondition, temperatureParts, type WeatherDetail } from "./weather-fields";
 import { WEATHER_ICONS } from "./weather-icons";
@@ -8,7 +9,7 @@ import {CONTACT_ICONS} from "./contact-icons";
 import {emptyContactInfo,contactDuplicates,contactMatch} from "./contact-info";
 import {renderEmojiText,attachEmojiPicker} from "./emoji";
 import {preparePortrait,portraitBytes,portraitSource,portraitKey,initialTone,emptyPortraitSources,PORTRAIT_INPUT_LIMIT,type PortraitSources} from "./portraits";
-import type { Cell, Contact, Document as PhoneDocument, ManualEdit, Note, Section } from "./model";
+import type { Cell, Contact, ManualEdit, Note, Section } from "./model";
 import { effectiveDocument, CONTACT_KEYS, SCENE_KEYS, SECTIONS, normalize } from "./model";
 import { APP_IMAGES } from "./app-icons";
 import { activityReceipt,activityUnread } from "./activity";
@@ -20,10 +21,11 @@ import { conversations, emptyReads, isUnread, receipt, threadKey, type Conversat
 import { isRecord, normalSpaces } from "./shared";
 
 export interface ViewActions {
-  update(change: { edit?: Partial<ManualEdit>; settings?: unknown; dismissNotice?: string;portrait?:{name:string;data:string|null};contactInfo?:unknown;fieldControl?:unknown;mergeContacts?:unknown }, revision: number): Promise<PhoneDocument>;
+  update(change: { trackingEnabled?:boolean; edit?: Partial<ManualEdit>; settings?: unknown; dismissNotice?: string;portrait?:{name:string;data:string|null};contactInfo?:unknown;fieldControl?:unknown;mergeContacts?:unknown }, revision: number): Promise<PhoneDocument>;
   preferences(change: { css?: string; dismiss?: App|"Home"|"Draft hint" }): Promise<Preferences>;
   markRead(chatId: string, key: string, observed: { id: string; receipt: string }[]): Promise<ReadState>;
   draft(chatId: string, to: string, text: string,group?:string): { manual: boolean; tag: string };
+  portraits?():void;
   size(width: number, height: number, open: boolean): void;
 }
 export const DESCRIPTIONS: Record<App, string> = {
@@ -110,6 +112,8 @@ export class PhoneView {
   private prefs = defaultPreferences();
   private app: App | "Home" = "Home";
   private openState = false;
+  private renderDirty=true;
+  private displayKey="";
   private editing = false;
   private busy = false;
   private observer: ResizeObserver;
@@ -148,24 +152,28 @@ export class PhoneView {
     this.render(); this.setOpen(false);
   }
   receive(doc: PhoneDocument | null, reads?: ReadState): void {
+    const key=JSON.stringify([doc?.chatId,doc?.trackingEnabled,doc?.settings,doc?.state,doc?.fieldLocks,doc?.contactInfo,doc?.portraits,doc?.currentPlayer,doc?.playerNames]);
+    const displayChanged=key!==this.displayKey;this.displayKey=key;
     const changedChat = doc?.chatId !== this.doc?.chatId;
+    if(!displayChanged){this.doc=doc;if(reads&&reads.revision>this.reads.revision)this.receiveReads(reads);return;}
 
     const oldActivities=new Set([...(this.doc?.state.calls??[]),...(this.doc?.state.emails??[])].map(e=>activityReceipt(e)));
     const previous = new Set(this.doc?.state.messages.filter(m => m.direction === "incoming").map(m => JSON.stringify([m.id, receipt(m)])) ?? []);
-    const arrived = !changedChat && this.doc && doc?.settings.apps.Messages&&doc.settings.enabled.messages ? doc.state.messages.filter(m => m.direction === "incoming" && !previous.has(JSON.stringify([m.id, receipt(m)]))) : [];
+    const arrived = doc?.trackingEnabled!==false && !changedChat && this.doc && doc?.settings.apps.Messages&&doc.settings.enabled.messages ? doc.state.messages.filter(m => m.direction === "incoming" && !previous.has(JSON.stringify([m.id, receipt(m)]))) : [];
     this.doc = doc;
+    if(doc?.trackingEnabled===false)this.app="Home";
     if(this.app!=="Home"&&!doc?.settings.apps[this.app])this.app="Home";
     if (changedChat) {
       this.modelError="";
-      this.selectedContact=null;this.contactOrigin="Contacts";this.contactScroll=0;this.portraitEpoch++;this.portraitSources=emptyPortraitSources();this.chatEpoch++; this.pendingReads.clear(); this.reads = reads ?? emptyReads(); this.replyDrafts.clear();this.replySelections.clear(); this.manualDrafts.clear();
+      this.portraitValidation.clear();this.selectedContact=null;this.contactOrigin="Contacts";this.contactScroll=0;this.portraitEpoch++;this.portraitSources=emptyPortraitSources();this.chatEpoch++; this.pendingReads.clear(); this.reads = reads ?? emptyReads(); this.replyDrafts.clear();this.replySelections.clear(); this.manualDrafts.clear();
       this.clearTextNotice(); this.editing = false; this.app = "Home"; this.selectedText = null;
 
 
     } else if (reads && reads.revision >= this.reads.revision) this.reads = reads;
-    if (!doc?.settings.apps.Messages||!doc.settings.enabled.messages) this.clearTextNotice();
+    if (doc?.trackingEnabled===false||!doc?.settings.apps.Messages||!doc.settings.enabled.messages) this.clearTextNotice();
     else if (arrived.length) this.showTextNotice(arrived.length === 1 ? `New text from ${arrived[0].from}` : `${arrived.length} new texts`);
-    if (!this.editing || changedChat) this.render(); else this.refreshBadges();
-    if(!changedChat&&doc){const arrived=[...doc.state.calls.filter(c=>c.direction==="missed"&&doc.settings.apps.Calls&&doc.settings.enabled.calls),...doc.state.emails.filter(e=>e.direction==="incoming"&&doc.settings.apps.Email&&doc.settings.enabled.email)].filter(e=>!oldActivities.has(activityReceipt(e))&&activityUnread(e,this.reads.seen));if(arrived.length)this.showTextNotice(arrived.length===1?("subject" in arrived[0]?`New email from ${arrived[0].from}`:`Missed call from ${arrived[0].name}`):`${arrived.length} new calls or emails`);}
+    if(displayChanged){this.renderDirty=true;if(this.openState&&(!this.editing||changedChat))this.render();else this.refreshBadges();}else if(reads)this.refreshBadges();
+    if(!changedChat&&doc&&doc.trackingEnabled!==false){const arrived=[...doc.state.calls.filter(c=>c.direction==="missed"&&doc.settings.apps.Calls&&doc.settings.enabled.calls),...doc.state.emails.filter(e=>e.direction==="incoming"&&doc.settings.apps.Email&&doc.settings.enabled.email)].filter(e=>!oldActivities.has(activityReceipt(e))&&activityUnread(e,this.reads.seen));if(arrived.length)this.showTextNotice(arrived.length===1?("subject" in arrived[0]?`New email from ${arrived[0].from}`:`Missed call from ${arrived[0].name}`):`${arrived.length} new calls or emails`);}
     this.markVisibleConversation();this.markVisibleActivity();
   }
   receiveReads(reads: ReadState): void { if (reads.revision >= this.reads.revision) { this.reads = reads; this.refreshBadges(); } }
@@ -174,16 +182,17 @@ export class PhoneView {
     const epoch=++this.portraitEpoch,chat=this.chatEpoch;const sources=emptyPortraitSources();
     const prepare=async(v:unknown)=>{if(!isRecord(v)||typeof v.name!=="string"||v.name.length>100)return;try{const bytes=portraitBytes(v.data,PORTRAIT_INPUT_LIMIT);return {name:v.name,data:await preparePortrait(new Blob([bytes],{type:typeof v.data==="string"?v.data.slice(5,v.data.indexOf(";")):""}))};}catch{return;}};
     if(isRecord(raw)){if(Array.isArray(raw.characters))for(const c of raw.characters.slice(0,30)){const result=await prepare(c);if(result)sources.characters.push(result);}const persona=await prepare(raw.persona);if(persona)sources.persona=persona;}
-    if(chat!==this.chatEpoch||epoch!==this.portraitEpoch)return;this.portraitSources=sources;if(!this.editing)this.render();
+    if(chat!==this.chatEpoch||epoch!==this.portraitEpoch)return;this.portraitSources=sources;this.renderDirty=true;if(this.openState&&!this.editing)this.render();
   }
+  private portraitValidation=new Map<string,string>();
   private portrait(name:string,player=false,group=false,custom?:Record<string,string>):HTMLElement{
     const node=el("span",`lpt-portrait lpt-portrait-tone-${initialTone(name)}`);node.setAttribute("role","img");node.setAttribute("aria-label",`Portrait for ${name}`);
     const initial=el("span","lpt-portrait-initial",Array.from(name.trim())[0]?.toLocaleUpperCase()??"?");node.append(initial);
     const source=group?undefined:portraitSource(name,custom??this.doc?.portraits??{},this.portraitSources,player);
-    if(source)try{portraitBytes(source);const img=el("img","lpt-portrait-image");img.alt="";img.setAttribute("aria-hidden","true");img.draggable=false;img.addEventListener("load",()=>{initial.hidden=true;});img.addEventListener("error",()=>{img.remove();initial.hidden=false;});img.src=source;node.append(img);}catch{}
+    if(source)try{if(this.portraitValidation.get(name)!==source){portraitBytes(source);if(this.portraitValidation.size>=32)this.portraitValidation.clear();this.portraitValidation.set(name,source);}const img=el("img","lpt-portrait-image");img.alt="";img.setAttribute("aria-hidden","true");img.draggable=false;img.addEventListener("load",()=>{initial.hidden=true;});img.addEventListener("error",()=>{img.remove();initial.hidden=false;});img.src=source;node.append(img);}catch{}
     return node;
   }
-  setModelError(message:string):void {if(this.modelError!==message){this.modelError=message;this.render();}}
+  setModelError(message:string):void {if(this.modelError!==message){this.modelError=message;this.renderDirty=true;if(this.openState)this.render();}}
   setError(message: string): void { renderEmojiText(this.error,message); }
   setStatus(message: string): void { renderEmojiText(this.status,message); }
   fit(): void { this.measure(); }
@@ -197,9 +206,9 @@ export class PhoneView {
   }
   open(app?: App): void { if (app) this.navigate(app); this.setOpen(true); this.back.hidden ? this.frame.querySelector<HTMLElement>(".lpt-app-button, .lpt-close")?.focus() : this.back.focus(); }
   close(): void { this.setOpen(false); this.launcher.focus(); }
-  destroy(): void { window.visualViewport?.removeEventListener("resize",this.viewportFit);this.portraitEpoch++;clearTimeout(this.noticeTimer); this.chatEpoch++; this.observer.disconnect(); this.root.remove(); }
+  destroy(): void { window.visualViewport?.removeEventListener("resize",this.viewportFit);this.portraitEpoch++;clearTimeout(this.noticeTimer); this.chatEpoch++; this.observer.disconnect(); this.portraitValidation.clear();this.root.remove(); }
   private setOpen(open: boolean): void {
-    this.openState = open; this.root.dataset.open = String(open); this.frame.hidden = !open; this.launcher.hidden = open;
+    this.openState = open;if(open&&this.renderDirty)this.render();if(open&&(this.app==="Contacts"||this.app==="Messages"))this.actions.portraits?.(); this.root.dataset.open = String(open); this.frame.hidden = !open; this.launcher.hidden = open;
     if (open) this.frame.insertBefore(this.textNotice, this.content); else this.root.insertBefore(this.textNotice, this.frame);
     this.measure(); this.markVisibleConversation();this.markVisibleActivity();
   }
@@ -213,8 +222,9 @@ export class PhoneView {
     const closedHeight = this.textNotice.hidden ? height : Math.max(48, Math.ceil(this.root.getBoundingClientRect().height));
     this.actions.size(Math.max(48, width), Math.max(48, this.openState ? height : closedHeight), this.openState);
   }
-  private navigate(app: App | "Home"): void { if(app==="Home")this.selectedContact=null; this.app = app!=="Home"&&!this.doc?.settings.apps[app]?"Home":app; this.editing = false; this.render(); this.content.scrollTop = 0; this.markVisibleActivity(); }
+  private navigate(app: App | "Home"): void { if(app==="Home")this.selectedContact=null; this.app = app!=="Home"&&!this.doc?.settings.apps[app]?"Home":app; this.editing = false; this.render(); this.content.scrollTop = 0;if(app==="Contacts"||app==="Messages")this.actions.portraits?.(); this.markVisibleActivity(); }
   private render(): void {
+    this.renderDirty=false;
     if(this.app==="Contacts"&&this.selectedContact===null&&this.content.querySelector(".lpt-contact-row"))this.contactScroll=this.content.scrollTop;
     if(this.app==="Messages"&&this.selectedText!==null&&(!this.enabled("messages")||!this.doc||( !this.doc.state.messages.some(m=>threadKey(m)===this.selectedText)&&!this.doc.state.contacts.some(c=>normalize(c.name)===this.selectedText))))this.selectedText=null;
     const previousReply=this.content.querySelector<HTMLTextAreaElement>(".lpt-reply-input"),previousThread=previousReply?.closest<HTMLElement>(".lpt-thread")?.dataset.conversation;
@@ -234,6 +244,7 @@ export class PhoneView {
     if(this.app==="Home")header.prepend(this.storyStrip);else this.frame.insertBefore(this.storyStrip,header);
     this.back.hidden = this.app === "Home" ||(this.app==="Contacts"&&this.selectedContact!==null)|| (this.app==="Messages"&&this.selectedText!==null);
     if (this.app === "Home") {
+      if(this.doc){const on=this.doc.trackingEnabled!==false;const toggle=button(on?"Turn off for this chat":"Turn on for this chat","lpt-button lpt-chat-toggle",()=>{void this.change({trackingEnabled:!on});});toggle.setAttribute("aria-pressed",String(on));this.content.append(toggle);if(!on){this.content.append(el("p","lpt-chat-off lpt-help","Tracking is off for this chat. Saved data is kept."));this.refreshBadges();this.measure();return;}}
       const home = el("div", "lpt-home");
       for (const app of APPS.filter(a=>this.doc?.settings.apps[a])) {
         const b = button("", "lpt-app-button", () => this.navigate(app)); b.dataset.app = app;
@@ -291,9 +302,7 @@ export class PhoneView {
     const controls = this.root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLButtonElement | HTMLSelectElement>(".lpt-setting input, .lpt-helper-source, .lpt-helper-connection, .lpt-form input, .lpt-form textarea, .lpt-form select, .lpt-form button, .lpt-add, .lpt-field, .lpt-delete");
     controls.forEach(control => { control.disabled = true; });
     try {
-      const doc = await this.actions.update(change, revision); this.editing = false; this.doc = doc;
-
-      this.render();
+      const doc = await this.actions.update(change, revision); this.editing = false; this.receive(doc);if(this.renderDirty&&this.openState)this.render();
       this.setStatus("Saved.");
     } catch (e) { this.setStatus(""); this.setError(e instanceof Error ? e.message : "Could not save. Your changes are still here."); }
     finally { this.busy = false; controls.forEach(control => { control.disabled = false; }); }

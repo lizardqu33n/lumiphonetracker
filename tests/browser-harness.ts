@@ -1,3 +1,4 @@
+import {phoneSnapshot} from "../src/ui-snapshot";
 import {SetupChoiceStore} from "../src/setup-choices";
 import {SetupWizard,SetupError} from "../src/setup-wizard";
 import {PersonalStore,emptyPersonal,builtInPresets,selectedWording} from "../src/personal-settings";
@@ -25,7 +26,7 @@ const readFiles = new Map<string, unknown>();
 let composerState = { mounted: true, chatId: "a" as string | null, text: "" }; let focusCount = 0; let sendCalls = 0;
 const readStore = new MessageReads({ read: async (u,c) => structuredClone(readFiles.get(`${u}/${c}`) ?? emptyReads()), write: async (u,c,v) => { readFiles.set(`${u}/${c}`, structuredClone(v)); } });
 const store = new PhoneStore({ authorize: async (chat, user) => user === `owner-${chat}`,
-  read: async chat => docs.get(chat) ?? "", write: async (chat, data) => { docs.set(chat, data); },
+  read: async chat => docs.get(chat) ?? JSON.stringify(emptyDocument(chat)), write: async (chat, data) => { docs.set(chat, data); },
   history: async chat => structuredClone(histories.get(chat) ?? []), player: async () => "Player" });
 const preferenceStore = new PreferenceStore({ read: async () => prefs, write: async (_u, value) => { prefs = structuredClone(value); } });
 let helperProfiles=[{id:"small",name:"Saved small connection",model:"Small test model",is_default:true}];let helperDelay=0;let helperOutput='{"weather":"Clear skies"}';const helperCalls:Parameters<HelperIO["generate"]>[0][]=[];
@@ -37,21 +38,23 @@ const setupApi={permissions:{has:(p:string)=>granted.includes(p)},chats:{get:asy
 const setupWizard=new SetupWizard(setupApi,store);
 const wizardChoices=new Map<string,unknown>();
 const choiceStore=new SetupChoiceStore({authorize:async(u,c)=>u===`owner-${c}`,read:async(u,c)=>wizardChoices.get(`${u}/${c}`)??[],write:async(u,c,v)=>{wizardChoices.set(`${u}/${c}`,v);}});
+const requestCounts=new Map<string,number>();
 const sendToBackend = (payload: unknown) => {
   if (!isRecord(payload)) return;
+  requestCounts.set(String(payload.type),(requestCounts.get(String(payload.type))??0)+1);
   if(payload.type==="phone_sync")syncCount++;
   const id = payload.requestId; const chat = payload.chatId===null?"":String(payload.chatId ?? activeChat ?? ""); const reply = onBackend;
   const run = async () => {
     try {
       if(payload.type==="phone_setup_choices"||payload.type==="phone_setup_choices_save"){const choices=await choiceStore.access(`owner-${chat}`,chat,payload.type==="phone_setup_choices_save",payload.choices);reply({type:"phone_setup_result",requestId:id,chatId:chat,result:{choices}});return;}
-      if(["phone_setup_prepare","phone_setup_run","phone_setup_save"].includes(String(payload.type))){let result;if(payload.type==="phone_setup_prepare")result=await setupWizard.prepare(`owner-${chat}`,chat,payload.choices);else if(payload.type==="phone_setup_run")result=await setupWizard.run(`owner-${chat}`,chat,String(payload.id));else{if(payload.confirm!==true)throw Error("Confirm first");result={snapshot:await setupWizard.save(`owner-${chat}`,chat,String(payload.id),payload.decisions)};}reply({type:"phone_setup_result",requestId:id,chatId:chat,result});return;}
+      if(["phone_setup_prepare","phone_setup_run","phone_setup_save"].includes(String(payload.type))){let result;if(payload.type==="phone_setup_prepare")result=await setupWizard.prepare(`owner-${chat}`,chat,payload.choices);else if(payload.type==="phone_setup_run")result=await setupWizard.run(`owner-${chat}`,chat,String(payload.id));else{if(payload.confirm!==true)throw Error("Confirm first");result={snapshot:phoneSnapshot(await setupWizard.save(`owner-${chat}`,chat,String(payload.id),payload.decisions))};}reply({type:"phone_setup_result",requestId:id,chatId:chat,result});return;}
       if(payload.type==="phone_personal") {
         let personal=await personalStore.read("user");let snapshot;
         const doc=chat?await store.preview(chat,`owner-${chat}`):null,change=payload.change;
         if(isRecord(change)&&change.kind==="preset_apply") {if(!doc||change.confirm!==true)throw Error();const preset=[...builtInPresets(),...personal.presets].find(p=>p.id===change.id);if(!preset)throw Error();snapshot=await store.update(`owner-${chat}`,chat,Number(payload.chatRevision),{settings:preset.settings});}
         else if(change!==undefined&&(!isRecord(change)||change.kind!=="preview"))personal=await personalStore.update("user",Number(payload.revision),change,doc?.settings);
         let preview;if(isRecord(change)&&change.kind==="preview"){if(!doc)throw Error();const target=change.target==="helper"?"helper":"main",text=change.text===undefined?selectedWording(personal,target):String(change.text);let note="";const warn=()=>{note="Generated syntax appended or Default used.";};const output=target==="main"?formatMacro(doc,text,warn):String(helperInput(await store.helperPreview(`owner-${chat}`,chat),text,warn).messages[0].content);preview={text:output,characters:output.length,tokenEstimate:Math.ceil(output.length/4),warning:note};}
-        const base=doc??emptyDocument("");reply({type:"phone_personal_result",requestId:id,chatId:chat||null,personal,templates:{main:defaultWordingTemplate(base),helper:defaultWordingTemplate(base,true)},snapshot,preview});return;
+        const base=doc??emptyDocument("");reply({type:"phone_personal_result",requestId:id,chatId:chat||null,personal,templates:{main:defaultWordingTemplate(base),helper:defaultWordingTemplate(base,true)},snapshot:snapshot?phoneSnapshot(snapshot):undefined,preview});return;
       }
       if(payload.type==="phone_portraits"){reply({type:"phone_portraits_result",requestId:payload.requestId,chatId:payload.chatId,sources:portraitSources});return;}
   if (payload.type === "phone_preferences" || payload.type === "phone_preferences_update") {
@@ -70,9 +73,9 @@ const sendToBackend = (payload: unknown) => {
         const reads = await readStore.mark("user", chat, String(payload.key), payload.observed as { id: string; receipt: string }[], snapshot.state.messages,snapshot.state);
         reply({ type: "phone_reads_result", requestId: id, chatId: chat, reads }); return;
       }
-      let snapshot = payload.type === "phone_update" ? await store.update(`owner-${chat}`, chat, Number(payload.revision), { edit: payload.edit, settings: payload.settings, dismissNotice: payload.dismissNotice,portrait:payload.portrait,contactInfo:payload.contactInfo,fieldControl:payload.fieldControl,mergeContacts:payload.mergeContacts }) : await store.sync(`owner-${chat}`, chat);
-      if(payload.type==="phone_update"){helper.cancel(chat);if(snapshot.settings.source==="helper"){await helper.connections(`owner-${chat}`,chat);snapshot=await store.sync(`owner-${chat}`,chat);}}
-      reply({ type: "phone_snapshot", requestId: id, chatId: chat, chatName:chat==="a"?"Lantern story":"Other story", snapshot, reads: await readStore.read("user",chat),helperBusy:helper.busy(chat) });
+      let snapshot = payload.type === "phone_update" ? await store.update(`owner-${chat}`, chat, Number(payload.revision), { trackingEnabled:payload.trackingEnabled, edit: payload.edit, settings: payload.settings, dismissNotice: payload.dismissNotice,portrait:payload.portrait,contactInfo:payload.contactInfo,fieldControl:payload.fieldControl,mergeContacts:payload.mergeContacts }) : await store.sync(`owner-${chat}`, chat);
+      if(payload.type==="phone_update"){if(payload.trackingEnabled===true)snapshot=await store.sync(`owner-${chat}`,chat);helper.cancel(chat);if(snapshot.trackingEnabled!==false&&snapshot.settings.source==="helper"){await helper.connections(`owner-${chat}`,chat);snapshot=await store.sync(`owner-${chat}`,chat);}}
+      reply({ type: "phone_snapshot", requestId: id, chatId: chat, chatName:chat==="a"?"Lantern story":"Other story", snapshot:phoneSnapshot(snapshot), reads: await readStore.read("user",chat),helperBusy:helper.busy(chat) });
     } catch (e) { reply({ type: String(payload.type).startsWith("phone_setup_")?"phone_setup_error": payload.type === "phone_personal" ? "phone_personal_error" : payload.type === "phone_mark_read" ? "phone_reads_error" : "phone_error", requestId: id, chatId:chat, message: e instanceof Error ? e.message : "Failed" }); }
   };
   setTimeout(() => { void run(); }, payload.type === "phone_update"||(payload.type==="phone_personal"&&isRecord(payload.change)&&payload.change.kind==="preset_apply") ? updateDelay : payload.type==="phone_sync"?syncDelay:0);
@@ -136,7 +139,7 @@ const fixturePast = (chat:string):StoryRow=>({id:`${chat}-past`,chat_id:chat,ind
 function start() { cleanup = setup(ctx as never); }
 const api = {
   async seed(kind: "empty" | "story" = "story") {
-    cleanup?.(); helper.cancelAll(); docs.clear(); histories.clear(); events.clear(); readFiles.clear(); prefs = defaultPreferences(); activeChat = "a"; granted = ["chats", "chat_mutation", "interceptor", "ui_panels","generation"]; updateDelay = 0;
+    cleanup?.();requestCounts.clear(); helper.cancelAll(); docs.clear(); histories.clear(); events.clear(); readFiles.clear(); prefs = defaultPreferences(); activeChat = "a"; granted = ["chats", "chat_mutation", "interceptor", "ui_panels","generation"]; updateDelay = 0;
     wizardChoices.clear();setupCalls=0;setupOutput=null;setupFinish="stop";setupFailure="";helperFailure="";setupFact="Zoe is a guide. Her phone is 555666.";helperCalls.length=0;helperDelay=0;helperOutput='{"weather":"Clear skies"}';helperProfiles=[{id:"small",name:"Saved small connection",model:"Small test model",is_default:true}];
     composerState = { mounted:true, chatId:"a", text:"" }; focusCount = 0; sendCalls = 0; ctx.host.capabilities["composer-v1"] = 1;
     failAppearanceSave = false; failWidget = false;
@@ -161,6 +164,7 @@ const api = {
   composerSupported(value: boolean) { ctx.host.capabilities["composer-v1"] = value ? 1 : 0; },
   syncTestDelay(ms:number){syncDelay=ms;syncCount=0;},
   syncTestCount(){return syncCount;},
+  backendCounts(){return Object.fromEntries(requestCounts);},
   generationListenerCounts(){return ["GENERATION_STARTED","GENERATION_ENDED","GENERATION_STOPPED"].map(name=>events.get(name)?.size??0);},
   generationEvent(name:string,id:string,error?:string){for(const fn of events.get(name)??[])fn({chatId:activeChat,generationId:id,error});},
   setupScenario(fact:string,output:string){setupFact=fact;setupOutput=output;},

@@ -1,3 +1,13 @@
+# 0.18.14 verification
+
+295 code tests, type checking, reproducible built-file checks, manifest validation and 40 focused browser checks passed. The installable package includes source, built files, tests and guides.
+
+New coverage: per-chat opt-in and old-chat migration; zero history/model work while off; retained journals/state; shared activation and isolated chats; late Helper results; actual backend macro/interceptor handling; mixed read coalescing with fresh follow-up and mutation barriers; preview-only reads never writing; compact UI snapshots retaining rename/lock data; transport receipt filtering without storage deletion; lazy connection/portrait requests; unchanged DOM/input focus; closed updates displayed on reopening; escaped drafts and outgoing bubbles only after sending; protected Reset.
+
+Synthetic 1,000-message benchmark: 21 mixed requests now cause 2 history reads, versus 21 in the prior build. The actual UI snapshot is 1,539 bytes versus a 194,925-byte internal document in that fixture. These are synthetic request/size measurements, not live server memory measurements. Run scripts/benchmark-refresh.ts with Bun to reproduce the current result.
+
+No real Lumiverse main-process heap, live connection, mobile device, or real multi-user/two-tab timing was profiled. Sequential reads still validate current history; no guessed generation ID or time-based cache was added. The full UI suite has the previously documented styling/assertion limitations below; the 40 focused checks are a separate passing run. Other deployment limitations below still apply.
+
 # Verification report - 0.18.13
 
 283 code tests pass with type checking and reproducible build/package validation. Added regressions for authoritative replay memoization, persona/chat identity, edit/swipe invalidation, bounded cache payloads, old journal compaction, optional lean history, Unicode scanning and timeout during blocked preparation. See docs/HISTORY-INVESTIGATION.md for isolated before/after measurements and the final synthetic workloads. The scanner passed a separate 5,000-input comparison. All 23 focused browser checks passed against the final local candidate.
