@@ -1,4 +1,303 @@
 // @bun
+// src/shared.ts
+var normalSpaces = (text) => text.replaceAll("\u2800", " ");
+var EXTENSION_NAME = "Lumi Phone Tracker";
+var BUILD_STEP = 6;
+var TRACKER_TAG = "phone-state";
+var TEXT_TAG = "phone-text";
+var TRACKER_FIELDS = ["location", "time", "present", "details", "weather", "notes"];
+var DEFAULT_ITEMS = Object.freeze({
+  location: true,
+  time: true,
+  present: true,
+  details: true,
+  weather: true,
+  notes: true,
+  messages: true
+});
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+// src/tags.ts
+var NAMES = [TRACKER_TAG, TEXT_TAG, "phone-email"];
+var OPENINGS = NAMES.map((name) => "<" + name);
+var MAX_NAME_LENGTH = Math.max(...NAMES.map((name) => name.length));
+var space = (c) => c === " " || c === "\u2800" || c === `
+` || c === "\r" || c === "\t";
+function* tagSpans(text, includeBody = true) {
+  if (!text.includes("<"))
+    return;
+  const folded = text.toLowerCase();
+  const lower = folded.length === text.length ? folded : text.replace(/[A-Z]/g, (char) => char.toLowerCase());
+  for (let i = 0;i < text.length; i++) {
+    if (text[i] !== "<")
+      continue;
+    let n = i + 1;
+    const closing = text[n] === "/";
+    if (closing)
+      n++;
+    let name;
+    for (const candidate of NAMES) {
+      const next = lower[n + candidate.length];
+      if (lower.startsWith(candidate, n) && (next === undefined || space(next) || next === ">" || next === "/")) {
+        name = candidate;
+        break;
+      }
+    }
+    if (!name) {
+      const tail = lower.slice(n, n + MAX_NAME_LENGTH + 1);
+      if (tail.length === 0 || NAMES.some((name) => name.startsWith(tail))) {
+        yield { name: "", start: i, end: text.length, header: "", body: "", complete: false, canonical: false };
+        break;
+      }
+      continue;
+    }
+    let quote = "";
+    let endHeader = -1;
+    for (let j = n + name.length;j < text.length; j++) {
+      const c = text[j];
+      if (quote) {
+        if (c === quote)
+          quote = "";
+      } else if (c === '"' || c === "'")
+        quote = c;
+      else if (c === ">") {
+        endHeader = j;
+        break;
+      } else if (c === "<")
+        break;
+    }
+    if (closing) {
+      const end = endHeader < 0 ? text.length : endHeader + 1;
+      yield { name, start: i, end, header: "", body: "", complete: false, canonical: false };
+      i = end - 1;
+      continue;
+    }
+    const close = `</${name}>`;
+    const closeAt = endHeader < 0 ? -1 : lower.indexOf(close, endHeader + 1);
+    const bodyEnd = closeAt < 0 ? text.length : closeAt;
+    const body = includeBody && endHeader >= 0 ? text.slice(endHeader + 1, bodyEnd) : "";
+    const lowerBody = endHeader < 0 ? "" : lower.slice(endHeader + 1, bodyEnd);
+    let nested = false;
+    for (const opening of OPENINGS)
+      if (lowerBody.includes(opening)) {
+        nested = true;
+        break;
+      }
+    const end = closeAt < 0 ? text.length : closeAt + close.length;
+    yield {
+      name,
+      start: i,
+      end,
+      header: endHeader < 0 ? "" : text.slice(n + name.length, endHeader),
+      body,
+      complete: closeAt >= 0 && !nested,
+      canonical: text.slice(i + 1, n + name.length) === name && text.slice(closeAt, end) === close
+    };
+    i = end - 1;
+  }
+}
+function scanTags(text) {
+  return [...tagSpans(text)];
+}
+function transformTags(text, mode) {
+  if (!text.includes("<"))
+    return text;
+  const output = [];
+  const headers = new Map;
+  let offset = 0;
+  for (const span of tagSpans(text, false)) {
+    output.push(text.slice(offset, span.start));
+    if (mode === "display" && span.complete && span.canonical) {
+      let valid = headers.get(span.header);
+      if (valid === undefined) {
+        valid = parseAttributes(span.header) !== null;
+        if (headers.size < 128 && span.header.length <= 2048)
+          headers.set(span.header, valid);
+      }
+      if (valid)
+        output.push(text.slice(span.start, span.end).replaceAll("\u2800", " "));
+    }
+    offset = span.end;
+  }
+  output.push(text.slice(offset));
+  return output.join("");
+}
+function decodeEntities(text) {
+  text = text.replaceAll("\u2800", " ");
+  const entities = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'" };
+  let output = "";
+  for (let i = 0;i < text.length; i++) {
+    const entity = text[i] === "&" ? Object.keys(entities).find((e) => text.startsWith(e, i)) : undefined;
+    if (entity) {
+      output += entities[entity];
+      i += entity.length - 1;
+    } else
+      output += text[i];
+  }
+  return output;
+}
+function parseAttributes(header) {
+  const attrs = Object.create(null);
+  let i = 0;
+  while (i < header.length) {
+    if (!space(header[i]))
+      return null;
+    while (space(header[i]))
+      i++;
+    if (i === header.length)
+      break;
+    const start = i;
+    while (i < header.length && !space(header[i]) && header[i] !== "=")
+      i++;
+    const key = header.slice(start, i);
+    while (space(header[i]))
+      i++;
+    if (!key || header[i++] !== "=")
+      return null;
+    while (space(header[i]))
+      i++;
+    const quote = header[i++];
+    if (quote !== '"' && quote !== "'")
+      return null;
+    const end = header.indexOf(quote, i);
+    if (end < 0 || Object.hasOwn(attrs, key))
+      return null;
+    attrs[key] = decodeEntities(header.slice(i, end));
+    i = end + 1;
+  }
+  return attrs;
+}
+
+// src/parser.ts
+var MAX_BLOCK = 8000;
+var clean = (value, max) => typeof value === "string" && value.length <= max && !value.includes("\x00") && !value.includes("<") && !value.includes(`
+`) && !value.includes("\r");
+function validatePatch(value) {
+  if (!isRecord(value) || Object.keys(value).some((key) => !TRACKER_FIELDS.includes(key)))
+    return null;
+  const patch = {};
+  for (const key of TRACKER_FIELDS) {
+    const item = value[key];
+    if (item === undefined || item === null)
+      continue;
+    if (key === "present" || key === "notes") {
+      if (!Array.isArray(item) || item.length > (key === "notes" ? 8 : 12) || item.some((v) => !clean(v, key === "notes" ? 240 : 100) || !v.trim()))
+        return null;
+      patch[key] = [...new Set(item.map((v) => v.trim()))];
+    } else {
+      if (!clean(item, key === "details" ? 500 : 240))
+        return null;
+      patch[key] = item.trim();
+    }
+  }
+  return patch;
+}
+function parseBlock(body) {
+  if (body.length > MAX_BLOCK)
+    return null;
+  const values = Object.create(null);
+  for (const raw of body.split(`
+`)) {
+    const line = raw.trim();
+    if (!line)
+      continue;
+    const equals = line.indexOf("=");
+    const key = line.slice(0, equals).trim();
+    if (equals < 1 || Object.hasOwn(values, key))
+      return null;
+    try {
+      values[key] = JSON.parse(decodeEntities(line.slice(equals + 1)));
+    } catch {
+      return null;
+    }
+  }
+  return validatePatch(values);
+}
+function parseReply(content) {
+  const result = { patch: {}, texts: [], invalidTracker: false, invalidTexts: false };
+  const tags = scanTags(content);
+  for (const tag of tags.filter((t) => !t.name)) {
+    const fragment = content.slice(tag.start).toLowerCase();
+    if (fragment.startsWith("<phone") || fragment.startsWith("</phone")) {
+      if (`<${TRACKER_TAG}`.startsWith(fragment) || `</${TRACKER_TAG}>`.startsWith(fragment))
+        result.invalidTracker = true;
+      if (`<${TEXT_TAG}`.startsWith(fragment) || `</${TEXT_TAG}>`.startsWith(fragment))
+        result.invalidTexts = true;
+    }
+  }
+  const trackers = tags.filter((t) => t.name === TRACKER_TAG);
+  if (trackers.length) {
+    const tag = trackers[0];
+    const patch = trackers.length === 1 && tag.complete && !tag.header.trim() ? parseBlock(tag.body) : null;
+    if (patch && !result.invalidTracker)
+      result.patch = patch;
+    else
+      result.invalidTracker = true;
+  }
+  for (const tag of tags.filter((t) => t.name === TEXT_TAG)) {
+    const attrs = parseAttributes(tag.header);
+    const text = decodeEntities(tag.body).trim();
+    if (!tag.complete || !attrs || !clean(attrs.from, 100) || !attrs.from.trim() || Object.keys(attrs).some((k) => k !== "from" && k !== "time") || attrs.time !== undefined && !clean(attrs.time, 100) || !text || text.length > 3000 || tag.body.includes("<") || text.includes("\x00") || result.texts.length >= 12) {
+      result.invalidTexts = true;
+      continue;
+    }
+    result.texts.push({ from: attrs.from.trim(), text, ...attrs.time?.trim() ? { time: attrs.time.trim() } : {} });
+  }
+  return result;
+}
+
+// src/history.ts
+function emptySnapshot(chatId) {
+  return { schema: 1, chatId, entries: [], tracker: {}, texts: [] };
+}
+function readSnapshot(value, chatId) {
+  if (value === null)
+    return emptySnapshot(chatId);
+  if (!isRecord(value) || value.schema !== 1 || value.chatId !== chatId || !Array.isArray(value.entries))
+    throw new Error("Invalid saved tracker");
+  const result = emptySnapshot(chatId);
+  for (const item of value.entries) {
+    if (!isRecord(item) || !isRecord(item.source) || typeof item.source.messageId !== "string" || typeof item.source.variant !== "string" || !Number.isInteger(item.source.index) || !Array.isArray(item.texts))
+      throw new Error("Invalid saved entry");
+    const patch = validatePatch(item.patch);
+    if (!patch)
+      throw new Error("Invalid saved patch");
+    const texts = [];
+    for (const text of item.texts) {
+      if (!isRecord(text) || typeof text.from !== "string" || !text.from.trim() || text.from.length > 100 || typeof text.text !== "string" || !text.text.trim() || text.text.length > 3000 || text.time !== undefined && (typeof text.time !== "string" || text.time.length > 100))
+        throw new Error("Invalid saved text");
+      texts.push({ from: text.from, text: text.text, ...typeof text.time === "string" ? { time: text.time } : {} });
+    }
+    const source = { messageId: item.source.messageId, variant: item.source.variant, index: item.source.index };
+    result.entries.push({ source, patch, texts });
+  }
+  result.entries.sort((a, b) => a.source.index - b.source.index);
+  for (const entry of result.entries) {
+    Object.assign(result.tracker, entry.patch);
+    entry.texts.forEach((text, ordinal) => result.texts.push({
+      ...text,
+      source: entry.source,
+      id: JSON.stringify([entry.source.messageId, entry.source.variant, ordinal])
+    }));
+  }
+  return result;
+}
+async function readStoryHistory(api, chatId) {
+  const rows = api.host?.capabilities?.["chat-lean-messages-v1"] >= 1 ? await api.chat.getMessages(chatId, { light: true, includeExtra: false, ownMetadataOnly: true }) : await api.chat.getMessages(chatId);
+  return rows.map((row) => ({
+    id: row.id,
+    chat_id: row.chat_id,
+    index_in_chat: row.index_in_chat,
+    role: row.role,
+    content: row.content,
+    swipe_id: row.swipe_id,
+    swipe_dates: row.swipe_dates,
+    ...typeof row.name === "string" ? { name: row.name } : {}
+  }));
+}
+
 // src/setup-fields.ts
 var SETUP_GROUPS = [
   { app: "Contacts", fields: [
@@ -48,26 +347,6 @@ class SetupChoiceStore {
     task.then(clear, clear);
     return task;
   }
-}
-
-// src/shared.ts
-var normalSpaces = (text) => text.replaceAll("\u2800", " ");
-var EXTENSION_NAME = "Lumi Phone Tracker";
-var BUILD_STEP = 6;
-var TRACKER_TAG = "phone-state";
-var TEXT_TAG = "phone-text";
-var TRACKER_FIELDS = ["location", "time", "present", "details", "weather", "notes"];
-var DEFAULT_ITEMS = Object.freeze({
-  location: true,
-  time: true,
-  present: true,
-  details: true,
-  weather: true,
-  notes: true,
-  messages: true
-});
-function isRecord(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 // src/model-errors.ts
@@ -1436,125 +1715,6 @@ ${values.join(`
 `)}`)].join(`
 
 `);
-}
-
-// src/tags.ts
-var NAMES = [TRACKER_TAG, TEXT_TAG, "phone-email"];
-var space = (c) => c === " " || c === "\u2800" || c === `
-` || c === "\r" || c === "\t";
-function scanTags(text) {
-  const lower = text.toLowerCase();
-  const result = [];
-  for (let i = 0;i < text.length; i++) {
-    if (text[i] !== "<")
-      continue;
-    let n = i + 1;
-    const closing = text[n] === "/";
-    if (closing)
-      n++;
-    const tail = lower.slice(n);
-    const name = NAMES.find((name) => tail.startsWith(name) && (tail.length === name.length || space(tail[name.length]) || ">/".includes(tail[name.length])));
-    if (!name) {
-      if (tail.length === 0 || NAMES.some((name) => name.startsWith(tail))) {
-        result.push({ name: "", start: i, end: text.length, header: "", body: "", complete: false, canonical: false });
-        break;
-      }
-      continue;
-    }
-    let quote = "";
-    let endHeader = -1;
-    for (let j = n + name.length;j < text.length; j++) {
-      const c = text[j];
-      if (quote) {
-        if (c === quote)
-          quote = "";
-      } else if (c === '"' || c === "'")
-        quote = c;
-      else if (c === ">") {
-        endHeader = j;
-        break;
-      } else if (c === "<")
-        break;
-    }
-    if (closing) {
-      const end = endHeader < 0 ? text.length : endHeader + 1;
-      result.push({ name, start: i, end, header: "", body: "", complete: false, canonical: false });
-      i = end - 1;
-      continue;
-    }
-    const close = `</${name}>`;
-    const closeAt = endHeader < 0 ? -1 : lower.indexOf(close, endHeader + 1);
-    const body = endHeader < 0 ? "" : text.slice(endHeader + 1, closeAt < 0 ? text.length : closeAt);
-    const nested = NAMES.some((name) => body.toLowerCase().includes(`<${name}`));
-    const end = closeAt < 0 ? text.length : closeAt + close.length;
-    result.push({
-      name,
-      start: i,
-      end,
-      header: endHeader < 0 ? "" : text.slice(n + name.length, endHeader),
-      body,
-      complete: closeAt >= 0 && !nested,
-      canonical: text.slice(i + 1, n + name.length) === name && text.slice(closeAt, end) === close
-    });
-    i = end - 1;
-  }
-  return result;
-}
-function transformTags(text, mode) {
-  let output = "";
-  let offset = 0;
-  for (const span of scanTags(text)) {
-    output += text.slice(offset, span.start);
-    if (mode === "display" && span.complete && span.canonical && parseAttributes(span.header))
-      output += text.slice(span.start, span.end).replaceAll("\u2800", " ");
-    offset = span.end;
-  }
-  return output + text.slice(offset);
-}
-function decodeEntities(text) {
-  text = text.replaceAll("\u2800", " ");
-  const entities = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'" };
-  let output = "";
-  for (let i = 0;i < text.length; i++) {
-    const entity = text[i] === "&" ? Object.keys(entities).find((e) => text.startsWith(e, i)) : undefined;
-    if (entity) {
-      output += entities[entity];
-      i += entity.length - 1;
-    } else
-      output += text[i];
-  }
-  return output;
-}
-function parseAttributes(header) {
-  const attrs = Object.create(null);
-  let i = 0;
-  while (i < header.length) {
-    if (!space(header[i]))
-      return null;
-    while (space(header[i]))
-      i++;
-    if (i === header.length)
-      break;
-    const start = i;
-    while (i < header.length && !space(header[i]) && header[i] !== "=")
-      i++;
-    const key = header.slice(start, i);
-    while (space(header[i]))
-      i++;
-    if (!key || header[i++] !== "=")
-      return null;
-    while (space(header[i]))
-      i++;
-    const quote = header[i++];
-    if (quote !== '"' && quote !== "'")
-      return null;
-    const end = header.indexOf(quote, i);
-    if (end < 0 || Object.hasOwn(attrs, key))
-      return null;
-    attrs[key] = decodeEntities(header.slice(i, end));
-    i = end + 1;
-  }
-  return attrs;
 }
 
 // src/calls.ts
@@ -2973,24 +3133,36 @@ class HelperAI {
     let timedOut = false;
     let abortHandler;
     let modelStarted = false;
+    let helperSelected = false;
     if (this.running.has(chatId) || this.active.get(chatId)?.size)
       return { ok: false, category: "validation rejected" };
     this.running.set(chatId, controller);
+    timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, this.timeoutMs);
+    const aborted = new Promise((_, reject) => {
+      abortHandler = () => reject(new HelperFailure(timedOut ? "timeout" : "validation rejected"));
+      controller.signal.addEventListener("abort", abortHandler, { once: true });
+    });
+    aborted.catch(() => {});
+    const preparing = (task) => Promise.race([task, aborted]);
     try {
       if (!userId)
         throw new HelperFailure("permission missing");
-      const initial = await this.store.preview(chatId, userId);
-      if (initial.settings.source !== "helper")
+      const initial = await preparing(this.store.trackingSource(userId, chatId));
+      if (initial.source !== "helper")
         return { ok: true };
-      if (initial.helperOwner !== userId)
+      helperSelected = true;
+      if (initial.owner !== userId)
         throw new HelperFailure("permission missing");
       if (!this.io.allowed())
         throw new HelperFailure("permission missing");
-      ticket = await this.store.helperStart(userId, chatId, job.attempt, job.expected);
+      ticket = await preparing(this.store.helperStart(userId, chatId, job.attempt, job.expected));
       if (!ticket)
         return { ok: true };
       this.notify(userId, chatId);
-      const profiles = await this.profiles(userId);
+      const profiles = await preparing(this.profiles(userId));
       const connection = profiles.find((c) => c.id === ticket.doc.settings.connection_id);
       if (!connection)
         return await this.failure(userId, chatId, "no connection", true);
@@ -2998,24 +3170,16 @@ class HelperAI {
         throw new HelperFailure("no connection");
       let wording;
       try {
-        wording = await this.io.wording?.(userId);
+        wording = await preparing(Promise.resolve(this.io.wording?.(userId)));
       } catch {
         this.io.warn("Lumi Phone Tracker: prompt wording unavailable; using Default.");
       }
       const input = helperInput(ticket, wording, this.io.warn);
-      const current = await this.store.preview(chatId, userId);
+      const current = await preparing(this.store.preview(chatId, userId));
       if (!this.io.allowed())
         throw new HelperFailure("permission missing");
       if (controller.signal.aborted || this.active.get(chatId)?.size || current.settings.source !== "helper" || current.helperOwner !== userId || current.revision !== ticket.doc.revision)
         throw new HelperFailure("validation rejected");
-      timer = setTimeout(() => {
-        timedOut = true;
-        controller.abort();
-      }, this.timeoutMs);
-      const aborted = new Promise((_, reject) => {
-        abortHandler = () => reject(new HelperFailure(timedOut ? "timeout" : "validation rejected"));
-        controller.signal.addEventListener("abort", abortHandler, { once: true });
-      });
       modelStarted = true;
       const content = await Promise.race([checkedModelReply(() => this.io.generate({ model: connection.model, messages: input.messages, connection_id: connection.id, userId, parameters: { max_tokens: 2400 }, signal: controller.signal })), aborted]);
       if (controller.signal.aborted || this.active.get(chatId)?.size)
@@ -3033,7 +3197,7 @@ class HelperAI {
       const category = failureCategory(error);
       const messages = { timeout: "The request timed out. Try again.", "empty reply": "The provider returned an empty reply.", "invalid output": "The reply could not be read as tracker data.", "validation rejected": "The reply could not be applied to this chat." };
       const detail = error instanceof ModelCallError ? error.message : messages[category] ?? "The tracker request failed.";
-      return await this.failure(userId, chatId, category, false, modelStarted ? `${detail} Nothing was saved.` : undefined);
+      return await this.failure(userId, chatId, category, false, modelStarted || controller.signal.aborted ? `${detail} Nothing was saved.` : undefined);
     } finally {
       if (timer)
         clearTimeout(timer);
@@ -3041,7 +3205,7 @@ class HelperAI {
         controller.signal.removeEventListener("abort", abortHandler);
       if (this.running.get(chatId) === controller)
         this.running.delete(chatId);
-      if (userId)
+      if (userId && helperSelected)
         this.notify(userId, chatId);
     }
   }
@@ -3175,121 +3339,6 @@ async function loadPortraitSources(api, chatId, userId, player) {
   return result;
 }
 
-// src/parser.ts
-var MAX_BLOCK = 8000;
-var clean = (value, max) => typeof value === "string" && value.length <= max && !value.includes("\x00") && !value.includes("<") && !value.includes(`
-`) && !value.includes("\r");
-function validatePatch(value) {
-  if (!isRecord(value) || Object.keys(value).some((key) => !TRACKER_FIELDS.includes(key)))
-    return null;
-  const patch = {};
-  for (const key of TRACKER_FIELDS) {
-    const item = value[key];
-    if (item === undefined || item === null)
-      continue;
-    if (key === "present" || key === "notes") {
-      if (!Array.isArray(item) || item.length > (key === "notes" ? 8 : 12) || item.some((v) => !clean(v, key === "notes" ? 240 : 100) || !v.trim()))
-        return null;
-      patch[key] = [...new Set(item.map((v) => v.trim()))];
-    } else {
-      if (!clean(item, key === "details" ? 500 : 240))
-        return null;
-      patch[key] = item.trim();
-    }
-  }
-  return patch;
-}
-function parseBlock(body) {
-  if (body.length > MAX_BLOCK)
-    return null;
-  const values = Object.create(null);
-  for (const raw of body.split(`
-`)) {
-    const line = raw.trim();
-    if (!line)
-      continue;
-    const equals = line.indexOf("=");
-    const key = line.slice(0, equals).trim();
-    if (equals < 1 || Object.hasOwn(values, key))
-      return null;
-    try {
-      values[key] = JSON.parse(decodeEntities(line.slice(equals + 1)));
-    } catch {
-      return null;
-    }
-  }
-  return validatePatch(values);
-}
-function parseReply(content) {
-  const result = { patch: {}, texts: [], invalidTracker: false, invalidTexts: false };
-  const tags = scanTags(content);
-  for (const tag of tags.filter((t) => !t.name)) {
-    const fragment = content.slice(tag.start).toLowerCase();
-    if (fragment.startsWith("<phone") || fragment.startsWith("</phone")) {
-      if (`<${TRACKER_TAG}`.startsWith(fragment) || `</${TRACKER_TAG}>`.startsWith(fragment))
-        result.invalidTracker = true;
-      if (`<${TEXT_TAG}`.startsWith(fragment) || `</${TEXT_TAG}>`.startsWith(fragment))
-        result.invalidTexts = true;
-    }
-  }
-  const trackers = tags.filter((t) => t.name === TRACKER_TAG);
-  if (trackers.length) {
-    const tag = trackers[0];
-    const patch = trackers.length === 1 && tag.complete && !tag.header.trim() ? parseBlock(tag.body) : null;
-    if (patch && !result.invalidTracker)
-      result.patch = patch;
-    else
-      result.invalidTracker = true;
-  }
-  for (const tag of tags.filter((t) => t.name === TEXT_TAG)) {
-    const attrs = parseAttributes(tag.header);
-    const text = decodeEntities(tag.body).trim();
-    if (!tag.complete || !attrs || !clean(attrs.from, 100) || !attrs.from.trim() || Object.keys(attrs).some((k) => k !== "from" && k !== "time") || attrs.time !== undefined && !clean(attrs.time, 100) || !text || text.length > 3000 || tag.body.includes("<") || text.includes("\x00") || result.texts.length >= 12) {
-      result.invalidTexts = true;
-      continue;
-    }
-    result.texts.push({ from: attrs.from.trim(), text, ...attrs.time?.trim() ? { time: attrs.time.trim() } : {} });
-  }
-  return result;
-}
-
-// src/history.ts
-function emptySnapshot(chatId) {
-  return { schema: 1, chatId, entries: [], tracker: {}, texts: [] };
-}
-function readSnapshot(value, chatId) {
-  if (value === null)
-    return emptySnapshot(chatId);
-  if (!isRecord(value) || value.schema !== 1 || value.chatId !== chatId || !Array.isArray(value.entries))
-    throw new Error("Invalid saved tracker");
-  const result = emptySnapshot(chatId);
-  for (const item of value.entries) {
-    if (!isRecord(item) || !isRecord(item.source) || typeof item.source.messageId !== "string" || typeof item.source.variant !== "string" || !Number.isInteger(item.source.index) || !Array.isArray(item.texts))
-      throw new Error("Invalid saved entry");
-    const patch = validatePatch(item.patch);
-    if (!patch)
-      throw new Error("Invalid saved patch");
-    const texts = [];
-    for (const text of item.texts) {
-      if (!isRecord(text) || typeof text.from !== "string" || !text.from.trim() || text.from.length > 100 || typeof text.text !== "string" || !text.text.trim() || text.text.length > 3000 || text.time !== undefined && (typeof text.time !== "string" || text.time.length > 100))
-        throw new Error("Invalid saved text");
-      texts.push({ from: text.from, text: text.text, ...typeof text.time === "string" ? { time: text.time } : {} });
-    }
-    const source = { messageId: item.source.messageId, variant: item.source.variant, index: item.source.index };
-    result.entries.push({ source, patch, texts });
-  }
-  result.entries.sort((a, b) => a.source.index - b.source.index);
-  for (const entry of result.entries) {
-    Object.assign(result.tracker, entry.patch);
-    entry.texts.forEach((text, ordinal) => result.texts.push({
-      ...text,
-      source: entry.source,
-      id: JSON.stringify([entry.source.messageId, entry.source.variant, ordinal])
-    }));
-  }
-  return result;
-}
-
 // src/store.ts
 function chatPath(chatId) {
   return `chats/c-${Array.from(new TextEncoder().encode(chatId), (b) => b.toString(16).padStart(2, "0")).join("")}.json`;
@@ -3335,11 +3384,9 @@ function legacyPatch(content) {
   return patch;
 }
 function replay(document2, rows, playerNames, report) {
-  const next = structuredClone(document2);
-  const state = emptyState();
+  const next = structuredClone({ ...document2, state: emptyState(), accepted: [] });
+  const state = next.state;
   state.notices = [...document2.notices];
-  next.state = state;
-  next.accepted = [];
   const players = new Set(playerNames.map(normalize).filter(Boolean));
   for (const row of rows)
     if (row.role === "user" && row.name?.trim())
@@ -3358,6 +3405,26 @@ function replay(document2, rows, playerNames, report) {
   const sorted = [...rows].sort((a, b) => a.index_in_chat - b.index_in_chat);
   const ids = new Set;
   const indexes = new Set;
+  const rowsById = new Map(sorted.map((row) => [row.id, row]));
+  const signatures = new Map;
+  const sourceMatches = (source) => {
+    const row = rowsById.get(source.id);
+    if (!row)
+      return false;
+    let signature = signatures.get(source.id);
+    if (signature === undefined) {
+      signature = helperSourceSignature(row);
+      signatures.set(source.id, signature);
+    }
+    return signature === source.signature;
+  };
+  const helpersByMessage = new Map;
+  for (const entry of document2.helperEntries ?? []) {
+    const group = helpersByMessage.get(entry.at.id) ?? [];
+    group.push(entry);
+    helpersByMessage.set(entry.at.id, group);
+  }
+  const parsedRows = new Map;
   for (const row of sorted) {
     if (row.chat_id !== document2.chatId || ids.has(row.id) || indexes.has(row.index_in_chat) || !row.id || !Number.isInteger(row.index_in_chat) || row.index_in_chat < 0)
       throw new Error("Invalid history");
@@ -3365,7 +3432,7 @@ function replay(document2, rows, playerNames, report) {
     indexes.add(row.index_in_chat);
   }
   for (const m of Object.values(next.contactMerges ?? {})) {
-    const anchor = sorted.find((r) => r.id === m.after);
+    const anchor = rowsById.get(m.after ?? "");
     m.index = anchor?.index_in_chat ?? Math.min(m.index, sorted.at(-1)?.index_in_chat ?? -1);
   }
   const displayPlayers = new Map;
@@ -3390,12 +3457,13 @@ function replay(document2, rows, playerNames, report) {
   const callCandidates = new Set;
   for (const row of sorted) {
     const parsed = parseExpandedReply(row.content);
+    parsedRows.set(row.id, parsed);
     const prior = previous.get(JSON.stringify([row.id, JSON.stringify([row.swipe_id, row.swipe_dates?.[row.swipe_id] ?? null])]));
     for (const c of parsed.patch?.calls ?? (parsed.patch === null ? prior?.patch.calls : []) ?? [])
       callCandidates.add(callId(row.id, c));
   }
   for (const entry of document2.helperEntries ?? [])
-    if (entry.sources.every((s) => sorted.some((r) => r.id === s.id && helperSourceSignature(r) === s.signature))) {
+    if (entry.sources.every(sourceMatches)) {
       for (const c of validateExpanded(entry.values).calls ?? [])
         if (!c.source || helperCallSource(c, sorted))
           callCandidates.add(callId(c.source ?? entry.at.id, c));
@@ -3407,7 +3475,7 @@ function replay(document2, rows, playerNames, report) {
   const reservedCalls = new Set((document2.callAdmissions ?? document2.state.calls.map((c) => c.id)).map((id) => callAliases.get(id) ?? id).filter((id) => callCandidates.has(id) && !deletedCalls.has(id)));
   const editsByIndex = new Map;
   for (const edit of next.edits) {
-    const anchor = sorted.find((r) => r.id === edit.after);
+    const anchor = rowsById.get(edit.after ?? "");
     const index = anchor?.index_in_chat ?? Math.min(edit.index, sorted.at(-1)?.index_in_chat ?? -1);
     editsByIndex.set(index, [...editsByIndex.get(index) ?? [], edit]);
   }
@@ -3426,14 +3494,19 @@ function replay(document2, rows, playerNames, report) {
   };
   manualAt(-1);
   projectMerges(next, -1);
+  let previousUser;
   for (const row of sorted) {
+    const lastUser = previousUser;
+    if (row.role === "user")
+      previousUser = row;
     const at = {
       id: row.id,
       index: row.index_in_chat,
       variant: JSON.stringify([row.swipe_id, row.swipe_dates?.[row.swipe_id] ?? null])
     };
     if (row.role !== "system") {
-      const parsed = parseExpandedReply(row.content);
+      const parsed = parsedRows.get(row.id);
+      parsedRows.delete(row.id);
       const prior = previous.get(JSON.stringify([at.id, at.variant]));
       const oldFormat = row.content.includes(`
 notes=`) || row.content.includes(`
@@ -3504,11 +3577,10 @@ details=`);
         }
       const texts = parsed.badTexts ? prior?.texts ?? parsed.texts : parsed.texts;
       const emails = parsed.badEmails && prior ? [...parsed.emails, ...(prior.emails ?? []).filter((old) => !parsed.emails.some((e) => e.from === old.from && e.subject === old.subject && e.time === old.time))] : parsed.emails;
-      const accepted = { at, patch, texts, emails, role: row.role, ...row.name ? { name: row.name } : {}, prose: parsed.prose };
+      const accepted = { at, patch, texts, emails, role: row.role, ...row.name ? { name: row.name } : {}, prose: "" };
       next.accepted.push(accepted);
       if (row.role === "assistant")
         applyAI(next, patch, at, parsed.prose, players, tombstones, knownNotes);
-      const lastUser = [...sorted].reverse().find((r) => r.index_in_chat < row.index_in_chat && r.role === "user");
       const needsBankFallback = parsed.patch === null || parsed.invalidFields.some((k) => k === "bank" || k.startsWith("bank:"));
       const proven = needsBankFallback ? prior?.bankProof ?? [] : [];
       const proofRow = { ...row, content: proven.map((b) => [b.name, b.balance, b.evidence ?? ""].join(" ")).join(`
@@ -3539,8 +3611,8 @@ details=`);
       if (row.role === "assistant")
         report?.(row, parsed.issues);
     }
-    for (const entry of document2.helperEntries ?? [])
-      if (entry.at.id === row.id && entry.at.variant === at.variant && entry.sources.every((s) => sorted.some((r) => r.id === s.id && helperSourceSignature(r) === s.signature))) {
+    for (const entry of helpersByMessage.get(row.id) ?? [])
+      if (entry.at.variant === at.variant && entry.sources.every(sourceMatches)) {
         const helperPatch = validateExpanded(entry.values);
         applyAI(next, helperPatch, entry.at, entry.prose, players, tombstones, knownNotes);
         const sources = sorted.filter((r) => entry.sources.some((s) => s.id === r.id));
@@ -4051,7 +4123,7 @@ function readDocument(raw, chatId) {
       texts: entry.texts,
       role: entry.role,
       ...typeof entry.name === "string" ? { name: entry.name } : {},
-      prose: entry.prose
+      prose: ""
     });
   }
   doc.rejected = doc.rejected.map((key) => {
@@ -4114,6 +4186,26 @@ function validateEdit(value) {
 class PhoneStore {
   io;
   queues = new Map;
+  pendingReads = new Map;
+  readOperation(kind, userId, chatId, action) {
+    const key = JSON.stringify([kind, userId, chatId]);
+    const prior = this.pendingReads.get(key);
+    if (prior && !prior.started && this.queues.get(chatId) === prior.task)
+      return prior.task.then((doc) => structuredClone(doc));
+    const entry = { started: false, task: undefined };
+    entry.task = this.serial(chatId, () => {
+      entry.started = true;
+      return action();
+    });
+    this.pendingReads.set(key, entry);
+    const cleanup = () => {
+      if (this.pendingReads.get(key) === entry)
+        this.pendingReads.delete(key);
+    };
+    entry.task.then(cleanup, cleanup);
+    return entry.task.then((doc) => structuredClone(doc));
+  }
+  replayCache;
   skips;
   constructor(io) {
     this.io = io;
@@ -4133,41 +4225,61 @@ class PhoneStore {
     if (!chatId || chatId.length > 256)
       throw new Error("Missing chat");
     const raw = await this.io.read(chatId);
-    let doc = readDocument(raw, chatId);
-    if (!raw && userId && this.io.legacy) {
-      const legacy = await this.io.legacy(userId, chatPath(chatId));
-      if (legacy !== null) {
-        const old = readSnapshot(legacy, chatId);
-        doc.legacy = legacy;
-        doc.accepted = old.entries.map((e) => {
-          const p = e.patch;
-          const patch = validateExpanded({ location: p.location, time: p.time, present: p.present, weather: p.weather });
-          return {
-            at: { id: e.source.messageId, index: e.source.index, variant: e.source.variant },
-            patch,
-            texts: e.texts,
-            role: "assistant",
-            prose: ""
-          };
-        });
-      }
-    }
     const rows = await this.io.history(chatId);
     const player = await this.io.player(chatId, userId);
+    const names = await this.io.names?.(chatId, userId) ?? [];
+    const legacy = !raw && this.io.legacy ? await this.io.legacy(userId, chatPath(chatId)) : null;
+    const proof = JSON.stringify([chatId, userId, raw, rows.map(rowSignature), player, names, legacy]);
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(proof));
+    const key = Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
+    if (this.replayCache?.key === key)
+      return { doc: structuredClone(this.replayCache.doc), rows };
+    let doc = readDocument(raw, chatId);
+    if (!raw && legacy !== null) {
+      const old = readSnapshot(legacy, chatId);
+      doc.legacy = legacy;
+      doc.accepted = old.entries.map((e) => {
+        const p = e.patch;
+        const patch = validateExpanded({ location: p.location, time: p.time, present: p.present, weather: p.weather });
+        return {
+          at: { id: e.source.messageId, index: e.source.index, variant: e.source.variant },
+          patch,
+          texts: e.texts,
+          role: "assistant",
+          prose: ""
+        };
+      });
+    }
     doc = replay(doc, rows, player ? [player] : [], (row, issues) => this.skips.record(chatId, row, issues));
     doc.currentPlayer = player ?? undefined;
-    projectContacts(doc, await this.io.names?.(chatId, userId) ?? []);
+    projectContacts(doc, names);
+    const bytes = new TextEncoder().encode(JSON.stringify(doc)).byteLength;
+    this.replayCache = bytes <= 2 * 1024 * 1024 ? { key, doc: structuredClone(doc), bytes } : undefined;
     return { doc, rows };
   }
-  preview(chatId, userId) {
+  trackingSource(userId, chatId) {
     return this.serial(chatId, async () => {
+      if (!userId || !await this.io.authorize(chatId, userId))
+        throw Error("Chat unavailable");
+      const raw = await this.io.read(chatId);
+      if (!raw)
+        return { source: "main" };
+      const value = JSON.parse(raw);
+      if (!isRecord(value) || value.schema !== 2 || value.chatId !== chatId)
+        throw Error("Invalid saved data");
+      const settings = readSettings(value.settings);
+      return { source: settings.source, ...typeof value.helperOwner === "string" ? { owner: value.helperOwner } : {} };
+    });
+  }
+  preview(chatId, userId) {
+    return this.readOperation("preview", userId, chatId, async () => {
       if (!userId || !await this.io.authorize(chatId, userId))
         throw new Error("Chat unavailable");
       return (await this.build(chatId, userId)).doc;
     });
   }
   sync(userId, chatId) {
-    return this.serial(chatId, async () => {
+    return this.readOperation("sync", userId, chatId, async () => {
       if (!userId || !await this.io.authorize(chatId, userId))
         throw new Error("Chat unavailable");
       const { doc } = await this.build(chatId, userId);
@@ -4625,7 +4737,7 @@ var store = new PhoneStore({
   names: (chat, user) => cardNames(spindle, chat, user),
   warn: (text) => warn(text),
   authorize: async (chatId, userId) => (await spindle.chats.get(chatId, userId))?.id === chatId,
-  history: async (chatId) => spindle.chat.getMessages(chatId),
+  history: async (chatId) => readStoryHistory(spindle, chatId),
   read: async (chatId) => spindle.variables.chat.get(chatId, DOCUMENT_KEY),
   write: async (chatId, data) => spindle.variables.chat.set(chatId, DOCUMENT_KEY, data),
   player: async (chatId, userId) => {

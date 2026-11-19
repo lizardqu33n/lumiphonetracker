@@ -49,8 +49,8 @@ function legacyPatch(content: string): Patch | null {
 }
 
 export function replay(document: Document, rows: StoryRow[], playerNames: string[], report?: (row: StoryRow, issues: ParseIssue[]) => void): Document {
-  const next = structuredClone(document);
-  const state = emptyState(); state.notices = [...document.notices]; next.state = state; next.accepted = [];
+  const next:Document = structuredClone({...document,state:emptyState(),accepted:[]});
+  const state = next.state; state.notices = [...document.notices];
   const players = new Set(playerNames.map(normalize).filter(Boolean));
   // A saved user message is authoritative evidence of that row's author name.
   for (const row of rows) if (row.role === "user" && row.name?.trim()) players.add(normalize(row.name));
@@ -65,12 +65,26 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
   const legacyEntries = document.legacy ? readSnapshot(document.legacy, document.chatId).entries : [];
   const sorted = [...rows].sort((a, b) => a.index_in_chat - b.index_in_chat);
   const ids = new Set<string>(); const indexes = new Set<number>();
+  const rowsById=new Map(sorted.map(row=>[row.id,row]));
+  const signatures=new Map<string,string>();
+  const sourceMatches=(source:{id:string;signature:string})=>{
+    const row=rowsById.get(source.id);if(!row)return false;
+    let signature=signatures.get(source.id);
+    if(signature===undefined){signature=helperSourceSignature(row);signatures.set(source.id,signature);}
+    return signature===source.signature;
+  };
+  const helpersByMessage=new Map<string,Document["helperEntries"]>();
+  for(const entry of document.helperEntries??[]){
+    const group=helpersByMessage.get(entry.at.id)??[];group.push(entry);helpersByMessage.set(entry.at.id,group);
+  }
+
+  const parsedRows=new Map<string,ReturnType<typeof parseExpandedReply>>();
   for (const row of sorted) {
     if (row.chat_id !== document.chatId || ids.has(row.id) || indexes.has(row.index_in_chat) ||
       !row.id || !Number.isInteger(row.index_in_chat) || row.index_in_chat < 0) throw new Error("Invalid history");
     ids.add(row.id); indexes.add(row.index_in_chat);
   }
-  for(const m of Object.values(next.contactMerges??{})){const anchor=sorted.find(r=>r.id===m.after);m.index=anchor?.index_in_chat??Math.min(m.index,sorted.at(-1)?.index_in_chat??-1);}
+  for(const m of Object.values(next.contactMerges??{})){const anchor=rowsById.get(m.after??"");m.index=anchor?.index_in_chat??Math.min(m.index,sorted.at(-1)?.index_in_chat??-1);}
   const displayPlayers = new Map<string, string>();
   for (const name of [...playerNames, ...rows.filter(r => r.role === "user").map(r => r.name ?? "")]) {
     if (name.trim()) displayPlayers.set(normalize(name), name.trim());
@@ -83,14 +97,14 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
   for(const entry of document.helperEntries??[])for(const [i,c]of (validateExpanded(entry.values).calls??[]).entries())callAliases.set(JSON.stringify([entry.at.id,entry.at.variant,"calls",i]),callId(c.source??entry.at.id,c));
   for(const edit of next.edits)if(edit.target==="call"&&edit.name)edit.name=callAliases.get(edit.name)??edit.name;
   const callCandidates=new Set<string>();
-  for(const row of sorted){const parsed=parseExpandedReply(row.content);const prior=previous.get(JSON.stringify([row.id,JSON.stringify([row.swipe_id,row.swipe_dates?.[row.swipe_id]??null])]));for(const c of (parsed.patch?.calls??(parsed.patch===null?prior?.patch.calls:[])??[]))callCandidates.add(callId(row.id,c));}
-  for(const entry of document.helperEntries??[])if(entry.sources.every(s=>sorted.some(r=>r.id===s.id&&helperSourceSignature(r)===s.signature)))for(const c of validateExpanded(entry.values).calls??[])if(!c.source||helperCallSource(c,sorted))callCandidates.add(callId(c.source??entry.at.id,c));
+  for(const row of sorted){const parsed=parseExpandedReply(row.content);parsedRows.set(row.id,parsed);const prior=previous.get(JSON.stringify([row.id,JSON.stringify([row.swipe_id,row.swipe_dates?.[row.swipe_id]??null])]));for(const c of (parsed.patch?.calls??(parsed.patch===null?prior?.patch.calls:[])??[]))callCandidates.add(callId(row.id,c));}
+  for(const entry of document.helperEntries??[])if(entry.sources.every(sourceMatches))for(const c of validateExpanded(entry.values).calls??[])if(!c.source||helperCallSource(c,sorted))callCandidates.add(callId(c.source??entry.at.id,c));
   for(const edit of next.edits)if(edit.target==="call"&&!edit.name&&!edit.remove)callCandidates.add(edit.id);
   const deletedCalls=new Set(next.edits.filter(e=>e.target==="call"&&e.remove).map(e=>e.name??e.id));
   const reservedCalls=new Set((document.callAdmissions??document.state.calls.map(c=>c.id)).map(id=>callAliases.get(id)??id).filter(id=>callCandidates.has(id)&&!deletedCalls.has(id)));
   const editsByIndex = new Map<number, ManualEdit[]>();
   for (const edit of next.edits) {
-    const anchor = sorted.find(r => r.id === edit.after);
+    const anchor = rowsById.get(edit.after??"");
     const index = anchor?.index_in_chat ?? Math.min(edit.index, sorted.at(-1)?.index_in_chat ?? -1);
     editsByIndex.set(index, [...editsByIndex.get(index) ?? [], edit]);
   }
@@ -108,11 +122,15 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
     }
   };
   manualAt(-1);projectMerges(next,-1);
+  let previousUser:StoryRow|undefined;
   for (const row of sorted) {
+    const lastUser=previousUser;
+    if(row.role==="user")previousUser=row;
     const at = { id: row.id, index: row.index_in_chat,
       variant: JSON.stringify([row.swipe_id, row.swipe_dates?.[row.swipe_id] ?? null]) };
     if (row.role !== "system") {
-      const parsed = parseExpandedReply(row.content);
+      const parsed = parsedRows.get(row.id)!;
+      parsedRows.delete(row.id);
       const prior = previous.get(JSON.stringify([at.id, at.variant]));
       const oldFormat = row.content.includes("\nnotes=") || row.content.includes("\ndetails=");
       if (row.role === "assistant") {
@@ -152,10 +170,10 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
       }
       const texts = parsed.badTexts ? prior?.texts ?? parsed.texts : parsed.texts;
       const emails=parsed.badEmails&&prior?[...parsed.emails,...(prior.emails??[]).filter(old=>!parsed.emails.some(e=>e.from===old.from&&e.subject===old.subject&&e.time===old.time))]:parsed.emails;
-      const accepted: Accepted = { at, patch, texts,emails, role: row.role, ...(row.name ? { name: row.name } : {}), prose: parsed.prose };
+      const accepted: Accepted = { at, patch, texts,emails, role: row.role, ...(row.name ? { name: row.name } : {}), prose: "" };
       next.accepted.push(accepted);
       if (row.role === "assistant") applyAI(next, patch, at, parsed.prose, players, tombstones, knownNotes);
-      const lastUser=[...sorted].reverse().find(r=>r.index_in_chat<row.index_in_chat&&r.role==="user");
+
       const needsBankFallback=parsed.patch===null||parsed.invalidFields.some(k=>k==="bank"||k.startsWith("bank:"));
       const proven=needsBankFallback?prior?.bankProof??[]:[];
       const proofRow:StoryRow={...row,content:proven.map(b=>[b.name,b.balance,b.evidence??""].join(" ")).join("\n")};
@@ -181,8 +199,8 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
       }
       if(row.role==="assistant")report?.(row,parsed.issues);
     }
-    for (const entry of document.helperEntries ?? []) if (entry.at.id === row.id &&
-      entry.at.variant === at.variant && entry.sources.every(s => sorted.some(r => r.id === s.id && helperSourceSignature(r) === s.signature))) {
+    for (const entry of helpersByMessage.get(row.id)??[]) if (
+      entry.at.variant === at.variant && entry.sources.every(sourceMatches)) {
       const helperPatch=validateExpanded(entry.values);applyAI(next, helperPatch, entry.at, entry.prose, players, tombstones, knownNotes);
       const sources=sorted.filter(r=>entry.sources.some(s=>s.id===r.id));
       for(const [ordinal,call] of (helperPatch.calls??[]).entries()) {

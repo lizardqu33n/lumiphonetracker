@@ -11,24 +11,30 @@ export interface TagSpan {
   canonical: boolean;
 }
 const NAMES = [TRACKER_TAG, TEXT_TAG,"phone-email"];
+const OPENINGS=NAMES.map(name=>"<"+name);
+const MAX_NAME_LENGTH=Math.max(...NAMES.map(name=>name.length));
 const space = (c: string) => c === " " || c === "\u2800" || c === "\n" || c === "\r" || c === "\t";
 
 /** A small scanner for our two reserved tags, never an HTML parser or regex script. */
-export function scanTags(text: string): TagSpan[] {
-  const lower = text.toLowerCase();
-  const result: TagSpan[] = [];
+function* tagSpans(text: string,includeBody=true): Generator<TagSpan> {
+  if (!text.includes("<")) return;
+  const folded = text.toLowerCase();
+  const lower = folded.length === text.length ? folded : text.replace(/[A-Z]/g, char => char.toLowerCase());
   for (let i = 0; i < text.length; i++) {
     if (text[i] !== "<") continue;
     let n = i + 1;
     const closing = text[n] === "/";
     if (closing) n++;
-    const tail = lower.slice(n);
-    const name = NAMES.find(name => tail.startsWith(name) &&
-      (tail.length === name.length || space(tail[name.length]) || ">/".includes(tail[name.length])));
+    let name:string|undefined;
+    for(const candidate of NAMES) {
+      const next=lower[n+candidate.length];
+      if(lower.startsWith(candidate,n)&&(next===undefined||space(next)||next===">"||next==="/")){name=candidate;break;}
+    }
     if (!name) {
+      const tail=lower.slice(n,n+MAX_NAME_LENGTH+1);
       // Withhold even a half-written opening/closing name until it is disambiguated.
       if (tail.length === 0 || NAMES.some(name => name.startsWith(tail))) {
-        result.push({ name: "", start: i, end: text.length, header: "", body: "", complete: false, canonical: false });
+        yield { name: "", start: i, end: text.length, header: "", body: "", complete: false, canonical: false };
         break;
       }
       continue;
@@ -44,35 +50,49 @@ export function scanTags(text: string): TagSpan[] {
     }
     if (closing) {
       const end = endHeader < 0 ? text.length : endHeader + 1;
-      result.push({ name, start: i, end, header: "", body: "", complete: false, canonical: false });
+      yield { name, start: i, end, header: "", body: "", complete: false, canonical: false };
       i = end - 1;
       continue;
     }
     const close = `</${name}>`;
     const closeAt = endHeader < 0 ? -1 : lower.indexOf(close, endHeader + 1);
-    const body = endHeader < 0 ? "" : text.slice(endHeader + 1, closeAt < 0 ? text.length : closeAt);
-    const nested = NAMES.some(name => body.toLowerCase().includes(`<${name}`));
+    const bodyEnd=closeAt<0?text.length:closeAt;
+    const body = includeBody&&endHeader>=0 ? text.slice(endHeader+1,bodyEnd) : "";
+    const lowerBody = endHeader<0?"":lower.slice(endHeader+1,bodyEnd);
+    let nested=false;
+    for(const opening of OPENINGS)if(lowerBody.includes(opening)){nested=true;break;}
     const end = closeAt < 0 ? text.length : closeAt + close.length;
-    result.push({
+    yield {
       name, start: i, end, header: endHeader < 0 ? "" : text.slice(n + name.length, endHeader),
       body, complete: closeAt >= 0 && !nested,
       canonical: text.slice(i + 1, n + name.length) === name && text.slice(closeAt, end) === close,
-    });
+    };
     i = end - 1;
   }
-  return result;
 }
+
+export function scanTags(text: string): TagSpan[] { return [...tagSpans(text)]; }
 
 /** Complete, canonical tags reach the frontend interceptor; broken ones never paint. */
 export function transformTags(text: string, mode: "display" | "strip"): string {
-  let output = "";
+  if (!text.includes("<")) return text;
+  const output:string[]=[];
+  const headers=new Map<string,boolean>();
   let offset = 0;
-  for (const span of scanTags(text)) {
-    output += text.slice(offset, span.start);
-    if (mode === "display" && span.complete && span.canonical && parseAttributes(span.header)) output += text.slice(span.start, span.end).replaceAll("\u2800", " ");
+  for (const span of tagSpans(text,false)) {
+    output.push(text.slice(offset, span.start));
+    if (mode === "display" && span.complete && span.canonical) {
+      let valid=headers.get(span.header);
+      if(valid===undefined) {
+        valid=parseAttributes(span.header)!==null;
+        if(headers.size<128&&span.header.length<=2048)headers.set(span.header,valid);
+      }
+      if(valid)output.push(text.slice(span.start, span.end).replaceAll("\u2800", " "));
+    }
     offset = span.end;
   }
-  return output + text.slice(offset);
+  output.push(text.slice(offset));
+  return output.join("");
 }
 
 /** Preserve preset instructions, multipart media, names, and source metadata. */

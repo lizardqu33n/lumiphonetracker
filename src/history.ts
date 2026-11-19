@@ -1,3 +1,4 @@
+import type { SpindleAPI } from "lumiverse-spindle-types";
 import { parseReply, validatePatch, type PhoneText } from "./parser";
 import { isRecord, type TrackerPatch } from "./shared";
 
@@ -75,4 +76,16 @@ export function readSnapshot(value: unknown, chatId: string): ChatSnapshot {
       id: JSON.stringify([entry.source.messageId, entry.source.variant, ordinal]) }));
   }
   return result;
+}
+
+/** Read active swipe content only when the host advertises the documented lean API. */
+export async function readStoryHistory(api:Pick<SpindleAPI,"host"|"chat">,chatId:string):Promise<(HistoryMessage&{name?:string})[]> {
+  const rows=api.host?.capabilities?.["chat-lean-messages-v1"]>=1
+    ? await api.chat.getMessages(chatId,{light:true,includeExtra:false,ownMetadataOnly:true})
+    : await api.chat.getMessages(chatId);
+  return rows.map(row=>({
+    id:row.id,chat_id:row.chat_id,index_in_chat:row.index_in_chat,role:row.role,
+    content:row.content,swipe_id:row.swipe_id,swipe_dates:row.swipe_dates,
+    ...(typeof row.name==="string"?{name:row.name}:{}),
+  }));
 }

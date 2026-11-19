@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.18.13 - History and generation performance
+
+- Coalesced backend sync/preview bursts and skipped Helper history preparation in Main AI mode.
+- Removed repeated replay scans, duplicate parsing and copying of discarded state. Compacted unused prose in the internal accepted journal while preserving saved messages and tracked facts.
+- Added one bounded replay memo with full authoritative input validation. Used capability-gated lean history reads where supported, with the original API as fallback.
+- Streamed display tag scanning and added a no-tag fast path. Bounded temporary header reuse and corrected Unicode tag offsets.
+- Applied the Helper deadline to preparation as well as the provider request.
+- Added regression tests, synthetic benchmark scripts and the local investigation report. Includes regression coverage and benchmarks for server testing; real-host RAM behavior still needs verification.
+
+
 ## 0.18.12 - Generation failure cleanup
 
 - Coalesced frontend tracker refreshes into one pending request and at most one follow-up, preventing a burst of completion notifications from queueing a full-chat replay for every event. Pending state and its timer clear on responses, errors, chat switches and shutdown.

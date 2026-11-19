@@ -76,7 +76,7 @@ export function readDocument(raw: string, chatId: string): Document {
     const bankProof=(entry.bankProof as unknown[]??[]).map(v=>validateActivity("bank",v)) as import("./model").BankData[];
     doc.accepted.push({ bankProof,emails,at: entry.at as unknown as Document["accepted"][number]["at"], patch,
       texts: entry.texts as Document["accepted"][number]["texts"], role: entry.role as "assistant" | "user",
-      ...(typeof entry.name === "string" ? { name: entry.name } : {}), prose: entry.prose });
+      ...(typeof entry.name === "string" ? { name: entry.name } : {}), prose: "" });
   }
   doc.rejected=doc.rejected.map(key=>{try{const parts:unknown=JSON.parse(key);if(Array.isArray(parts)&&parts[0]==="activity"&&parts[1]==="calls"&&typeof parts[2]==="string"){const id:unknown=JSON.parse(parts[2]);if(Array.isArray(id)&&typeof id[0]==="string"&&id[2]==="calls"){const call=validateActivity("calls",parts[3]) as import("./model").CallData;return JSON.stringify(["activity","calls",callId(id[0],call),call]);}}}catch{}return key;});
   // Cache only admitted identities, never story values. Reserve existing slots during source-ID migration.
@@ -107,6 +107,19 @@ export function validateEdit(value: unknown): ManualEdit {
 }
 export class PhoneStore {
   private queues = new Map<string, Promise<unknown>>();
+  private pendingReads=new Map<string,{task:Promise<Document>;started:boolean}>();
+  private readOperation(kind:"sync"|"preview",userId:string,chatId:string,action:()=>Promise<Document>):Promise<Document> {
+    const key=JSON.stringify([kind,userId,chatId]);
+    const prior=this.pendingReads.get(key);
+    if(prior&&!prior.started&&this.queues.get(chatId)===prior.task)return prior.task.then(doc=>structuredClone(doc));
+    const entry={started:false,task:undefined as unknown as Promise<Document>};
+    entry.task=this.serial(chatId,()=>{entry.started=true;return action();});
+    this.pendingReads.set(key,entry);
+    const cleanup=()=>{if(this.pendingReads.get(key)===entry)this.pendingReads.delete(key);};
+    void entry.task.then(cleanup,cleanup);
+    return entry.task.then(doc=>structuredClone(doc));
+  }
+  private replayCache?:{key:string;doc:Document;bytes:number};
   private skips: SkipLogger;
   constructor(private io: PhoneIO) { this.skips = new SkipLogger(text => this.io.warn?.(text)); }
   private serial<T>(chatId: string, action: () => Promise<T>): Promise<T> {
@@ -117,36 +130,55 @@ export class PhoneStore {
   }
   private async build(chatId: string, userId: string): Promise<{ doc: Document; rows: StoryRow[] }> {
     if (!chatId || chatId.length > 256) throw new Error("Missing chat");
-    const raw = await this.io.read(chatId); let doc = readDocument(raw, chatId);
-    // Keep the exact old payload. Migration never deletes or rewrites the old file.
-    if (!raw && userId && this.io.legacy) {
-      const legacy = await this.io.legacy(userId, chatPath(chatId));
-      if (legacy !== null) {
-        const old = readSnapshot(legacy, chatId); doc.legacy = legacy;
-        doc.accepted = old.entries.map(e => {
-          const p = e.patch;
-          const patch = validateExpanded({ location: p.location, time: p.time, present: p.present, weather: p.weather });
-          return { at: { id: e.source.messageId, index: e.source.index, variant: e.source.variant },
-            patch, texts: e.texts, role: "assistant", prose: "" };
-        });
-      }
-    }
+    const raw = await this.io.read(chatId);
     const rows = await this.io.history(chatId);
     const player = await this.io.player(chatId, userId);
+    const names=await this.io.names?.(chatId,userId)??[];
+    const legacy=!raw&&this.io.legacy?await this.io.legacy(userId,chatPath(chatId)):null;
+    // Validate every input afresh. There is no time-based or timestamp-only cache hit.
+    const proof=JSON.stringify([chatId,userId,raw,rows.map(rowSignature),player,names,legacy]);
+    const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(proof));
+    const key=Array.from(new Uint8Array(digest),value=>value.toString(16).padStart(2,"0")).join("");
+    if(this.replayCache?.key===key)return {doc:structuredClone(this.replayCache.doc),rows};
+    let doc = readDocument(raw, chatId);
+    if (!raw && legacy !== null) {
+      const old = readSnapshot(legacy, chatId); doc.legacy = legacy;
+      doc.accepted = old.entries.map(e => {
+        const p = e.patch;
+        const patch = validateExpanded({ location: p.location, time: p.time, present: p.present, weather: p.weather });
+        return { at: { id: e.source.messageId, index: e.source.index, variant: e.source.variant },
+          patch, texts: e.texts, role: "assistant", prose: "" };
+      });
+    }
     doc = replay(doc, rows, player ? [player] : [], (row, issues) => this.skips.record(chatId, row, issues));
     doc.currentPlayer = player ?? undefined;
-    projectContacts(doc,await this.io.names?.(chatId,userId)??[]);
+    projectContacts(doc,names);
+    // One entry, at most 2 MiB of serialized data. Large portrait-heavy chats skip reuse.
+    const bytes=new TextEncoder().encode(JSON.stringify(doc)).byteLength;
+    this.replayCache=bytes<=2*1024*1024?{key,doc:structuredClone(doc),bytes}:undefined;
     return { doc, rows };
+  }
+  /** Read only stored settings for routing, without fetching or replaying story history. */
+  trackingSource(userId:string,chatId:string):Promise<{source:"main"|"helper";owner?:string}> {
+    return this.serial(chatId,async()=>{
+      if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");
+      const raw=await this.io.read(chatId);
+      if(!raw)return {source:"main"};
+      const value:unknown=JSON.parse(raw);
+      if(!isRecord(value)||value.schema!==2||value.chatId!==chatId)throw Error("Invalid saved data");
+      const settings=readSettings(value.settings);
+      return {source:settings.source,...(typeof value.helperOwner==="string"?{owner:value.helperOwner}:{})};
+    });
   }
   /** Read-only preview with a trusted user and an authorized chat. Never writes. */
   preview(chatId: string, userId: string): Promise<Document> {
-    return this.serial(chatId, async () => {
+    return this.readOperation("preview",userId,chatId, async () => {
       if (!userId || !(await this.io.authorize(chatId, userId))) throw new Error("Chat unavailable");
       return (await this.build(chatId, userId)).doc;
     });
   }
   sync(userId: string, chatId: string): Promise<Document> {
-    return this.serial(chatId, async () => {
+    return this.readOperation("sync",userId,chatId, async () => {
       if (!userId || !(await this.io.authorize(chatId, userId))) throw new Error("Chat unavailable");
       const { doc } = await this.build(chatId, userId);
       const raw = await this.io.read(chatId);

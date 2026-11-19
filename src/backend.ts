@@ -1,3 +1,4 @@
+import { readStoryHistory } from "./history";
 import { SetupChoiceStore } from "./setup-choices";
 import {SetupWizard,SetupError} from "./setup-wizard";
 import {cardNames} from "./card-access";
@@ -37,7 +38,7 @@ const store = new PhoneStore({
   names:(chat,user)=>cardNames(spindle,chat,user),
   warn: text => warn(text),
   authorize: async (chatId, userId) => (await spindle.chats.get(chatId, userId))?.id === chatId,
-  history: async chatId => spindle.chat.getMessages(chatId),
+  history: async chatId => readStoryHistory(spindle,chatId),
   read: async chatId => spindle.variables.chat.get(chatId, DOCUMENT_KEY),
   write: async (chatId, data) => spindle.variables.chat.set(chatId, DOCUMENT_KEY, data),
   player: async (chatId, userId) => {

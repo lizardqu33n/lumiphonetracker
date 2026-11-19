@@ -1,4 +1,11 @@
-# Verification report - 0.18.12
+# Verification report - 0.18.13
+
+283 code tests pass with type checking and reproducible build/package validation. Added regressions for authoritative replay memoization, persona/chat identity, edit/swipe invalidation, bounded cache payloads, old journal compaction, optional lean history, Unicode scanning and timeout during blocked preparation. See docs/HISTORY-INVESTIGATION.md for isolated before/after measurements and the final synthetic workloads. The scanner passed a separate 5,000-input comparison. All 23 focused browser checks passed against the final local candidate.
+
+This version is prepared for server testing; synthetic checks do not establish that real-host memory growth is resolved. The original real-host main-process memory growth, two real browser tabs, the recorded display timeout and provider behavior remain unverified. Native macros lack a shared documented generation ID, so serial calls still validate fresh history rather than relying on an unsafe timestamp or time-based cache. Legacy/helper evidence is preserved. The new lean-history capability is defined in the installed official types and is used only when advertised by the host; otherwise the existing API is used. Public documentation retrieval and real lean-host behavior could not be verified. Earlier full-suite UI limitations remain documented below.
+
+## 0.18.12 - Cleanup
+
 
 Checked November 18, 2026. 272 code tests (2,241 assertions), 23 focused browser checks, type checking and reproducible build/package validation passed.
 

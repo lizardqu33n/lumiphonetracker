@@ -3,6 +3,8 @@ import { execFileSync } from "node:child_process";
 
 // Include an explicit allowlist; never package dependencies or personal inputs.
 const files = [
+  "scripts/benchmark-history.ts", "scripts/benchmark-macros.ts", "scripts/benchmark-tags.ts", "docs/HISTORY-INVESTIGATION.md",
+  "tests/history-performance.test.ts",
   "src/fonts.css", "licenses/CHERRYBOMBONE-OFL.txt", "licenses/DYNAPUFF-OFL.txt", "licenses/SOURGUMMY-OFL.txt", "licenses/SHRIKHAND-OFL.txt",
   "src/action-images.ts",
   "src/field-icons.ts",

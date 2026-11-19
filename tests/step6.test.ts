@@ -190,3 +190,56 @@ test("failed and stopped Main AI generations release per-chat tracking sets",asy
   expect((f.helper as any).running.size).toBe(0);
   expect(f.calls).toHaveLength(0);
 });
+
+test("Main AI completion hooks do not fetch history just to check the tracking source",async()=>{
+  const f=fixture();let histories=0;
+  const history=f.io.history;f.io.history=async chat=>{histories++;return history(chat);};
+  for(let i=0;i<20;i++)f.helper.ended("owner-a",{chatId:"a",generationId:"main-"+i,messageId:"m0",content:f.rows.get("a")![0].content});
+  await f.helper.settled("a");
+  expect(histories).toBe(0);expect(f.calls).toHaveLength(0);expect(f.changes).toHaveLength(0);
+});
+test("concurrent same-user sync reads coalesce without sharing mutable results",async()=>{
+  const f=fixture();let histories=0;
+  const history=f.io.history;f.io.history=async chat=>{histories++;return history(chat);};
+  const results=await Promise.all(Array.from({length:100},()=>f.store.sync("owner-a","a")));
+  expect(histories).toBe(1);
+  results[0].settings.logLines=99;
+  expect(results[1].settings.logLines).toBe(20);
+  expect((f.store as any).queues.size).toBe(0);
+});
+test("a queued edit is a barrier between sync batches and user authorization stays separate",async()=>{
+  const f=fixture();const initial=await f.store.sync("owner-a","a");
+  const before=f.store.sync("owner-a","a");
+  const edit=f.store.update("owner-a","a",initial.revision,{settings:{logLines:7}});
+  const after=f.store.sync("owner-a","a");
+  expect((await before).settings.logLines).toBe(20);await edit;
+  expect((await after).settings.logLines).toBe(7);
+  await expect(f.store.sync("someone-else","a")).rejects.toThrow("Chat unavailable");
+});
+
+test("failed shared reads release batch state and a later request can retry",async()=>{
+  const f=fixture();let failed=true,reads=0;
+  const history=f.io.history;f.io.history=async chat=>{reads++;if(failed)throw Error("Read failed");return history(chat);};
+  const failures=await Promise.allSettled(Array.from({length:25},()=>f.store.sync("owner-a","a")));
+  expect(failures.every(result=>result.status==="rejected")).toBe(true);expect(reads).toBe(1);
+  expect((f.store as any).pendingReads.size).toBe(0);
+  failed=false;await f.store.sync("owner-a","a");
+  expect(reads).toBe(2);expect((f.store as any).pendingReads.size).toBe(0);
+});
+test("source routing is chat-authorized and never fetches story history",async()=>{
+  const f=fixture();let reads=0;const history=f.io.history;f.io.history=async chat=>{reads++;return history(chat);};
+  expect(await f.store.trackingSource("owner-a","a")).toEqual({source:"main"});
+  await expect(f.store.trackingSource("owner-b","a")).rejects.toThrow("Chat unavailable");
+  const invalid=emptyDocument("b");invalid.settings.source="helper";invalid.helperOwner="owner-a";f.saved.set("a",JSON.stringify(invalid));
+  await expect(f.store.trackingSource("owner-a","a")).rejects.toThrow("Invalid saved data");
+  expect(reads).toBe(0);
+});
+
+test("Helper timeout includes blocked preparation and late preparation never dispatches a model",async()=>{
+ const f=fixture(10);await f.enable();
+ let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});
+ const history=f.io.history;f.io.history=async chat=>{await gate;return history(chat);};
+ const result=await f.helper.updateNow("owner-a","a");expect(result.category).toBe("timeout");
+ expect(f.calls).toHaveLength(0);expect((f.helper as any).running.size).toBe(0);
+ release();await Bun.sleep(10);expect(f.calls).toHaveLength(0);
+});

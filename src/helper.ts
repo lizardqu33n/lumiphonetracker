@@ -229,32 +229,36 @@ export class HelperAI {
     const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;let timedOut=false;
     let abortHandler:(()=>void)|undefined;
     let modelStarted=false;
+    let helperSelected=false;
     if(this.running.has(chatId)||this.active.get(chatId)?.size)return {ok:false,category:"validation rejected"};
     this.running.set(chatId,controller);
+    timer=setTimeout(()=>{timedOut=true;controller.abort();},this.timeoutMs);
+    const aborted=new Promise<never>((_,reject)=>{
+      abortHandler=()=>reject(new HelperFailure(timedOut?"timeout":"validation rejected"));
+      controller.signal.addEventListener("abort",abortHandler,{once:true});
+    });
+    void aborted.catch(()=>{});
+    const preparing=<T>(task:Promise<T>):Promise<T>=>Promise.race([task,aborted]);
     try {
       if(!userId)throw new HelperFailure("permission missing");
-      // Sync first, so Main AI never makes a provider call or a generation-permission failure.
-      const initial=await this.store.preview(chatId,userId);
-      if(initial.settings.source!=="helper")return {ok:true};
-      if(initial.helperOwner!==userId)throw new HelperFailure("permission missing");
+      // Route from authorized saved settings before any Helper history or provider work.
+      const initial=await preparing(this.store.trackingSource(userId,chatId));
+      if(initial.source!=="helper")return {ok:true};
+      helperSelected=true;
+      if(initial.owner!==userId)throw new HelperFailure("permission missing");
       if(!this.io.allowed())throw new HelperFailure("permission missing");
-      ticket=await this.store.helperStart(userId,chatId,job.attempt,job.expected);
+      ticket=await preparing(this.store.helperStart(userId,chatId,job.attempt,job.expected));
       if(!ticket)return {ok:true};
       this.notify(userId,chatId);
-      const profiles=await this.profiles(userId);
+      const profiles=await preparing(this.profiles(userId));
       const connection=profiles.find(c=>c.id===ticket!.doc.settings.connection_id);
       if(!connection)return await this.failure(userId,chatId,"no connection",true);
       if(!connection.model?.trim())throw new HelperFailure("no connection");
-      let wording:string|undefined;try{wording=await this.io.wording?.(userId);}catch{this.io.warn("Lumi Phone Tracker: prompt wording unavailable; using Default.");}
+      let wording:string|undefined;try{wording=await preparing(Promise.resolve(this.io.wording?.(userId)));}catch{this.io.warn("Lumi Phone Tracker: prompt wording unavailable; using Default.");}
       const input=helperInput(ticket,wording,this.io.warn);
-      const current=await this.store.preview(chatId,userId);
+      const current=await preparing(this.store.preview(chatId,userId));
       if(!this.io.allowed())throw new HelperFailure("permission missing");
       if(controller.signal.aborted||this.active.get(chatId)?.size||current.settings.source!=="helper"||current.helperOwner!==userId||current.revision!==ticket.doc.revision)throw new HelperFailure("validation rejected");
-      timer=setTimeout(()=>{timedOut=true;controller.abort();},this.timeoutMs);
-      const aborted=new Promise<never>((_,reject)=>{
-        abortHandler=()=>reject(new HelperFailure(timedOut?"timeout":"validation rejected"));
-        controller.signal.addEventListener("abort",abortHandler,{once:true});
-      });
       // Passing signal is documented. Racing it also bounds providers that ignore cancellation.
       modelStarted=true;
       const content=await Promise.race([checkedModelReply(()=>this.io.generate({model:connection.model,messages:input.messages,connection_id:connection.id,userId,parameters:{max_tokens:2400},signal:controller.signal})),aborted]);
@@ -268,12 +272,12 @@ export class HelperAI {
       const category=failureCategory(error);
       const messages:Partial<Record<HelperFailureCategory,string>>={"timeout":"The request timed out. Try again.","empty reply":"The provider returned an empty reply.","invalid output":"The reply could not be read as tracker data.","validation rejected":"The reply could not be applied to this chat."};
       const detail=error instanceof ModelCallError?error.message:messages[category]??"The tracker request failed.";
-      return await this.failure(userId,chatId,category,false,modelStarted?`${detail} Nothing was saved.`:undefined);
+      return await this.failure(userId,chatId,category,false,(modelStarted||controller.signal.aborted)?`${detail} Nothing was saved.`:undefined);
     }
     finally {
       if(timer)clearTimeout(timer);if(abortHandler)controller.signal.removeEventListener("abort",abortHandler);
       if(this.running.get(chatId)===controller)this.running.delete(chatId);
-      if(userId)this.notify(userId,chatId);
+      if(userId&&helperSelected)this.notify(userId,chatId);
     }
   }
 }
