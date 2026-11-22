@@ -1,3 +1,4 @@
+import {createUiIds,type UiUuidContext} from "./ui-id";
 import fontCSS from "./fonts.css" with {type:"text"};
 import {showCopyableError} from "./copy-error";
 import {safeModelMessage} from "./model-errors";
@@ -19,6 +20,7 @@ import { failureCategory, failureLabel } from "./helper-status";
 import { HelperFailure, readRefreshResult } from "./helper-status";
 
 export function setup(ctx: SpindleFrontendContext): () => void {
+  const nextUiId=createUiIds(ctx as SpindleFrontendContext & UiUuidContext);
   const disposers: (() => void)[] = [];
   let disposed = false;
   let activeChat: string | null = null;
@@ -43,16 +45,16 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   let openRequested = false;
   let appearanceEpoch = 0;
   const setupRequests=new Map<string,{chat:string;epoch:number;resolve:(v:Record<string,unknown>)=>void;reject:(e:Error)=>void;timer:ReturnType<typeof setTimeout>}>();
-  const setup:import("./setup-view").SetupRequest=(action,data)=>{if(!activeChat||!current||disposed)return Promise.reject(Error("Open a chat first."));if(busy()&&action!=="choices"&&action!=="choices_save")return Promise.reject(Error("Wait for the current reply to finish."));const chat=activeChat,requestId=crypto.randomUUID();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{setupRequests.delete(requestId);reject(Error("Setup took too long. Check the tracker before trying again."));},action==="run"?105000:20000);setupRequests.set(requestId,{chat,epoch,resolve,reject,timer});ctx.sendToBackend({type:`phone_setup_${action}`,chatId:chat,requestId,...data});});};
+  const setup:import("./setup-view").SetupRequest=(action,data)=>{if(!activeChat||!current||disposed)return Promise.reject(Error("Open a chat first."));if(busy()&&action!=="choices"&&action!=="choices_save")return Promise.reject(Error("Wait for the current reply to finish."));const chat=activeChat,requestId=nextUiId();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{setupRequests.delete(requestId);reject(Error("Setup took too long. Check the tracker before trying again."));},action==="run"?105000:20000);setupRequests.set(requestId,{chat,epoch,resolve,reject,timer});ctx.sendToBackend({type:`phone_setup_${action}`,chatId:chat,requestId,...data});});};
   const personalRequests=new Map<string,{chatId:string|null;epoch:number;resolve:(r:PersonalReply)=>void;reject:(e:Error)=>void;timer:ReturnType<typeof setTimeout>}>();
-  const personal=(change?:unknown,revision?:number):Promise<PersonalReply>=>{const chatId=activeChat,requestId=crypto.randomUUID();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{personalRequests.delete(requestId);reject(Error("Saving took too long."));},15000);personalRequests.set(requestId,{chatId,epoch,resolve,reject,timer});ctx.sendToBackend({type:"phone_personal",requestId,chatId,chatRevision:current?.revision,revision,change});});};
+  const personal=(change?:unknown,revision?:number):Promise<PersonalReply>=>{const chatId=activeChat,requestId=nextUiId();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{personalRequests.delete(requestId);reject(Error("Saving took too long."));},15000);personalRequests.set(requestId,{chatId,epoch,resolve,reject,timer});ctx.sendToBackend({type:"phone_personal",requestId,chatId,chatRevision:current?.revision,revision,change});});};
   const updates = new Map<string, { chatId: string; epoch: number; resolve: (doc: PhoneDocument) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   const prefsRequests = new Map<string, { appearanceEpoch: number; resolve: (prefs: Preferences) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   const readRequests = new Map<string, { chatId: string; epoch: number; resolve: (reads: ReadState) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   const streaming=new Map<string,Set<string>>();
   let backendBusy=false;
   const busy=()=>backendBusy||!!(activeChat&&streaming.get(activeChat)?.size);
-  const helperRequests = new Map<string, { chatId:string; epoch:number; resolve:(value:unknown)=>void; reject:(error:Error)=>void; timer:ReturnType<typeof setTimeout> }>();
+  const trackerRequests = new Map<string, { chatId:string; epoch:number; resolve:(value:unknown)=>void; reject:(error:Error)=>void; timer:ReturnType<typeof setTimeout> }>();
   let removeSidebarStyle=()=>{};
   const applySidebarStyle=(text:string)=>{const scoped=prepareSidebarCSS(text);const remove=scoped?ctx.dom.addStyle(scoped):()=>{};removeSidebarStyle();removeSidebarStyle=remove;};
   disposers.push(()=>removeSidebarStyle());
@@ -62,7 +64,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   const sendSync = () => {
     if(disposed)return;
     if(pendingSync){syncQueued=true;return;}
-    pendingSync = crypto.randomUUID();
+    pendingSync = nextUiId();
     syncTimer=setTimeout(()=>{
       pendingSync="";syncQueued=false;syncTimer=undefined;
       console.warn("Lumi Phone Tracker: tracker refresh timed out.");
@@ -86,10 +88,10 @@ export function setup(ctx: SpindleFrontendContext): () => void {
 
   const requestPortraits=()=>{
     if(disposed||!activeChat||!current||current.trackingEnabled===false||portraitChat===activeChat)return;
-    portraitChat=activeChat;portraitRequest=crypto.randomUUID();ctx.sendToBackend({type:"phone_portraits",requestId:portraitRequest,chatId:activeChat});
+    portraitChat=activeChat;portraitRequest=nextUiId();ctx.sendToBackend({type:"phone_portraits",requestId:portraitRequest,chatId:activeChat});
   };
   const prefsChange = (change?: { css?: string; sidebarCss?:string; dismiss?: import("./preferences").App|"Home"|"Draft hint" }): Promise<Preferences> => {
-    const requestId = crypto.randomUUID();
+    const requestId = nextUiId();
     if (change?.css !== undefined||change?.sidebarCss!==undefined) { appearanceEpoch++; preferences = { ...preferences, ...(change.css!==undefined?{css:change.css}:{}),...(change.sidebarCss!==undefined?{sidebarCss:change.sidebarCss}:{}) }; }
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => { prefsRequests.delete(requestId); reject(new Error("Appearance could not be saved. Try again.")); }, 15000);
@@ -99,7 +101,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   };
   const update = (change: Parameters<PhoneViewActionsUpdate>[0], revision: number): Promise<PhoneDocument> => {
     if (!activeChat || !current) return Promise.reject(new Error("Open a chat first."));
-    const requestId = crypto.randomUUID(); const chatId = activeChat; const originEpoch = epoch;
+    const requestId = nextUiId(); const chatId = activeChat; const originEpoch = epoch;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => { updates.delete(requestId); reject(new Error("Saving took too long. Reopen this chat and check before trying again.")); }, 15000);
       updates.set(requestId, { chatId, epoch: originEpoch, resolve, reject, timer });
@@ -108,20 +110,20 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   };
   const markRead: import("./phone-view").ViewActions["markRead"] = (chatId, key, observed) => {
     if (disposed || chatId !== activeChat) return Promise.reject(new Error("The chat changed."));
-    const requestId = crypto.randomUUID();
+    const requestId = nextUiId();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => { readRequests.delete(requestId); reject(new Error("Read status could not be saved.")); }, 15000);
       readRequests.set(requestId, { chatId, epoch, resolve, reject, timer });
       ctx.sendToBackend({ type: "phone_mark_read", requestId, chatId, key, observed });
     });
   };
-  const requestHelper = (type:"phone_connections"|"phone_helper_now"):Promise<unknown> => {
+  const requestTracker = (type:"phone_connections"|"phone_refresh"):Promise<unknown> => {
     if(!activeChat||disposed)return Promise.reject(new Error("Open a chat first."));
-    if(type==="phone_helper_now" && busy())return Promise.reject(new HelperFailure("validation rejected"));
-    const chatId=activeChat,requestId=crypto.randomUUID();
+    if(type==="phone_refresh" && busy())return Promise.reject(new HelperFailure("validation rejected"));
+    const chatId=activeChat,requestId=nextUiId();
     return new Promise((resolve,reject)=>{
-      const timer=setTimeout(()=>{helperRequests.delete(requestId);reject(new HelperFailure("timeout"));},type==="phone_helper_now"?105000:15000);
-      helperRequests.set(requestId,{chatId,epoch,resolve,reject,timer});ctx.sendToBackend({type,chatId,requestId});
+      const timer=setTimeout(()=>{trackerRequests.delete(requestId);reject(new HelperFailure("timeout"));},15000);
+      trackerRequests.set(requestId,{chatId,epoch,resolve,reject,timer});ctx.sendToBackend({type,chatId,requestId});
     });
   };
   const reset = () => {
@@ -162,9 +164,9 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     statuses.forEach(n=>{n.textContent="";});
     showCopyableError(refreshStatus,message);
   };
-  const decorate=(button:HTMLButtonElement,name:UIIconName,label:string,short:string)=>{button.classList.add("lpt-toolbar-button");button.setAttribute("aria-label",label);button.replaceChildren();const image=document.createElement("img");image.className="lpt-toolbar-icon";image.src=UI_ICONS[name];image.alt="";image.setAttribute("aria-hidden","true");image.draggable=false;const caption=document.createElement("span");caption.className="lpt-toolbar-label";caption.textContent=short;const tooltip=document.createElement("span");tooltip.className="lpt-toolbar-tooltip";tooltip.id=`lpt-tip-${crypto.randomUUID()}`;tooltip.setAttribute("role","tooltip");tooltip.textContent=label;button.setAttribute("aria-describedby",tooltip.id);button.append(image,caption,tooltip);return tooltip;};
+  const decorate=(button:HTMLButtonElement,name:UIIconName,label:string,short:string)=>{button.classList.add("lpt-toolbar-button");button.setAttribute("aria-label",label);button.replaceChildren();const image=document.createElement("img");image.className="lpt-toolbar-icon";image.src=UI_ICONS[name];image.alt="";image.setAttribute("aria-hidden","true");image.draggable=false;const caption=document.createElement("span");caption.className="lpt-toolbar-label";caption.textContent=short;const tooltip=document.createElement("span");tooltip.className="lpt-toolbar-tooltip";tooltip.id=`lpt-tip-${nextUiId()}`;tooltip.setAttribute("role","tooltip");tooltip.textContent=label;button.setAttribute("aria-describedby",tooltip.id);button.append(image,caption,tooltip);return tooltip;};
   decorate(open,"open-phone","Open phone","Open");const refreshTooltip=decorate(refreshButton,"refresh","Refresh tracker","Refresh");decorate(resetButton,"reset","Reset appearance","Reset");
-  const updateBusy=()=>{refreshButton.disabled=!activeChat||!current||current.trackingEnabled===false||busy()||refreshPending;refreshTooltip.textContent=current?.settings.source==="helper"?"Refresh tracker. Requests may cost money depending on the model chosen.":"Refresh tracker. Main AI makes no model request.";};
+  const updateBusy=()=>{refreshButton.disabled=!activeChat||!current||current.trackingEnabled===false||busy()||refreshPending;refreshTooltip.textContent="Refresh tracker. Re-reads saved messages without a model request.";};
   refreshButton.addEventListener("click",()=>{
     const origin=epoch;
     portraitChat=null;
@@ -172,7 +174,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     refreshStatus.textContent="";
     showModelError("");
     updateBusy();
-    void requestHelper("phone_helper_now").then(value=>{
+    void requestTracker("phone_refresh").then(value=>{
       if(origin!==epoch)return;
       const result=readRefreshResult(value);
       if(result.ok)toolbarResult(refreshStatus,"Refreshed");
@@ -185,7 +187,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   recoveryActions.setAttribute("role","toolbar");recoveryActions.setAttribute("aria-label","Phone actions");recoveryActions.append(open,refreshButton,resetButton);
   const results=document.createElement("div");results.className="lpt-toolbar-results";results.append(...statuses);
   const scroll=document.createElement("div");scroll.className="lpt-sidebar-scroll lpt-sidebar-style-boundary";scroll.append(help);panel.append(recoveryActions,results,scroll);tab.root.append(panel);
-  sidebar=new Sidebar(scroll,{setup,personal,update:async(settings,revision)=>await update({settings},revision),connections:async()=>await requestHelper("phone_connections") as ConnectionsInfo,css:change=>prefsChange(change),applyCSS:change=>{if(change.sidebarCss!==undefined)applySidebarStyle(change.sidebarCss);if(change.css!==undefined)view?.applyCSS(change.css);appearanceEpoch++;preferences={...preferences,...change};}},preferences);
+  sidebar=new Sidebar(scroll,{setup,personal,update:async(settings,revision)=>await update({settings},revision),connections:async()=>await requestTracker("phone_connections") as ConnectionsInfo,css:change=>prefsChange(change),applyCSS:change=>{if(change.sidebarCss!==undefined)applySidebarStyle(change.sidebarCss);if(change.css!==undefined)view?.applyCSS(change.css);appearanceEpoch++;preferences={...preferences,...change};}},preferences);
   updateBusy();disposers.push(()=>{clearTimeout(toolbarTimer);for(const r of personalRequests.values()){clearTimeout(r.timer);r.reject(Error("Closed"));}personalRequests.clear();sidebar?.destroy();},()=>tab.destroy());
   disposers.push(tab.onActivate(() => { void ensureWidget(); }));
 
@@ -210,7 +212,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
       lastSize = "";
       widget = ctx.ui.createFloatWidget({ width: 48, height: 48, initialPosition: { x: 24, y: 110 }, chromeless: true, tooltip: "Lumi Phone Tracker", snapToEdge: true });
       const transport = document.createElement("div"); transport.className = "lpt-transport";
-      const placementId = crypto.randomUUID(); transport.dataset.lptPlacement = placementId;
+      const placementId = nextUiId(); transport.dataset.lptPlacement = placementId;
       const placementStyle = document.createElement("style");
       const viewport = document.createElement("div"); viewport.className = "lpt-viewport";
       const island = document.createElement("div"); island.className = "lpt-island";
@@ -220,7 +222,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
       const base = document.createElement("style"); base.textContent = css;
       const custom = document.createElement("style"); shadow.append(base, custom);
       viewport.append(island); transport.append(viewport); widget.root.append(placementStyle, transport);
-      view = new PhoneView(shadow, custom, { update, portraits:requestPortraits, preferences: prefsChange, markRead,
+      view = new PhoneView(shadow, custom, { update, uuid:nextUiId, portraits:requestPortraits, preferences: prefsChange, markRead,
         draft: (chatId, to, text,group) => {
           if (disposed || activeChat !== chatId || current?.chatId !== chatId || current.trackingEnabled===false || (!current.settings.apps.Messages||!current.settings.enabled.messages)) throw new Error("The chat changed. Reopen the original conversation.");
           return addReplyDraft(ctx, chatId, current.currentPlayer ?? "", to, text,group);
@@ -260,18 +262,18 @@ export function setup(ctx: SpindleFrontendContext): () => void {
 
     if (disposed || !isRecord(payload)) return;
     if(payload.type==="phone_model_failure"){if(activeChat&&payload.chatId===activeChat)showModelError(typeof payload.message==="string"?safeModelMessage(payload.message):"");return;}
-    if(payload.type==="phone_helper_changed") { if(activeChat && payload.chatId===activeChat && current?.trackingEnabled!==false)sendSync();return; }
+    if(payload.type==="phone_tracker_changed"||payload.type==="phone_helper_changed") { if(activeChat && payload.chatId===activeChat && current?.trackingEnabled!==false)sendSync();return; }
     if(typeof payload.requestId!=="string")return;
     const sr=setupRequests.get(payload.requestId);if(sr&&["phone_setup_result","phone_setup_error"].includes(String(payload.type))){clearTimeout(sr.timer);setupRequests.delete(payload.requestId);if(sr.epoch!==epoch||sr.chat!==activeChat||payload.chatId!==activeChat){sr.reject(Error("The chat changed. Reopen setup in the original chat."));return;}if(payload.type==="phone_setup_error"){sr.reject(Error(typeof payload.message==="string"?payload.message:"Setup failed. Nothing was saved."));return;}if(!isRecord(payload.result)){sr.reject(Error("Invalid setup response."));return;}if(isRecord(payload.result.snapshot)&&payload.result.snapshot.chatId===activeChat){current=payload.result.snapshot as unknown as PhoneDocument;sidebar?.receive(current,chatName);view?.receive(current,reads);}sr.resolve(payload.result);return;}
     const pr=personalRequests.get(payload.requestId);
     if(pr&&["phone_personal_result","phone_personal_error"].includes(String(payload.type))){clearTimeout(pr.timer);personalRequests.delete(payload.requestId);if(pr.epoch!==epoch||pr.chatId!==activeChat){pr.reject(Error("The chat changed."));return;}if(payload.type==="phone_personal_error"){pr.reject(Error("Could not save your choices."));return;}const result=payload as unknown as PersonalReply;if(result.snapshot&&result.snapshot.chatId===activeChat){current=result.snapshot;sidebar?.receive(current,chatName);view?.receive(current,reads);updateBusy();}pr.resolve(result);return;}
-    const helperRequest=helperRequests.get(payload.requestId);
-    if(helperRequest) {
-      if(!["phone_connections_result","phone_helper_now_result","phone_helper_error"].includes(String(payload.type)))return;
-      clearTimeout(helperRequest.timer);helperRequests.delete(payload.requestId);
-      if(helperRequest.epoch!==epoch||helperRequest.chatId!==activeChat||payload.chatId!==activeChat){helperRequest.reject(new Error("The chat changed."));return;}
-      if(payload.type==="phone_helper_error"){helperRequest.reject(new HelperFailure(readRefreshResult({ok:false,category:payload.category}).category!));return;}
-      helperRequest.resolve(payload.type==="phone_helper_now_result"?payload.result:payload.info);return;
+    const trackerRequest=trackerRequests.get(payload.requestId);
+    if(trackerRequest) {
+      if(!["phone_connections_result","phone_refresh_result","phone_helper_error"].includes(String(payload.type)))return;
+      clearTimeout(trackerRequest.timer);trackerRequests.delete(payload.requestId);
+      if(trackerRequest.epoch!==epoch||trackerRequest.chatId!==activeChat||payload.chatId!==activeChat){trackerRequest.reject(new Error("The chat changed."));return;}
+      if(payload.type==="phone_helper_error"){trackerRequest.reject(new HelperFailure(readRefreshResult({ok:false,category:payload.category}).category!));return;}
+      trackerRequest.resolve(payload.type==="phone_refresh_result"?payload.result:payload.info);return;
     }
     const readRequest = readRequests.get(payload.requestId);
     if (readRequest) {
@@ -324,7 +326,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     modelError="";clearTimeout(toolbarTimer);statuses.forEach(n=>{n.textContent="";});portraitChat=null;portraitRequest="";epoch++; refreshPending=false;refreshStatus.textContent="";openStatus.textContent="";backendBusy=false;clearTimeout(syncTimer);syncTimer=undefined;syncQueued=false;pendingSync = ""; activeChat = chatId; current = null; reads = emptyReads(); view?.receive(null, reads);chatName="";sidebar?.receive(null,"");updateBusy();
     for (const [id, p] of readRequests) { clearTimeout(p.timer); p.reject(new Error("The chat changed.")); readRequests.delete(id); }
     for (const [id, p] of updates) { clearTimeout(p.timer); p.reject(new Error("The chat changed. Your original chat keeps its saved changes.")); updates.delete(id); }
-    for(const [id,p]of helperRequests){clearTimeout(p.timer);p.reject(new Error("The chat changed."));helperRequests.delete(id);}
+    for(const [id,p]of trackerRequests){clearTimeout(p.timer);p.reject(new Error("The chat changed."));trackerRequests.delete(id);}
     if (chatId) sendSync();
   };
   disposers.push(ctx.events.on("CHAT_SWITCHED", (payload: unknown) => { if (isRecord(payload)) switchChat(typeof payload.chatId === "string" ? payload.chatId : null); }));
@@ -351,8 +353,8 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     for (const p of updates.values()) { clearTimeout(p.timer); p.reject(new Error("The phone closed before saving completed. Check the chat before trying again.")); }
     for (const p of prefsRequests.values()) { clearTimeout(p.timer); p.reject(new Error("The phone closed.")); }
     for (const p of readRequests.values()) { clearTimeout(p.timer); p.reject(new Error("The phone closed.")); }
-    for(const p of helperRequests.values()){clearTimeout(p.timer);p.reject(new Error("The phone closed."));}
-    updates.clear(); prefsRequests.clear(); readRequests.clear(); helperRequests.clear(); disposers.forEach(fn => fn());
+    for(const p of trackerRequests.values()){clearTimeout(p.timer);p.reject(new Error("The phone closed."));}
+    updates.clear(); prefsRequests.clear(); readRequests.clear(); trackerRequests.clear(); disposers.forEach(fn => fn());
   };
 }
 type PhoneViewActionsUpdate = import("./phone-view").ViewActions["update"];

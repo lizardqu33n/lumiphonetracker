@@ -21,15 +21,10 @@ test("changed sources or revisions before Run cause no request; failed output ha
 test("repeated contact proposals keep the first record without overwriting it or exceeding caps",()=>{const d=emptyDocument("a");const result=setupCandidates(d,{contacts:[{name:"Bea",phone:"555123"},{name:"BEA",phone:"555999"}],notes:[],locations:[]});expect(result.contacts).toHaveLength(1);expect(result.contacts[0].phone).toBe("555123");d.state.contacts=Array.from({length:30},(_,i)=>({name:`N${i}`,player:false,fields:{}}));expect(setupCandidates(d,{contacts:[{name:"Bea",phone:"555123"}],notes:[],locations:[]}).contacts).toHaveLength(0);});
 
 // The old implementation looked up only settings.connection_id. Main AI normally has none.
-test("reported Main AI failure reproduced and default connection resolved without a saved custom ID",async()=>{
- const f=fixture(),d=JSON.parse(f.docs.get("a")!);d.settings.connection_id=null;f.docs.set("a",JSON.stringify(d));const profiles=await f.api.connections.list("u");
- const legacy=()=>{if(!profiles.find((c:any)=>c.id===d.settings.connection_id))throw Error("Choose your custom connection in the sidebar's Connections section first.");};
- expect(legacy).toThrow("Choose your custom connection in the sidebar's Connections section first.");
- const p=await f.wizard.prepare("u","a",[...SETUP_FIELD_IDS]) as any;await f.wizard.run("u","a",p.id);expect(f.generated[0].connection_id).toBe("u-connection");expect(f.generated[0].userId).toBe("u");
- d.settings.connection_id="stale";expect(setupConnection(d,profiles).id).toBe("u-connection");d.settings.source="helper";expect(()=>setupConnection(d,profiles)).toThrow("Custom connection is unavailable");
- d.settings.connection_id="u-connection";expect(setupConnection(d,profiles).id).toBe("u-connection");d.settings.source="main";expect(()=>setupConnection(d,[])).toThrow("Main AI connection is unavailable");expect(()=>setupConnection(d,[...profiles,...profiles])).toThrow("More than one");
-});
-test("a changed default after cost review cannot spend on the old connection",async()=>{const f=fixture(),p=await f.wizard.prepare("u","a",["contacts.phone"]) as any;f.api.connections.list=async(u:string)=>{expect(u).toBe("u");return [{id:"replacement",model:"small",is_default:true}];};await expect(f.wizard.run("u","a",p.id)).rejects.toThrow("Connection changed");expect(f.generated).toHaveLength(0);});
+test("setup requires an explicit saved connection, never guesses a default",async()=>{const f=fixture(),d=JSON.parse(f.docs.get("a")!);d.settings.connection_id=null;f.docs.set("a",JSON.stringify(d));await expect(f.wizard.prepare("u","a",["contacts.phone"])).rejects.toThrow("Choose a connection");expect(f.generated).toHaveLength(0);d.settings.connection_id="stale";expect(()=>setupConnection(d,[])).toThrow("Connection not found");d.settings.connection_id="u-connection";expect(setupConnection(d,[{id:"u-connection",model:"small"}] as never).id).toBe("u-connection");});
+
+test("removing the selected connection after review cannot spend",async()=>{const f=fixture(),p=await f.wizard.prepare("u","a",["contacts.phone"]) as any;f.api.connections.list=async()=>[];await expect(f.wizard.run("u","a",p.id)).rejects.toThrow("Connection not found");expect(f.generated).toHaveLength(0);});
+
 test("all fifteen fields have bounded source-proven import and unselected values are rejected",async()=>{
  const f=fixture(),q="Bea 555123 bea@example.org sister guide Unhurt Calm beside gate red coat old hat hopes to leave. Lantern Town quiet town. Reminder Keep gate locked.";
  f.setSource(q);f.setResponse(JSON.stringify({contacts:[{name:"Bea",phone:"555123",email:"bea@example.org",relationship:"sister",roles:["guide"],physical:"Unhurt",mood:"Calm",position:"beside gate",attire:{worn:["red coat"],removed:["old hat"]},thoughts:"hopes to leave",quote:q}],notes:[{section:"misc",name:"Reminder",detail:"Keep gate locked",quote:q}]}));

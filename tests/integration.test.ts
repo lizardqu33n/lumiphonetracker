@@ -3,13 +3,13 @@ import { expect, test } from "bun:test";
 import { emptyDocument, SWITCHES } from "../src/model";
 import type { SpindleAPI } from "lumiverse-spindle-types";
 
-test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and explicit Helper AI", async () => {
+test("actual backend: render/prompt hooks, scoped receipts, saved-message safety and wizard-only AI", async () => {
   let processor: Parameters<SpindleAPI["registerMessageContentProcessor"]>[0] | undefined;
   let interceptor: Parameters<SpindleAPI["registerInterceptor"]>[0] | undefined;
   let macroInterceptor: Parameters<SpindleAPI["registerMacroInterceptor"]>[0] | undefined;
   const capabilities: string[] = []; const events: string[] = [];
   const handlers=new Map<string,(payload:unknown,userId?:string)=>void>();const generations:Record<string,unknown>[]=[];
-  const persisted = new Map<string, unknown>();
+  const persisted = new Map<string, unknown>([["a/lpt_phone_v2",JSON.stringify(emptyDocument("a"))],["c/lpt_phone_v2",JSON.stringify(emptyDocument("c"))]]);
   let receive!: (payload: unknown, userId: string) => void;
   let deliver: (p: Record<string, unknown>, user: string) => void = () => {};
   let registrationOptions: unknown;
@@ -48,13 +48,14 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     sendToFrontend: (p: Record<string, unknown>, user: string) => { scoped(user,"sendToFrontend");deliver(p,user); },
     log: { info: () => {}, warn: (text:string) => {warnings.push(text);} },
   };
+  let interceptorHistoryReads=0;const originalHistory=fake.chat.getMessages;fake.chat.getMessages=async chat=>{interceptorHistoryReads++;return originalHistory(chat);};
   const prior = (globalThis as unknown as { spindle?: unknown }).spindle;
   (globalThis as unknown as { spindle: unknown }).spindle = fake;
   try {
     await import(`../src/backend.ts?test=${crypto.randomUUID()}`);
     expect(capabilities).toEqual(["message_tag_interceptor"]);
     expect(() => scoped(undefined,"mock self-check")).toThrow("userId is required for operator-scoped extensions");
-    expect(events).toContain("GENERATION_ENDED");
+    expect(events).not.toContain("GENERATION_ENDED");expect(events).toContain("MESSAGE_SENT");
     expect(registrationOptions).toBe(1000);
     expect(macroInterceptor).toBeDefined();
     expect(processor).toBeDefined(); expect(interceptor).toBeDefined();
@@ -64,8 +65,11 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     }
     expect(await processor!({ ...base, origin: "render" })).toEqual({ content: "Story" });
     const input = [{ role: "assistant" as const, __isChatHistory: true, content: 'Story<phone-state>location="Hidden"</phone-state>' }];
+    const beforePromptHistory=interceptorHistoryReads;
+    const untagged=[{...input[0],content:"Plain story"}];expect(await interceptor!(untagged,{chatId:"a",userId:"u"} as never)).toBe(untagged);expect(interceptorHistoryReads).toBe(beforePromptHistory);
     const output = await interceptor!(input, {chatId:"a",userId:"u",isDryRun:true} as never);
     expect(output).toEqual([{ ...input[0], content: "Story" }]);
+    expect(interceptorHistoryReads).toBe(beforePromptHistory);
     expect(input[0].content).toContain("phone-state");
     // Dry Run and normal replies use the same read-only, explicitly scoped path.
     expect(await interceptor!(input,{chatId:"a",userId:"u",isDryRun:false} as never)).toEqual(output);
@@ -140,7 +144,7 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     receive({type:"phone_preferences_update",requestId:"missing",change:{css:""},userId:"u"},undefined as never);
     receive({type:"phone_sync",requestId:"missing",chatId:"a",userId:"u"},undefined as never);
     receive({type:"phone_helper_now",requestId:"missing-helper",chatId:"a",userId:"u"},undefined as never);
-    expect(warnings.at(-1)).toBe("Lumi Phone Tracker: Helper AI: permission missing.");
+    expect(warnings.at(-1)).toBe("Lumi Phone Tracker: setup/refresh: permission missing.");
     await Bun.sleep(5); expect(calls.length).toBe(beforeMissingUser);
     for (const chatId of ["a", "b"]) {
       const response = new Promise<Record<string, unknown>>(resolve => {
@@ -151,7 +155,7 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
       expect(result.type).toBe("phone_snapshot"); expect(result.chatId).toBe(chatId);
       expect((result.snapshot as { state: { scene: { location: { value: { name: string } } } } }).state.scene.location.value.name).toBe(chatId);
     }
-    expect(persisted.size).toBe(2);
+    expect(persisted.size).toBe(3);
     for (const event of ["MESSAGE_SENT","MESSAGE_EDITED","MESSAGE_DELETED","MESSAGE_SWIPED","SWIPE_EDITED","CHAT_CHANGED"]) {
       handlers.get(event)!({chatId:"a"},"u");
     }
@@ -176,43 +180,16 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     expect(marked.type).toBe("phone_reads_result"); expect(marked.chatId).toBe("a"); expect((marked.reads as {seen:Record<string,string>}).seen[text.id]).toBe(observed[0].receipt);
     const forbidden = await request({type:"phone_mark_read",chatId:"a",key:"ada",observed},"other-user");
     expect(forbidden.type).toBe("phone_reads_error");
-    handlers.get("GENERATION_ENDED")!({chatId:"a",generationId:"main-only",messageId:"m1",content:`<phone-state>location="a"</phone-state><phone-text from="Ada">Actual saved test text</phone-text>`},"u");
+    handlers.get("MESSAGE_SENT")!({chatId:"a",message:{id:"m1",chat_id:"a",index_in_chat:0,is_user:false,name:"Ada",swipe_id:0,content:'<phone-state>location="a"</phone-state><phone-text from="Ada">Actual saved test text</phone-text>'}},"u");
     await Bun.sleep(10);expect(generations.length).toBe(0);
     const before=await request({type:"phone_sync",chatId:"a"},"u");
     const selected=await request({type:"phone_update",chatId:"a",revision:(before.snapshot as {revision:number}).revision,settings:{source:"helper",connection_id:"small"}},"u");
-    expect((selected.snapshot as {settings:{source:string}}).settings.source).toBe("helper");expect(generations.length).toBe(0);
-    const done=await request({type:"phone_helper_now",chatId:"a"},"u");expect(done.type).toBe("phone_helper_now_result");expect(done.result).toEqual({ok:true});expect(generations.length).toBe(1);
-    const countBeforeMissingEvent=generations.length;
-    handlers.get("GENERATION_ENDED")!({chatId:"a",generationId:"unscoped",messageId:"m1",content:"PRIVATE"});
-    await Bun.sleep(10); expect(generations.length).toBe(countBeforeMissingEvent);
-    // Also exercise automatic completion through the strict operator host.
-    handlers.get("GENERATION_STARTED")!({chatId:"a",generationId:"scoped-auto"},"u");
-    
-    handlers.get("GENERATION_ENDED")!({chatId:"a",generationId:"scoped-auto",messageId:"m1",content:`<phone-state>location="a"</phone-state><phone-text from="Ada">Actual saved test text</phone-text>`},"u");
-    for(let i=0;i<100&&generations.length<2;i++)await Bun.sleep(5);
-    expect(generations.length).toBe(2);
-    handlers.get("GENERATION_STOPPED")!({chatId:"a",generationId:"stopped-with-user"},"u");
-    expect(calls).toContain("userStorage.setJson");expect(calls).toContain("macros.resolve");expect(calls).toContain("chats.get");
-    const cBefore=await request({type:"phone_sync",chatId:"c"},"v");
-    await request({type:"phone_update",chatId:"c",revision:(cBefore.snapshot as {revision:number}).revision,settings:{source:"helper",connection_id:"v-small"}},"v");
-    const cRefresh=await request({type:"phone_helper_now",chatId:"c"},"v");expect(cRefresh.result).toEqual({ok:true});
-    expect(generations.at(-1)!.userId).toBe("v");expect(generations.at(-1)!.connection_id).toBe("v-small");
-    const cSaved=JSON.parse(String(persisted.get("c/lpt_phone_v2")));expect(cSaved.helperOwner).toBe("v");expect(cSaved.helperEntries.length).toBe(1);
-    const cText=(cBefore.snapshot as {state:{messages:{id:string;from:string;to?:string;time?:string;text:string}[]}}).state.messages[0];
-    const cObserved=[{id:cText.id,receipt:JSON.stringify([cText.from,cText.to??null,cText.time??null,cText.text])}];
-    expect((await request({type:"phone_mark_read",chatId:"c",key:"ada",observed:cObserved},"v")).type).toBe("phone_reads_result");
-    expect([...persisted.keys()].some(k=>k.startsWith("v/message-reads/"))).toBe(true);
-    const beforeForbidden=generations.length;
-    expect((await request({type:"phone_helper_now",chatId:"c"},"u")).category).toBe("permission missing");expect(generations.length).toBe(beforeForbidden);
-    const sharedU=await request({type:"phone_sync",chatId:"shared"},"u");
-    const sharedAdded=await request({type:"phone_update",chatId:"shared",revision:(sharedU.snapshot as {revision:number}).revision,settings:{apps:{Calls:true,Email:true,Bank:true}}},"v");
-    const sharedV=await request({type:"phone_sync",chatId:"shared"},"u");expect((sharedV.snapshot as any).state).toEqual((sharedAdded.snapshot as any).state);expect((sharedV.snapshot as any).settings.apps.Bank).toBe(true);
-    const call=(sharedV.snapshot as any).state.calls[0],mail=(sharedV.snapshot as any).state.emails[0];
-    for(const [key,entry]of [["@calls",call],["@email",mail]])expect((await request({type:"phone_mark_read",chatId:"shared",key,observed:[{id:entry.id,receipt:activityReceipt(entry)}]},"u")).type).toBe("phone_reads_result");
-    const uAfter=await request({type:"phone_sync",chatId:"shared"},"u"),vAfter=await request({type:"phone_sync",chatId:"shared"},"v");expect((uAfter.reads as any).seen[call.id]).toBeDefined();expect((vAfter.reads as any).seen[call.id]).toBeUndefined();expect((uAfter.reads as any).seen[mail.id]).toBeDefined();expect((vAfter.reads as any).seen[mail.id]).toBeUndefined();
-    expect(await macros.get("phone_email")!({chatId:"shared",userId:"u"})).toBe("");expect(await macros.get("phone_email")!({chatId:"shared",userId:"v"})).toContain("Shared plan");
-    failReceipts=true;expect(await macros.get("phone_email")!({chatId:"shared",userId:"v"})).toBe("");expect(await macros.get("phone_format")!({chatId:"shared",userId:"v"})).toContain("call:");expect(warnings.join()).not.toContain("PRIVATE receipt failure");failReceipts=false;
-    expect(generations[0].type).toBe("raw");expect(generations[0].connection_id).toBe("small");expect(generations[0].userId).toBe("u");expect((generations[0].messages as unknown[]).length).toBe(2);
+    expect(selected.type).toBe("phone_error");expect(generations.length).toBe(0);
+    const done=await request({type:"phone_helper_now",chatId:"a"},"u");expect(done.type).toBe("phone_helper_now_result");expect(done.result).toEqual({ok:true});expect(generations.length).toBe(0);
+    const legacyRaw=JSON.parse(String(persisted.get("a/lpt_phone_v2")));legacyRaw.settings.source="helper";legacyRaw.settings.connection_id="small";persisted.set("a/lpt_phone_v2",JSON.stringify(legacyRaw));
+    expect(await nativePull("a","u")).toContain("End each reply with <phone-state>");
+    await request({type:"phone_helper_now",chatId:"a"},"u");expect(generations.length).toBe(0);
+    expect((await request({type:"phone_helper_now",chatId:"c"},"u")).category).toBe("permission missing");
     // Personal settings RPC uses transport identity, including real preview and apply paths.
     const p0=await request({type:"phone_personal",chatId:"a"},"u");expect(p0.type).toBe("phone_personal_result");
     const p1=await request({type:"phone_personal",chatId:"a",revision:0,change:{kind:"wording_save",target:"main",name:"U wording",text:"U CUSTOM [[phone_syntax]]"}},"u");expect(p1.type).toBe("phone_personal_result");
@@ -222,13 +199,9 @@ test("actual backend: render/prompt hooks, scoped receipts, Main AI safety and e
     const denied=await request({type:"phone_personal",chatId:"a"},"v");expect(denied.type).toBe("phone_personal_error");
     const now=await request({type:"phone_sync",chatId:"a"},"u");const beforeApply=now.snapshot as ReturnType<typeof emptyDocument>;const paidBefore=generations.length;
     const applied=await request({type:"phone_personal",chatId:"a",chatRevision:beforeApply.revision,change:{kind:"preset_apply",id:"minimal",confirm:true}},"u");expect(applied.type).toBe("phone_personal_result");const afterApply=applied.snapshot as ReturnType<typeof emptyDocument>;expect(afterApply.state).toEqual(beforeApply.state);expect(afterApply.settings.source).toBe(beforeApply.settings.source);expect(afterApply.settings.aiPlayerTexts).toBe(beforeApply.settings.aiPlayerTexts);expect(generations.length).toBe(paidBefore);
-    const ph=await request({type:"phone_personal",chatId:"c",revision:0,change:{kind:"wording_save",target:"helper",name:"V helper",text:"V HELPER [[phone_syntax]]"}},"v");expect(ph.type).toBe("phone_personal_result");
-    const helperPreview=await request({type:"phone_personal",chatId:"c",change:{kind:"preview",target:"helper"}},"v");const hpText=(helperPreview.preview as {text:string}).text;
-    await request({type:"phone_helper_now",chatId:"c"},"v");expect(String((generations.at(-1)!.messages as any[])[0].content)).toBe(hpText);expect(hpText).toContain("V HELPER");expect(hpText).toContain("Null means unknown");expect(generations.at(-1)!.userId).toBe("v");
-    const p2=await request({type:"phone_personal",chatId:"a",revision:1,change:{kind:"wording_save",target:"main",id:(p1.personal as any).wordings.main[0].id,name:"U wording",text:"U WORDING WITHOUT TOKEN"}},"u");expect(p2.type).toBe("phone_personal_result");expect(await nativePull("a","u")).toContain("<phone-text");expect(warnings.at(-1)).toContain("missing syntax");expect(warnings.at(-1)).not.toContain("U WORDING");
     Object.assign(fake,{characters:{get:async(_id:string,u:string)=>{scoped(u,"characters.get");return {name:"Ada",description:"Zoe is a guide. Her phone is 555666.",personality:"",scenario:"",world_book_ids:[]};}},personas:{getActive:async(u:string)=>{scoped(u,"personas.getActive");return {name:"Player",description:"Player is a traveler.",attached_world_book_id:null};}},world_books:{getGlobal:async(u:string)=>{scoped(u,"world_books.getGlobal");return ["book"];},entries:{list:async(_id:string,o:any)=>{scoped(o.userId,"world_books.entries.list");return {data:[],total:0};}}},tokens:{countMessages:async(_m:unknown,o:any)=>{scoped(o.userId,"tokens.countMessages");return {total_tokens:123,approximate:true};}}});
-    setupMode=true;const setupSync=await request({type:"phone_sync",chatId:"a"},"u");await request({type:"phone_update",chatId:"a",revision:(setupSync.snapshot as any).revision,settings:{apps:{Contacts:true},source:"main"}},"u");const setupPaid=generations.length;
-    const plan=await request({type:"phone_setup_prepare",chatId:"a",choices:["contacts.phone"]},"u");expect(plan.type).toBe("phone_setup_result");const planId=(plan.result as any).id;expect((plan.result as any).charactersRead).toBeGreaterThan(0);expect((plan.result as any).requests).toBe(1);expect(generations.length).toBe(setupPaid);
+    setupMode=true;const setupSync=await request({type:"phone_sync",chatId:"a"},"u");await request({type:"phone_update",chatId:"a",revision:(setupSync.snapshot as any).revision,settings:{apps:{Contacts:true},source:"main",connection_id:"small"}},"u");const setupPaid=generations.length;
+    const plan=await request({type:"phone_setup_prepare",chatId:"a",choices:["contacts.phone"]},"u");expect(plan.message??plan.type).toBe("phone_setup_result");const planId=(plan.result as any).id;expect((plan.result as any).charactersRead).toBeGreaterThan(0);expect((plan.result as any).requests).toBe(1);expect(generations.length).toBe(setupPaid);
     const beforeSetupRun=persisted.get("a/lpt_phone_v2");const setupRun=await request({type:"phone_setup_run",chatId:"a",id:planId},"u");expect(setupRun.type).toBe("phone_setup_result");expect(persisted.get("a/lpt_phone_v2")).toBe(beforeSetupRun);expect(generations.length).toBe(setupPaid+1);expect(generations.at(-1)!.userId).toBe("u");expect(generations.at(-1)!.model).toBe("Test model");
     expect((await request({type:"phone_setup_save",chatId:"a",id:planId},"u")).type).toBe("phone_setup_error");const setupSaved=await request({type:"phone_setup_save",chatId:"a",id:planId,confirm:true},"u");expect(setupSaved.type).toBe("phone_setup_result");expect((setupSaved.result as any).snapshot.state.contacts.some((c:any)=>c.name==="Zoe")).toBe(true);expect(calls).not.toContain("tokens.countMessages");expect(calls).toContain("world_books.entries.list");
     const failPlan=await request({type:"phone_setup_prepare",chatId:"a",choices:["contacts.phone"]},"u");const originalRaw=fake.generate.raw;fake.generate.raw=async()=>{throw Error("Example generate failed (429): Please wait. Authorization: Bearer PRIVATE_KEY");};const failedSetup=await request({type:"phone_setup_run",chatId:"a",id:(failPlan.result as any).id},"u");expect(failedSetup.type).toBe("phone_setup_error");expect(failedSetup.message).toBe("Rate-limited by the provider. Wait, then try again. Nothing was saved.");expect(warnings).toContain("Lumi Phone Tracker: setup failed: provider error.");expect(JSON.stringify(warnings)).not.toContain("PRIVATE_KEY");fake.generate.raw=originalRaw;

@@ -17,10 +17,10 @@ export function insertEmoji(value:string,start:number,end:number,name:string,max
  if(!Object.hasOwn(EMOJI_IMAGES,name)||!Number.isInteger(start)||!Number.isInteger(end)||start<0||end<start||end>value.length)return null;
  const code=`:${name}:`,next=value.slice(0,start)+code+value.slice(end);return next.length>max?null:{value:next,caret:start+code.length};
 }
-/** Ordinary nonmodal picker. No host API and no send operation. */
-export function attachEmojiPicker(form:HTMLFormElement,input:HTMLTextAreaElement,status:HTMLElement,valid:()=>boolean):HTMLButtonElement {
+/** Ordinary nonmodal picker. ID helper is supplied by the caller; no send operation. */
+export function attachEmojiPicker(form:HTMLFormElement,input:HTMLTextAreaElement,status:HTMLElement,valid:()=>boolean,nextUiId:()=>string):HTMLButtonElement {
  const toggle=document.createElement("button");toggle.type="button";toggle.className="lpt-emoji-toggle";toggle.setAttribute("aria-label","Choose emoji");toggle.setAttribute("aria-expanded","false");toggle.title="Choose emoji";toggle.append(emojiImage("smile"));
- const picker=document.createElement("section");picker.className="lpt-emoji-picker";picker.id=`lpt-emoji-${crypto.randomUUID()}`;picker.hidden=true;picker.setAttribute("role","dialog");picker.setAttribute("aria-label","Emoji picker");toggle.setAttribute("aria-controls",picker.id);toggle.setAttribute("aria-haspopup","dialog");
+ const picker=document.createElement("section");picker.className="lpt-emoji-picker";picker.id=`lpt-emoji-${nextUiId()}`;picker.hidden=true;picker.setAttribute("role","dialog");picker.setAttribute("aria-label","Emoji picker");toggle.setAttribute("aria-controls",picker.id);toggle.setAttribute("aria-haspopup","dialog");
  const header=document.createElement("div");header.className="lpt-emoji-header";const title=document.createElement("strong");title.className="lpt-emoji-title";title.textContent="Emoji";const close=document.createElement("button");close.type="button";close.className="lpt-emoji-close";close.textContent="Close";close.setAttribute("aria-label","Close emoji picker");const tooltip=document.createElement("span");tooltip.className="lpt-emoji-tooltip";tooltip.id=`${picker.id}-name`;tooltip.setAttribute("role","tooltip");header.append(title,tooltip,close);
  const grid=document.createElement("div");grid.className="lpt-emoji-grid";const buttons:HTMLButtonElement[]=[];
  const hide=(focus=false)=>{picker.hidden=true;toggle.setAttribute("aria-expanded","false");if(focus&&valid())input.focus({preventScroll:true});};

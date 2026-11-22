@@ -3,7 +3,7 @@ export type PhoneSnapshot=Pick<Document,"schema"|"trackingEnabled"|"chatId"|"rev
 export function phoneSnapshot(doc:Document):PhoneSnapshot {
  const {schema,trackingEnabled,chatId,revision,settings,state,playerNames,currentPlayer,fieldLocks,contactInfo,portraits}=doc;
  const contactRenames=doc.edits.filter(e=>e.target==="contact"&&e.rename).map(({target,name,rename})=>({target,name,rename}));
- return {contactRenames,schema,trackingEnabled,chatId,revision,settings,state,playerNames,currentPlayer,fieldLocks,contactInfo,portraits};
+ return {contactRenames,schema,trackingEnabled,chatId,revision,settings:{...settings,source:"main"},state,playerNames,currentPlayer,fieldLocks,contactInfo,portraits};
 }
 
 /** Trim transport only; stored personal receipts are never deleted. */

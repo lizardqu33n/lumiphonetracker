@@ -35,7 +35,6 @@ export class Sidebar {
     private fileEpoch={css:0,sidebarCss:0};
     private alive=true;
     private info: ConnectionsInfo = { available: false, choices: [], note: "Loading connections..." };
-    private helperChoice = false;
     private settingsKey="";
     private connectionsRequested=false;
     private connectionsPending=false;
@@ -45,17 +44,14 @@ export class Sidebar {
     receive(doc: Document | null, name: string): void {
         const key=JSON.stringify([doc?.chatId,doc?.trackingEnabled,doc?.settings,name]);const unchanged=key===this.settingsKey;this.settingsKey=key;
         const changed = doc?.chatId !== this.doc?.chatId;
-        if (this.doc?.settings.source === "helper" && doc?.settings.source === "main")
-            this.helperChoice = false;
         this.doc = doc;
         this.personal.receive(doc);this.setup.receive(doc);
         this.name = name;
         if (changed || doc?.trackingEnabled!==false && this.info.note==="Tracking is off.") {
             this.epoch++;this.connectionsRequested=false;this.connectionsPending=false;
             this.saving = false;
-            this.helperChoice = false;
             this.info = { available: false, choices: [], note: doc?.trackingEnabled===false?"Tracking is off.":"Loading connections..." };
-            if (doc && doc.trackingEnabled!==false && (doc.settings.source==="helper"||this.open.has("source")))
+            if (doc && doc.trackingEnabled!==false && this.open.has("setup"))
                 void this.connections();
         }
         if(!unchanged)this.render();
@@ -83,7 +79,7 @@ export class Sidebar {
     catch {
         if (epoch !== this.epoch)
             return;
-        this.info = { available: false, choices: [], note: "Connections unavailable. Main AI still works." };
+        this.info = { available: false, choices: [], note: "Connections unavailable. Normal tracking still works." };
     } this.connectionsPending=false;this.render(); }
     private async save(settings: unknown): Promise<void> { if (!this.doc || this.saving)
         return; const epoch = this.epoch, revision = this.doc.revision; this.saving = true; this.render(); try {
@@ -92,7 +88,6 @@ export class Sidebar {
             return;
         this.doc = doc;
         if (doc.settings.source === "main")
-            this.helperChoice = false;
         this.status.textContent = "Saved.";
     }
     catch {
@@ -114,7 +109,7 @@ export class Sidebar {
         const summary=node("summary","lpt-side-summary");
         const icon=node("img","lpt-side-icon");icon.src=key==="setup"?CONTACT_ICONS.wizard:key==="presets"?CONTACT_ICONS.profile:UI_ICONS[({apps:"apps",tracking:"track",source:"helper",appearance:"look",advanced:"advanced"} as Record<string,UIIconName>)[key]??"advanced"];icon.alt="";icon.setAttribute("aria-hidden","true");icon.draggable=false;
         summary.append(icon,node("span","lpt-side-heading",title),node("small","lpt-side-scope",scope));details.append(summary);
-        details.addEventListener("toggle",()=>{if(!details.isConnected)return;if(details.open){if(key==="source")void this.connections();this.open.clear();this.open.add(key);for(const other of Array.from(this.root.querySelectorAll<HTMLDetailsElement>(".lpt-side-section")))if(other!==details)other.open=false;}else this.open.delete(key);});
+        details.addEventListener("toggle",()=>{if(!details.isConnected)return;if(details.open){if(key==="setup")void this.connections();this.open.clear();this.open.add(key);for(const other of Array.from(this.root.querySelectorAll<HTMLDetailsElement>(".lpt-side-section")))if(other!==details)other.open=false;}else this.open.delete(key);});
         this.root.append(details);
         return details;
     }
@@ -205,48 +200,8 @@ export class Sidebar {
                 track.append(group);
             }
         }
-        const source = this.section("source", "Connections", "This chat");
-        if (this.doc) {
-            const label = node("label", "lpt-side-label", "Who updates the tracker");
-            const select = node("select", "lpt-helper-source");
-            for (const [value, title] of [["main", "Main AI"], ["helper", "Custom connection"]]) {
-                const o = node("option", "", title);
-                o.value = value;
-                select.append(o);
-            }
-            select.value = this.doc.settings.source === "helper" || this.helperChoice ? "helper" : "main";
-            select.disabled = this.saving;
-            select.addEventListener("change", () => {
-                if(origin!==this.epoch||!select.isConnected)return; this.helperChoice = select.value === "helper"; if(this.helperChoice)void this.connections(); if (!this.helperChoice)
-                void this.save({ source: "main" });
-            else if (this.doc!.settings.connection_id && this.info.available)
-                void this.save({ source: "helper" });
-            else
-                this.render(); });
-            label.append(select);
-            source.append(label);
-            if (select.value === "helper") {
-                const label = node("label", "lpt-side-label", "Connection");
-                const connection = node("select", "lpt-helper-connection");
-                const empty = node("option", "", "Choose a connection");
-                empty.value = "";
-                connection.append(empty);
-                for (const c of this.info.choices) {
-                    const o = node("option", "", c.label);
-                    o.value = c.id;
-                    connection.append(o);
-                }
-                connection.value = this.doc.settings.connection_id ?? "";
-                connection.disabled = !this.info.available || this.saving;
-                connection.addEventListener("change", () => { if (origin===this.epoch&&connection.isConnected&&connection.value)
-                    void this.save({ source: "helper", connection_id: connection.value }); });
-                label.append(connection);
-                source.append(label, node("p", "lpt-side-help", this.info.note));
-                this.number(source, "helperMessages", "Messages to read", "Only recent messages and the compact tracker are sent.", 1, 10);
-                source.append(node("p", "lpt-side-help", "Requests may cost money depending on the model chosen."));
-            }
-        }
         const setup=this.section("setup","Setup wizard","This chat");
+        if(this.doc){const label=node("label","lpt-side-label","Setup connection"),select=node("select","lpt-helper-connection lpt-setup-connection");select.setAttribute("aria-label","Setup connection");const empty=node("option","","Choose a connection");empty.value="";select.append(empty);for(const c of this.info.choices){const option=node("option","",c.label);option.value=c.id;select.append(option);}select.value=this.doc.settings.connection_id??"";select.disabled=!this.info.available||this.saving;select.addEventListener("change",()=>{if(origin===this.epoch&&select.isConnected&&select.value)void this.save({connection_id:select.value});});label.append(select);setup.append(label,node("p","lpt-side-help",this.info.available&&this.doc.settings.connection_id&&!this.info.choices.some(c=>c.id===this.doc!.settings.connection_id)?"Connection not found. Choose a saved connection.":this.info.note||"Used only when you run the setup wizard."));}
         if(this.doc){this.toggle(setup,"fakeAddresses","Make up phone/email (fake)","Made-up phone numbers and emails are fake. Don't assume they belong to the character or to any real person.",this.doc.settings.fakeAddresses,on=>({fakeAddresses:on}));
           if(this.doc.settings.fakeAddresses){const label=node("label","lpt-side-label lpt-fake-domain-label","Made-up email domain"),domain=node("input","lpt-input lpt-fake-domain");domain.type="text";domain.maxLength=150;domain.value=this.doc.settings.fakeDomain;domain.disabled=this.saving;domain.setAttribute("aria-label","Made-up email domain");domain.addEventListener("change",()=>{if(origin===this.epoch&&domain.isConnected)void this.save({fakeDomain:domain.value.trim()});});label.append(domain);setup.append(label);}
         }setup.append(this.setup.root);

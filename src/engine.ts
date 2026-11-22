@@ -48,8 +48,8 @@ function legacyPatch(content: string): Patch | null {
   return patch;
 }
 
-export function replay(document: Document, rows: StoryRow[], playerNames: string[], report?: (row: StoryRow, issues: ParseIssue[]) => void): Document {
-  const next:Document = structuredClone({...document,state:emptyState(),accepted:[]});
+export function replay(document: Document, rows: StoryRow[], playerNames: string[], report?: (row: StoryRow, issues: ParseIssue[]) => void, incremental?:{lastUser?:StoryRow}): Document {
+  const next:Document = structuredClone(incremental?document:{...document,state:emptyState(),accepted:[]});
   const state = next.state; state.notices = [...document.notices];
   const players = new Set(playerNames.map(normalize).filter(Boolean));
   // A saved user message is authoritative evidence of that row's author name.
@@ -57,12 +57,12 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
   for(const player of [...players])players.add(normalize(canonicalContact(document,player)));
   // A user's display-name correction must not remove player-field restrictions.
   for (const edit of document.edits) if (edit.target === "contact" && edit.rename && players.has(normalize(edit.name ?? ""))) players.add(normalize(edit.rename));
-  const previous = new Map(document.accepted.map(e => [JSON.stringify([e.at.id, e.at.variant]), e]));
+  const previous = new Map((incremental?[]:document.accepted).map(e => [JSON.stringify([e.at.id, e.at.variant]), e]));
   const knownNotes = new Set(SECTIONS.flatMap(s => document.state.notes[s].map(n => `${s}/${normalize(n.name)}`)));
   const tombstones = new Set<string>();
   let oldNotes: string[] = [];
   let oldDetails = "";
-  const legacyEntries = document.legacy ? readSnapshot(document.legacy, document.chatId).entries : [];
+  const legacyEntries = !incremental&&document.legacy ? readSnapshot(document.legacy, document.chatId).entries : [];
   const sorted = [...rows].sort((a, b) => a.index_in_chat - b.index_in_chat);
   const ids = new Set<string>(); const indexes = new Set<number>();
   const rowsById=new Map(sorted.map(row=>[row.id,row]));
@@ -74,7 +74,7 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
     return signature===source.signature;
   };
   const helpersByMessage=new Map<string,Document["helperEntries"]>();
-  for(const entry of document.helperEntries??[]){
+  for(const entry of incremental?[]:document.helperEntries??[]){
     const group=helpersByMessage.get(entry.at.id)??[];group.push(entry);helpersByMessage.set(entry.at.id,group);
   }
 
@@ -86,22 +86,22 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
   }
   for(const m of Object.values(next.contactMerges??{})){const anchor=rowsById.get(m.after??"");m.index=anchor?.index_in_chat??Math.min(m.index,sorted.at(-1)?.index_in_chat??-1);}
   const displayPlayers = new Map<string, string>();
-  for (const name of [...playerNames, ...rows.filter(r => r.role === "user").map(r => r.name ?? "")]) {
+  for (const name of [...(incremental?document.playerNames:[]),...playerNames, ...rows.filter(r => r.role === "user").map(r => r.name ?? "")]) {
     if (name.trim()) displayPlayers.set(normalize(name), name.trim());
   }
   next.playerNames = [...displayPlayers.values()];
-  for (const [key, name] of displayPlayers) if (players.has(key) && state.contacts.length < 30) state.contacts.push({ name, player: true, fields: {} });
+  for (const [key, name] of displayPlayers) if (players.has(key) && state.contacts.length < 30 && !state.contacts.some(c=>normalize(c.name)===key)) state.contacts.push({ name, player: true, fields: {} });
   // Migrate old ordinal/swipe IDs once, from the validated saved source journal.
   const callAliases=new Map<string,string>();
-  for(const entry of document.accepted)for(const [i,c]of (entry.patch.calls??[]).entries())callAliases.set(JSON.stringify([entry.at.id,entry.at.variant,"calls",i]),callId(entry.at.id,c));
-  for(const entry of document.helperEntries??[])for(const [i,c]of (validateExpanded(entry.values).calls??[]).entries())callAliases.set(JSON.stringify([entry.at.id,entry.at.variant,"calls",i]),callId(c.source??entry.at.id,c));
+  for(const entry of incremental?[]:document.accepted)for(const [i,c]of (entry.patch.calls??[]).entries())callAliases.set(JSON.stringify([entry.at.id,entry.at.variant,"calls",i]),callId(entry.at.id,c));
+  for(const entry of incremental?[]:document.helperEntries??[])for(const [i,c]of (validateExpanded(entry.values).calls??[]).entries())callAliases.set(JSON.stringify([entry.at.id,entry.at.variant,"calls",i]),callId(c.source??entry.at.id,c));
   for(const edit of next.edits)if(edit.target==="call"&&edit.name)edit.name=callAliases.get(edit.name)??edit.name;
   const callCandidates=new Set<string>();
   for(const row of sorted){const parsed=parseExpandedReply(row.content);parsedRows.set(row.id,parsed);const prior=previous.get(JSON.stringify([row.id,JSON.stringify([row.swipe_id,row.swipe_dates?.[row.swipe_id]??null])]));for(const c of (parsed.patch?.calls??(parsed.patch===null?prior?.patch.calls:[])??[]))callCandidates.add(callId(row.id,c));}
-  for(const entry of document.helperEntries??[])if(entry.sources.every(sourceMatches))for(const c of validateExpanded(entry.values).calls??[])if(!c.source||helperCallSource(c,sorted))callCandidates.add(callId(c.source??entry.at.id,c));
+  for(const entry of incremental?[]:document.helperEntries??[])if(entry.sources.every(sourceMatches))for(const c of validateExpanded(entry.values).calls??[])if(!c.source||helperCallSource(c,sorted))callCandidates.add(callId(c.source??entry.at.id,c));
   for(const edit of next.edits)if(edit.target==="call"&&!edit.name&&!edit.remove)callCandidates.add(edit.id);
   const deletedCalls=new Set(next.edits.filter(e=>e.target==="call"&&e.remove).map(e=>e.name??e.id));
-  const reservedCalls=new Set((document.callAdmissions??document.state.calls.map(c=>c.id)).map(id=>callAliases.get(id)??id).filter(id=>callCandidates.has(id)&&!deletedCalls.has(id)));
+  const reservedCalls=new Set((document.callAdmissions??document.state.calls.map(c=>c.id)).map(id=>callAliases.get(id)??id).filter(id=>(!!incremental||callCandidates.has(id))&&!deletedCalls.has(id)));
   const editsByIndex = new Map<number, ManualEdit[]>();
   for (const edit of next.edits) {
     const anchor = rowsById.get(edit.after??"");
@@ -109,6 +109,7 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
     editsByIndex.set(index, [...editsByIndex.get(index) ?? [], edit]);
   }
   const manualAt = (index: number) => {
+    if(incremental)return;
     for (const edit of editsByIndex.get(index) ?? []) {
       // A changed/deleted source cannot resurrect its old edited call as a manual add.
       if(edit.target==="call"&&edit.name&&!state.calls.some(c=>c.id===edit.name))continue;
@@ -122,7 +123,7 @@ export function replay(document: Document, rows: StoryRow[], playerNames: string
     }
   };
   manualAt(-1);projectMerges(next,-1);
-  let previousUser:StoryRow|undefined;
+  let previousUser:StoryRow|undefined=incremental?.lastUser;
   for (const row of sorted) {
     const lastUser=previousUser;
     if(row.role==="user")previousUser=row;

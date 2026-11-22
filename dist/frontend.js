@@ -1,3 +1,13 @@
+// src/ui-id.ts
+var fallbackSession = 0;
+function createUiIds(ctx) {
+  if ((ctx.host?.capabilities?.["frontend-uuid-v1"] ?? 0) >= 1 && typeof ctx.uuid?.v4 === "function")
+    return () => ctx.uuid.v4();
+  const prefix = "lpt-" + Date.now().toString(36) + "-" + (++fallbackSession).toString(36);
+  let sequence = 0;
+  return () => prefix + "-" + (++sequence).toString(36);
+}
+
 // src/fonts.css
 var fonts_default = `/* Official Google Fonts, bundled under their included SIL OFL licenses. */
 @font-face {
@@ -1047,7 +1057,7 @@ function insertEmoji(value, start, end, name, max = 3000) {
   const code = `:${name}:`, next = value.slice(0, start) + code + value.slice(end);
   return next.length > max ? null : { value: next, caret: start + code.length };
 }
-function attachEmojiPicker(form, input, status, valid) {
+function attachEmojiPicker(form, input, status, valid, nextUiId) {
   const toggle = document.createElement("button");
   toggle.type = "button";
   toggle.className = "lpt-emoji-toggle";
@@ -1057,7 +1067,7 @@ function attachEmojiPicker(form, input, status, valid) {
   toggle.append(emojiImage("smile"));
   const picker = document.createElement("section");
   picker.className = "lpt-emoji-picker";
-  picker.id = `lpt-emoji-${crypto.randomUUID()}`;
+  picker.id = `lpt-emoji-${nextUiId()}`;
   picker.hidden = true;
   picker.setAttribute("role", "dialog");
   picker.setAttribute("aria-label", "Emoji picker");
@@ -2905,7 +2915,7 @@ class PhoneView {
       fallback.value = this.manualDrafts.get(thread.key) ?? "";
       fallback.hidden = !fallback.value;
       form.append(label, add, status, fallback);
-      const emoji = attachEmojiPicker(form, input, status, () => epoch === this.chatEpoch && this.doc?.chatId === chatId && form.isConnected);
+      const emoji = attachEmojiPicker(form, input, status, () => epoch === this.chatEpoch && this.doc?.chatId === chatId && form.isConnected, this.actions.uuid);
       form.insertBefore(emoji, add);
       form.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -5427,7 +5437,7 @@ class SetupView {
           fields.append(el2("small", "lpt-setup-hint", "Add this app in the App Store first."));
         this.root.append(fields);
       }
-      this.root.append(el2("p", "lpt-setup-source", this.doc.settings.source === "main" ? "Uses Main AI: your Lumiverse default connection." : "Uses your selected Custom connection."), el2("p", "lpt-setup-hint", "Reads the card, your persona and attached/global lorebooks. Scene is excluded. These import choices do not change tracking switches."));
+      this.root.append(el2("p", "lpt-setup-source", "Uses the saved connection selected above, only when you run setup."), el2("p", "lpt-setup-hint", "Reads the card, your persona and attached/global lorebooks. Scene is excluded. These import choices do not change tracking switches."));
       this.button(this.root, "Review input", () => void this.act("prepare")).disabled = this.busy || this.loadingChoices;
     } else if (!this.preview) {
       this.root.append(el2("p", "lpt-setup-cost", `${this.plan.charactersRead} source characters read. ${this.plan.messagesRead} request messages. Model requests: ${this.plan.requests}.`), el2("p", "lpt-setup-hint", "Nothing is saved until you confirm the preview."));
@@ -5777,21 +5787,7 @@ class PersonalControls {
     const summary = el3("summary", "lpt-side-css-summary", "Prompt wording · All my chats");
     this.wording.append(summary);
     this.wording.append(el3("p", "lpt-side-help", "Up to 10 custom wordings total. Copy Default to reword it. Keep [[phone_syntax]] for the protected format. App headings hide their wording when an app is removed. Safety checks stay on."));
-    const target = el3("select", "lpt-personal-select");
-    target.setAttribute("aria-label", "Wording for");
-    for (const [id, name] of [["main", "Main AI"], ["helper", "Custom connection"]]) {
-      const o = el3("option", "", name);
-      o.value = id;
-      target.append(o);
-    }
-    target.value = this.target;
-    target.addEventListener("change", () => {
-      this.target = target.value;
-      this.choose();
-      this.render();
-    });
-    target.disabled = this.pending;
-    this.wording.append(target);
+    this.target = "main";
     const choice = el3("select", "lpt-personal-select");
     choice.setAttribute("aria-label", "Prompt wording");
     for (const w of [{ id: "default", name: "Default" }, ...this.p.wordings[this.target]]) {
@@ -5841,7 +5837,7 @@ class PersonalControls {
     this.button(buttons, "Delete wording", () => void this.run({ kind: "wording_delete", target: this.target, id: this.choice }), this.copy || this.choice === "default");
     this.button(buttons, "Reset to default", () => void this.run({ kind: "wording_select", target: this.target, id: "default" }));
     this.button(buttons, "Preview", () => void this.run({ kind: "preview", target: this.target, ...this.copy || this.choice !== "default" ? { text: this.text } : {} }), !this.doc);
-    this.wording.append(el3("p", "lpt-side-help", this.target === "helper" ? "Preview shows the exact custom connection instructions. Its separate recent-story data is unchanged." : "Preview shows the exact phone_format output for this chat. Save edits to use them."));
+    this.wording.append(el3("p", "lpt-side-help", "Preview shows the exact phone_format output for this chat. Save edits to use them."));
     this.wording.append(el3("p", "lpt-wording-count", this.count));
     const pre = el3("pre", "lpt-wording-preview", this.preview);
     pre.hidden = !this.preview;
@@ -5873,7 +5869,6 @@ class Sidebar {
   fileEpoch = { css: 0, sidebarCss: 0 };
   alive = true;
   info = { available: false, choices: [], note: "Loading connections..." };
-  helperChoice = false;
   settingsKey = "";
   connectionsRequested = false;
   connectionsPending = false;
@@ -5892,8 +5887,6 @@ class Sidebar {
     const unchanged = key === this.settingsKey;
     this.settingsKey = key;
     const changed = doc?.chatId !== this.doc?.chatId;
-    if (this.doc?.settings.source === "helper" && doc?.settings.source === "main")
-      this.helperChoice = false;
     this.doc = doc;
     this.personal.receive(doc);
     this.setup.receive(doc);
@@ -5903,9 +5896,8 @@ class Sidebar {
       this.connectionsRequested = false;
       this.connectionsPending = false;
       this.saving = false;
-      this.helperChoice = false;
       this.info = { available: false, choices: [], note: doc?.trackingEnabled === false ? "Tracking is off." : "Loading connections..." };
-      if (doc && doc.trackingEnabled !== false && (doc.settings.source === "helper" || this.open.has("source")))
+      if (doc && doc.trackingEnabled !== false && this.open.has("setup"))
         this.connections();
     }
     if (!unchanged)
@@ -5996,7 +5988,7 @@ class Sidebar {
     } catch {
       if (epoch !== this.epoch)
         return;
-      this.info = { available: false, choices: [], note: "Connections unavailable. Main AI still works." };
+      this.info = { available: false, choices: [], note: "Connections unavailable. Normal tracking still works." };
     }
     this.connectionsPending = false;
     this.render();
@@ -6013,8 +6005,7 @@ class Sidebar {
         return;
       this.doc = doc;
       if (doc.settings.source === "main")
-        this.helperChoice = false;
-      this.status.textContent = "Saved.";
+        this.status.textContent = "Saved.";
     } catch {
       if (epoch === this.epoch)
         this.status.textContent = "Could not save. Check this chat and try again.";
@@ -6043,7 +6034,7 @@ class Sidebar {
       if (!details.isConnected)
         return;
       if (details.open) {
-        if (key === "source")
+        if (key === "setup")
           this.connections();
         this.open.clear();
         this.open.add(key);
@@ -6194,56 +6185,27 @@ class Sidebar {
         track.append(group);
       }
     }
-    const source = this.section("source", "Connections", "This chat");
+    const setup = this.section("setup", "Setup wizard", "This chat");
     if (this.doc) {
-      const label = node("label", "lpt-side-label", "Who updates the tracker");
-      const select = node("select", "lpt-helper-source");
-      for (const [value, title] of [["main", "Main AI"], ["helper", "Custom connection"]]) {
-        const o = node("option", "", title);
-        o.value = value;
-        select.append(o);
+      const label = node("label", "lpt-side-label", "Setup connection"), select = node("select", "lpt-helper-connection lpt-setup-connection");
+      select.setAttribute("aria-label", "Setup connection");
+      const empty = node("option", "", "Choose a connection");
+      empty.value = "";
+      select.append(empty);
+      for (const c of this.info.choices) {
+        const option = node("option", "", c.label);
+        option.value = c.id;
+        select.append(option);
       }
-      select.value = this.doc.settings.source === "helper" || this.helperChoice ? "helper" : "main";
-      select.disabled = this.saving;
+      select.value = this.doc.settings.connection_id ?? "";
+      select.disabled = !this.info.available || this.saving;
       select.addEventListener("change", () => {
-        if (origin !== this.epoch || !select.isConnected)
-          return;
-        this.helperChoice = select.value === "helper";
-        if (this.helperChoice)
-          this.connections();
-        if (!this.helperChoice)
-          this.save({ source: "main" });
-        else if (this.doc.settings.connection_id && this.info.available)
-          this.save({ source: "helper" });
-        else
-          this.render();
+        if (origin === this.epoch && select.isConnected && select.value)
+          this.save({ connection_id: select.value });
       });
       label.append(select);
-      source.append(label);
-      if (select.value === "helper") {
-        const label = node("label", "lpt-side-label", "Connection");
-        const connection = node("select", "lpt-helper-connection");
-        const empty = node("option", "", "Choose a connection");
-        empty.value = "";
-        connection.append(empty);
-        for (const c of this.info.choices) {
-          const o = node("option", "", c.label);
-          o.value = c.id;
-          connection.append(o);
-        }
-        connection.value = this.doc.settings.connection_id ?? "";
-        connection.disabled = !this.info.available || this.saving;
-        connection.addEventListener("change", () => {
-          if (origin === this.epoch && connection.isConnected && connection.value)
-            this.save({ source: "helper", connection_id: connection.value });
-        });
-        label.append(connection);
-        source.append(label, node("p", "lpt-side-help", this.info.note));
-        this.number(source, "helperMessages", "Messages to read", "Only recent messages and the compact tracker are sent.", 1, 10);
-        source.append(node("p", "lpt-side-help", "Requests may cost money depending on the model chosen."));
-      }
+      setup.append(label, node("p", "lpt-side-help", this.info.available && this.doc.settings.connection_id && !this.info.choices.some((c) => c.id === this.doc.settings.connection_id) ? "Connection not found. Choose a saved connection." : this.info.note || "Used only when you run the setup wizard."));
     }
-    const setup = this.section("setup", "Setup wizard", "This chat");
     if (this.doc) {
       this.toggle(setup, "fakeAddresses", "Make up phone/email (fake)", "Made-up phone numbers and emails are fake. Don't assume they belong to the character or to any real person.", this.doc.settings.fakeAddresses, (on) => ({ fakeAddresses: on }));
       if (this.doc.settings.fakeAddresses) {
@@ -6528,6 +6490,7 @@ function readRefreshResult(value) {
 
 // src/frontend.ts
 function setup(ctx) {
+  const nextUiId = createUiIds(ctx);
   const disposers = [];
   let disposed = false;
   let activeChat = null;
@@ -6556,7 +6519,7 @@ function setup(ctx) {
       return Promise.reject(Error("Open a chat first."));
     if (busy() && action !== "choices" && action !== "choices_save")
       return Promise.reject(Error("Wait for the current reply to finish."));
-    const chat = activeChat, requestId = crypto.randomUUID();
+    const chat = activeChat, requestId = nextUiId();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         setupRequests.delete(requestId);
@@ -6568,7 +6531,7 @@ function setup(ctx) {
   };
   const personalRequests = new Map;
   const personal = (change, revision) => {
-    const chatId = activeChat, requestId = crypto.randomUUID();
+    const chatId = activeChat, requestId = nextUiId();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         personalRequests.delete(requestId);
@@ -6584,7 +6547,7 @@ function setup(ctx) {
   const streaming = new Map;
   let backendBusy = false;
   const busy = () => backendBusy || !!(activeChat && streaming.get(activeChat)?.size);
-  const helperRequests = new Map;
+  const trackerRequests = new Map;
   let removeSidebarStyle = () => {};
   const applySidebarStyle = (text) => {
     const scoped = prepareSidebarCSS(text);
@@ -6602,7 +6565,7 @@ function setup(ctx) {
       syncQueued = true;
       return;
     }
-    pendingSync = crypto.randomUUID();
+    pendingSync = nextUiId();
     syncTimer = setTimeout(() => {
       pendingSync = "";
       syncQueued = false;
@@ -6639,11 +6602,11 @@ function setup(ctx) {
     if (disposed || !activeChat || !current || current.trackingEnabled === false || portraitChat === activeChat)
       return;
     portraitChat = activeChat;
-    portraitRequest = crypto.randomUUID();
+    portraitRequest = nextUiId();
     ctx.sendToBackend({ type: "phone_portraits", requestId: portraitRequest, chatId: activeChat });
   };
   const prefsChange = (change) => {
-    const requestId = crypto.randomUUID();
+    const requestId = nextUiId();
     if (change?.css !== undefined || change?.sidebarCss !== undefined) {
       appearanceEpoch++;
       preferences = { ...preferences, ...change.css !== undefined ? { css: change.css } : {}, ...change.sidebarCss !== undefined ? { sidebarCss: change.sidebarCss } : {} };
@@ -6660,7 +6623,7 @@ function setup(ctx) {
   const update = (change, revision) => {
     if (!activeChat || !current)
       return Promise.reject(new Error("Open a chat first."));
-    const requestId = crypto.randomUUID();
+    const requestId = nextUiId();
     const chatId = activeChat;
     const originEpoch = epoch;
     return new Promise((resolve, reject) => {
@@ -6675,7 +6638,7 @@ function setup(ctx) {
   const markRead = (chatId, key, observed) => {
     if (disposed || chatId !== activeChat)
       return Promise.reject(new Error("The chat changed."));
-    const requestId = crypto.randomUUID();
+    const requestId = nextUiId();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         readRequests.delete(requestId);
@@ -6685,18 +6648,18 @@ function setup(ctx) {
       ctx.sendToBackend({ type: "phone_mark_read", requestId, chatId, key, observed });
     });
   };
-  const requestHelper = (type) => {
+  const requestTracker = (type) => {
     if (!activeChat || disposed)
       return Promise.reject(new Error("Open a chat first."));
-    if (type === "phone_helper_now" && busy())
+    if (type === "phone_refresh" && busy())
       return Promise.reject(new HelperFailure("validation rejected"));
-    const chatId = activeChat, requestId = crypto.randomUUID();
+    const chatId = activeChat, requestId = nextUiId();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
-        helperRequests.delete(requestId);
+        trackerRequests.delete(requestId);
         reject(new HelperFailure("timeout"));
-      }, type === "phone_helper_now" ? 105000 : 15000);
-      helperRequests.set(requestId, { chatId, epoch, resolve, reject, timer });
+      }, 15000);
+      trackerRequests.set(requestId, { chatId, epoch, resolve, reject, timer });
       ctx.sendToBackend({ type, chatId, requestId });
     });
   };
@@ -6811,7 +6774,7 @@ function setup(ctx) {
     caption.textContent = short;
     const tooltip = document.createElement("span");
     tooltip.className = "lpt-toolbar-tooltip";
-    tooltip.id = `lpt-tip-${crypto.randomUUID()}`;
+    tooltip.id = `lpt-tip-${nextUiId()}`;
     tooltip.setAttribute("role", "tooltip");
     tooltip.textContent = label;
     button.setAttribute("aria-describedby", tooltip.id);
@@ -6823,7 +6786,7 @@ function setup(ctx) {
   decorate(resetButton, "reset", "Reset appearance", "Reset");
   const updateBusy = () => {
     refreshButton.disabled = !activeChat || !current || current.trackingEnabled === false || busy() || refreshPending;
-    refreshTooltip.textContent = current?.settings.source === "helper" ? "Refresh tracker. Requests may cost money depending on the model chosen." : "Refresh tracker. Main AI makes no model request.";
+    refreshTooltip.textContent = "Refresh tracker. Re-reads saved messages without a model request.";
   };
   refreshButton.addEventListener("click", () => {
     const origin = epoch;
@@ -6832,7 +6795,7 @@ function setup(ctx) {
     refreshStatus.textContent = "";
     showModelError("");
     updateBusy();
-    requestHelper("phone_helper_now").then((value) => {
+    requestTracker("phone_refresh").then((value) => {
       if (origin !== epoch)
         return;
       const result = readRefreshResult(value);
@@ -6864,7 +6827,7 @@ function setup(ctx) {
   scroll.append(help);
   panel.append(recoveryActions, results, scroll);
   tab.root.append(panel);
-  sidebar = new Sidebar(scroll, { setup, personal, update: async (settings, revision) => await update({ settings }, revision), connections: async () => await requestHelper("phone_connections"), css: (change) => prefsChange(change), applyCSS: (change) => {
+  sidebar = new Sidebar(scroll, { setup, personal, update: async (settings, revision) => await update({ settings }, revision), connections: async () => await requestTracker("phone_connections"), css: (change) => prefsChange(change), applyCSS: (change) => {
     if (change.sidebarCss !== undefined)
       applySidebarStyle(change.sidebarCss);
     if (change.css !== undefined)
@@ -6932,7 +6895,7 @@ function setup(ctx) {
       widget = ctx.ui.createFloatWidget({ width: 48, height: 48, initialPosition: { x: 24, y: 110 }, chromeless: true, tooltip: "Lumi Phone Tracker", snapToEdge: true });
       const transport = document.createElement("div");
       transport.className = "lpt-transport";
-      const placementId = crypto.randomUUID();
+      const placementId = nextUiId();
       transport.dataset.lptPlacement = placementId;
       const placementStyle = document.createElement("style");
       const viewport = document.createElement("div");
@@ -6949,6 +6912,7 @@ function setup(ctx) {
       widget.root.append(placementStyle, transport);
       view = new PhoneView(shadow, custom, {
         update,
+        uuid: nextUiId,
         portraits: requestPortraits,
         preferences: prefsChange,
         markRead,
@@ -7021,7 +6985,7 @@ function setup(ctx) {
         showModelError(typeof payload.message === "string" ? safeModelMessage(payload.message) : "");
       return;
     }
-    if (payload.type === "phone_helper_changed") {
+    if (payload.type === "phone_tracker_changed" || payload.type === "phone_helper_changed") {
       if (activeChat && payload.chatId === activeChat && current?.trackingEnabled !== false)
         sendSync();
       return;
@@ -7074,21 +7038,21 @@ function setup(ctx) {
       pr.resolve(result);
       return;
     }
-    const helperRequest = helperRequests.get(payload.requestId);
-    if (helperRequest) {
-      if (!["phone_connections_result", "phone_helper_now_result", "phone_helper_error"].includes(String(payload.type)))
+    const trackerRequest = trackerRequests.get(payload.requestId);
+    if (trackerRequest) {
+      if (!["phone_connections_result", "phone_refresh_result", "phone_helper_error"].includes(String(payload.type)))
         return;
-      clearTimeout(helperRequest.timer);
-      helperRequests.delete(payload.requestId);
-      if (helperRequest.epoch !== epoch || helperRequest.chatId !== activeChat || payload.chatId !== activeChat) {
-        helperRequest.reject(new Error("The chat changed."));
+      clearTimeout(trackerRequest.timer);
+      trackerRequests.delete(payload.requestId);
+      if (trackerRequest.epoch !== epoch || trackerRequest.chatId !== activeChat || payload.chatId !== activeChat) {
+        trackerRequest.reject(new Error("The chat changed."));
         return;
       }
       if (payload.type === "phone_helper_error") {
-        helperRequest.reject(new HelperFailure(readRefreshResult({ ok: false, category: payload.category }).category));
+        trackerRequest.reject(new HelperFailure(readRefreshResult({ ok: false, category: payload.category }).category));
         return;
       }
-      helperRequest.resolve(payload.type === "phone_helper_now_result" ? payload.result : payload.info);
+      trackerRequest.resolve(payload.type === "phone_refresh_result" ? payload.result : payload.info);
       return;
     }
     const readRequest = readRequests.get(payload.requestId);
@@ -7233,10 +7197,10 @@ function setup(ctx) {
       p.reject(new Error("The chat changed. Your original chat keeps its saved changes."));
       updates.delete(id);
     }
-    for (const [id, p] of helperRequests) {
+    for (const [id, p] of trackerRequests) {
       clearTimeout(p.timer);
       p.reject(new Error("The chat changed."));
-      helperRequests.delete(id);
+      trackerRequests.delete(id);
     }
     if (chatId)
       sendSync();
@@ -7325,14 +7289,14 @@ function setup(ctx) {
       clearTimeout(p.timer);
       p.reject(new Error("The phone closed."));
     }
-    for (const p of helperRequests.values()) {
+    for (const p of trackerRequests.values()) {
       clearTimeout(p.timer);
       p.reject(new Error("The phone closed."));
     }
     updates.clear();
     prefsRequests.clear();
     readRequests.clear();
-    helperRequests.clear();
+    trackerRequests.clear();
     disposers.forEach((fn) => fn());
   };
 }

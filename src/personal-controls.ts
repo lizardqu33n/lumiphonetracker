@@ -30,7 +30,7 @@ export class PersonalControls {
  this.presets.append(el("p","lpt-personal-status",this.error));
  const summary=el("summary","lpt-side-css-summary","Prompt wording · All my chats");this.wording.append(summary);
  this.wording.append(el("p","lpt-side-help","Up to 10 custom wordings total. Copy Default to reword it. Keep [[phone_syntax]] for the protected format. App headings hide their wording when an app is removed. Safety checks stay on."));
- const target=el("select","lpt-personal-select");target.setAttribute("aria-label","Wording for");for(const [id,name] of [["main","Main AI"],["helper","Custom connection"]]){const o=el("option","",name);o.value=id;target.append(o);}target.value=this.target;target.addEventListener("change",()=>{this.target=target.value as WordingTarget;this.choose();this.render();});target.disabled=this.pending;this.wording.append(target);
+ this.target="main";
  const choice=el("select","lpt-personal-select");choice.setAttribute("aria-label","Prompt wording");for(const w of [{id:"default",name:"Default"},...this.p.wordings[this.target]]){const o=el("option","",w.name);o.value=w.id;choice.append(o);}if(this.copy){const unsaved=el("option","","Unsaved copy");unsaved.value="new";unsaved.disabled=true;choice.append(unsaved);}choice.value=this.choice;choice.disabled=this.pending||!this.loaded;choice.addEventListener("change",()=>void this.run({kind:"wording_select",target:this.target,id:choice.value}));this.wording.append(choice);
  this.button(this.wording,"Copy Default",()=>{this.copy=true;this.choice="new";this.title="";this.text=this.templates[this.target];this.preview="";this.count="";this.render();},this.p.wordings.main.length+this.p.wordings.helper.length>=10);
  this.input(this.wording,"Wording name",this.title,v=>this.title=v).disabled=this.pending||(!this.copy&&this.choice==="default");
@@ -41,7 +41,7 @@ export class PersonalControls {
  this.button(buttons,"Delete wording",()=>void this.run({kind:"wording_delete",target:this.target,id:this.choice}),this.copy||this.choice==="default");
  this.button(buttons,"Reset to default",()=>void this.run({kind:"wording_select",target:this.target,id:"default"}));
  this.button(buttons,"Preview",()=>void this.run({kind:"preview",target:this.target,...(this.copy||this.choice!=="default"?{text:this.text}:{})}),!this.doc);
- this.wording.append(el("p","lpt-side-help",this.target==="helper"?"Preview shows the exact custom connection instructions. Its separate recent-story data is unchanged.":"Preview shows the exact phone_format output for this chat. Save edits to use them."));
+ this.wording.append(el("p","lpt-side-help","Preview shows the exact phone_format output for this chat. Save edits to use them."));
  this.wording.append(el("p","lpt-wording-count",this.count));const pre=el("pre","lpt-wording-preview",this.preview);pre.hidden=!this.preview;this.wording.append(pre,el("p","lpt-personal-status",this.error));
  }
 }

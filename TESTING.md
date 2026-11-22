@@ -1,3 +1,19 @@
+# 0.19.0 verification
+
+314 code tests and type checking passed. 48 focused browser checks passed, including the wizard-only connection picker, no automatic-source controls, no model call on selection/input review, one call on Run, preview without saving and explicit confirmation. Existing focused layout/draft/read/Reset regressions remain covered. Reproducible build and package checks passed. The old full browser suite contains retired Helper UI assertions and is not claimed as passing.
+
+The actual backend mock confirms no backend generation-event subscriptions or normal model requests, and a model dispatch only through the wizard. New append-path tests compare saved state with complete replay, including ordinary user edits, caps/data rules, text authorship, calls, bank, malformed blocks, duplicate events, source replacement, restart, persona/user projection and archived Helper facts. Historical Helper unit tests remain only for backward-compatibility algorithms; that runner is not imported into production bundles.
+
+Synthetic 1,000-message workload: one startup history read, then zero history reads for 20 new ordinary replies and 40 cached view/prompt reads. This is a host-call count, not proof that the real memory-pressure stall is fixed. Long journals still cost validation/copying/serialization. Full rebuild fallbacks remain for correctness.
+
+No real Lumiverse install, live connection, multi-user/mobile server or main-process heap was profiled. Details and source/API checks: docs/SIMPLE-WORKFLOW.md. The build is prepared for the authorized GitHub publication.
+
+Frontend IDs use the documented [ctx.uuid.v4() helper](https://docs.lumiverse.chat/frontend-api/uuid/) when frontend-uuid-v1 is advertised. The pinned older types omit that member, so a narrow documented interface is used. Older hosts fall back to local request/DOM identifiers only. Tests cover host-helper use, the built frontend having no direct crypto.randomUUID calls, and the phone/emoji picker running with that browser API blocked. No additional permission is needed. Actual host installation acceptance remains unverified.
+
+# 0.18.15 local candidate
+
+304 code tests, type checking, reproducible build/package checks and 40 focused browser checks passed. Nine new targeted tests and actual-backend assertions cover prompt-interceptor fast paths, exact trusted context, recent-text admission, cancellation/deadlines, a cooperative local budget, bounded outstanding work, late history and generation-safe errors. See docs/INTERCEPTOR-TIMEOUT.md for precise limits. No real-server RAM, live provider or recovery behavior was tested. This candidate has not been pushed.
+
 # 0.18.14 verification
 
 295 code tests, type checking, reproducible built-file checks, manifest validation and 40 focused browser checks passed. The installable package includes source, built files, tests and guides.

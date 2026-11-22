@@ -71,6 +71,11 @@ function* tagSpans(text: string,includeBody=true): Generator<TagSpan> {
   }
 }
 
+/** Existence check without collecting spans or copying tag bodies. */
+export function hasPhoneTag(text:string,name?:string,complete=false):boolean {
+ for(const span of tagSpans(text,false))if((name===undefined||span.name===name)&&(!complete||span.complete&&span.canonical))return true;
+ return false;
+}
 export function scanTags(text: string): TagSpan[] { return [...tagSpans(text)]; }
 
 /** Complete, canonical tags reach the frontend interceptor; broken ones never paint. */

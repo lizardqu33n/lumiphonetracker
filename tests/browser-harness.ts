@@ -66,25 +66,27 @@ const sendToBackend = (payload: unknown) => {
         setTimeout(() => reply({ type: "phone_preferences_result", requestId: id, preferences }), delay); return;
       }
       if (!chat) { reply({ type: "phone_snapshot", requestId: id, chatId: null }); return; }
-      if(payload.type==="phone_connections"){const info=await helper.connections(`owner-${chat}`,chat);reply({type:"phone_connections_result",requestId:id,chatId:chat,info});return;}
-      if(payload.type==="phone_helper_now"){const result=await helper.refresh(`owner-${chat}`,chat);reply({type:"phone_helper_now_result",requestId:id,chatId:chat,result});return;}
+      if(payload.type==="phone_connections"){await store.settingsPreview(`owner-${chat}`,chat);const info={available:granted.includes("generation"),choices:helperProfiles.map(c=>({id:c.id,label:[c.name,c.model].join(" - ")})),note:""};reply({type:"phone_connections_result",requestId:id,chatId:chat,info});return;}
+      if(payload.type==="phone_refresh"||payload.type==="phone_helper_now"){const doc=await store.sync(`owner-${chat}`,chat);const result={ok:doc.trackingEnabled!==false};reply({type:payload.type==="phone_refresh"?"phone_refresh_result":"phone_helper_now_result",requestId:id,chatId:chat,result});return;}
       if (payload.type === "phone_mark_read") {
         const snapshot = await store.sync(`owner-${chat}`,chat);
         const reads = await readStore.mark("user", chat, String(payload.key), payload.observed as { id: string; receipt: string }[], snapshot.state.messages,snapshot.state);
         reply({ type: "phone_reads_result", requestId: id, chatId: chat, reads }); return;
       }
-      let snapshot = payload.type === "phone_update" ? await store.update(`owner-${chat}`, chat, Number(payload.revision), { trackingEnabled:payload.trackingEnabled, edit: payload.edit, settings: payload.settings, dismissNotice: payload.dismissNotice,portrait:payload.portrait,contactInfo:payload.contactInfo,fieldControl:payload.fieldControl,mergeContacts:payload.mergeContacts }) : await store.sync(`owner-${chat}`, chat);
-      if(payload.type==="phone_update"){if(payload.trackingEnabled===true)snapshot=await store.sync(`owner-${chat}`,chat);helper.cancel(chat);if(snapshot.trackingEnabled!==false&&snapshot.settings.source==="helper"){await helper.connections(`owner-${chat}`,chat);snapshot=await store.sync(`owner-${chat}`,chat);}}
-      reply({ type: "phone_snapshot", requestId: id, chatId: chat, chatName:chat==="a"?"Lantern story":"Other story", snapshot:phoneSnapshot(snapshot), reads: await readStore.read("user",chat),helperBusy:helper.busy(chat) });
+      let snapshot = payload.type === "phone_update" ? await store.update(`owner-${chat}`, chat, Number(payload.revision), { trackingEnabled:payload.trackingEnabled, edit: payload.edit, settings: payload.settings, dismissNotice: payload.dismissNotice,portrait:payload.portrait,contactInfo:payload.contactInfo,fieldControl:payload.fieldControl,mergeContacts:payload.mergeContacts }) : await store.openView(chat,`owner-${chat}`);
+      if(payload.type==="phone_update"&&payload.trackingEnabled===true)snapshot=await store.sync(`owner-${chat}`,chat);
+      reply({ type: "phone_snapshot", requestId: id, chatId: chat, chatName:chat==="a"?"Lantern story":"Other story", snapshot:phoneSnapshot(snapshot), reads: await readStore.read("user",chat),helperBusy:false });
     } catch (e) { reply({ type: String(payload.type).startsWith("phone_setup_")?"phone_setup_error": payload.type === "phone_personal" ? "phone_personal_error" : payload.type === "phone_mark_read" ? "phone_reads_error" : "phone_error", requestId: id, chatId:chat, message: e instanceof Error ? e.message : "Failed" }); }
   };
   setTimeout(() => { void run(); }, payload.type === "phone_update"||(payload.type==="phone_personal"&&isRecord(payload.change)&&payload.change.kind==="preset_apply") ? updateDelay : payload.type==="phone_sync"?syncDelay:0);
 };
+let uuidCalls=0;
 const ctx = {
+  uuid:{v4:()=>"00000000-0000-4000-8000-"+(++uuidCalls).toString(16).padStart(12,"0")},
   components:{mountSwitch:(target:HTMLElement,options:{checked:boolean;disabled:boolean;ariaLabel:string;onChange:(v:boolean)=>void})=>{
     const input=document.createElement("input");input.type="checkbox";input.checked=options.checked;input.disabled=options.disabled;input.setAttribute("role","switch");input.setAttribute("aria-label",options.ariaLabel);input.addEventListener("change",()=>options.onChange(input.checked));target.append(input);return {destroy:()=>input.remove(),update:()=>{},getValue:()=>input.checked};
   }},
-  host: { capabilities: { "composer-v1": 1 } },
+  host: { capabilities: { "composer-v1": 1,"frontend-uuid-v1":1 } },
   composer: {
     getState: () => ({ ...composerState }),
     insertText: (text: string, options: { at: string }) => { if (!composerState.mounted || options.at !== "end") throw new Error("Wrong composer operation"); composerState.text += text; },
@@ -157,7 +159,7 @@ const api = {
   sendComposer() {
     const chat = activeChat!; const rows = histories.get(chat) ?? [];
     rows.push({ id:`${chat}-${rows.length}`, chat_id:chat, index_in_chat:rows.length, role:"user", name:"Player", swipe_id:0, content:composerState.text });
-    histories.set(chat,rows); composerState.text = ""; events.get("MESSAGE_SENT")?.forEach(fn => fn({ chatId:chat }));
+    histories.set(chat,rows);void store.receiveSaved(`owner-${chat}`,chat,rows.at(-1)!).then(()=>onBackend({type:"phone_tracker_changed",chatId:chat})); composerState.text = ""; events.get("MESSAGE_SENT")?.forEach(fn => fn({ chatId:chat }));
   },
   composer: () => ({ ...composerState, focusCount, sendCalls }),
   setComposer(state: Partial<typeof composerState>) { composerState = { ...composerState, ...state }; },
@@ -165,6 +167,7 @@ const api = {
   syncTestDelay(ms:number){syncDelay=ms;syncCount=0;},
   syncTestCount(){return syncCount;},
   backendCounts(){return Object.fromEntries(requestCounts);},
+  uuidCalls(){return uuidCalls;},
   generationListenerCounts(){return ["GENERATION_STARTED","GENERATION_ENDED","GENERATION_STOPPED"].map(name=>events.get(name)?.size??0);},
   generationEvent(name:string,id:string,error?:string){for(const fn of events.get(name)??[])fn({chatId:activeChat,generationId:id,error});},
   setupScenario(fact:string,output:string){setupFact=fact;setupOutput=output;},
@@ -185,7 +188,7 @@ const api = {
   failAppearanceSave(value: boolean) { failAppearanceSave = value; },
   failWidget(value: boolean) { failWidget = value; },
   setCSS(css: string) { prefs = { ...defaultPreferences(), css }; },
-  activityStory(content:string,role:"assistant"|"user"="assistant",name?:string){const chat=activeChat!,rows=histories.get(chat)??[];rows.push({id:`${chat}-${rows.length}`,chat_id:chat,index_in_chat:rows.length,role,swipe_id:0,content,...(name?{name}:{})});histories.set(chat,rows);events.get("MESSAGE_SENT")?.forEach(fn=>fn({chatId:chat}));},
+  activityStory(content:string,role:"assistant"|"user"="assistant",name?:string){const chat=activeChat!,rows=histories.get(chat)??[];rows.push({id:`${chat}-${rows.length}`,chat_id:chat,index_in_chat:rows.length,role,swipe_id:0,content,...(name?{name}:{})});histories.set(chat,rows);void store.receiveSaved(`owner-${chat}`,chat,rows.at(-1)!).then(()=>onBackend({type:"phone_tracker_changed",chatId:chat}));events.get("MESSAGE_SENT")?.forEach(fn=>fn({chatId:chat}));},
   portraitSources(value:unknown){portraitSources=value;},
   getDocument: (chat = "a") => JSON.parse(docs.get(chat) ?? "null"),
   emitTag(tag: string, streaming: boolean, user: boolean) { for (const item of tagHandlers) if ((item.options as { tagName: string }).tagName === tag) item.callback({ chatId: activeChat, messageId: `${activeChat}-0`, isUser: user, isStreaming: streaming }); },

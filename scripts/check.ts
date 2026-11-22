@@ -18,6 +18,8 @@ assert.equal(manifest.entry_frontend, "dist/frontend.js");
 for (const key of ["entry_backend", "entry_frontend"]) {
   assert.ok(await Bun.file(manifest[key]).exists(), `${manifest[key]} must exist`);
 }
+const frontendSource=await Bun.file(manifest.entry_frontend).text();
+assert.ok(!/\bcrypto\s*\.\s*randomUUID\s*\(/.test(frontendSource), "Frontend must not call the blocked direct ID API");
 const frontend = await import(`../${manifest.entry_frontend}`);
 assert.equal(typeof frontend.setup, "function", "Frontend must export setup(ctx)");
 console.log("Manifest, built entry files, and frontend export: passed.");

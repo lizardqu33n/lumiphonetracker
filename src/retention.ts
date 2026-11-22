@@ -1,10 +1,14 @@
 import type { LlmMessageDTO } from "lumiverse-spindle-types";
 import type { Document, Settings } from "./model";
 import { normalize } from "./model";
-import { decodeEntities, parseAttributes, scanTags } from "./tags";
+import { decodeEntities, parseAttributes, scanTags, hasPhoneTag } from "./tags";
 
-/** Only admitted, authored texts may remain in the recent prompt window. */
-export function trimPhoneHistory(messages: LlmMessageDTO[], settings: Settings, document?: Document): LlmMessageDTO[] {
+/** Join only contiguous text parts, matching the retention transform exactly. */
+function* textSegments(message:LlmMessageDTO):Generator<string>{
+ if(typeof message.content==="string"){yield message.content;return;}
+ let text="";for(const part of message.content){if(part.type==="text")text+=part.text;else if(text){yield text;text="";}}if(text)yield text;
+}
+function retentionWindow(messages:LlmMessageDTO[]){
   const history = messages.map((m, i) => ({ m, i })).filter(x => x.m.__isChatHistory === true);
   const indexed = history.every(x => Number.isInteger(x.m.sourceIndexInChat));
   let last=-1;for(const {m,i}of history)last=Math.max(last,m.sourceIndexInChat??i);
@@ -12,15 +16,29 @@ export function trimPhoneHistory(messages: LlmMessageDTO[], settings: Settings, 
   for (const { m, i } of history) { const id = m.sourceMessageId ?? `part:${i}`; if (!unique.has(id)) unique.set(id,unique.size); }
   const recent = (m: LlmMessageDTO, index: number, n: number) => n > 0 && (indexed ? (m.sourceIndexInChat ?? -1) > last - n :
     (unique.get(m.sourceMessageId ?? `part:${index}`)??-1) >= unique.size - n);
+  return recent;
+}
+export function promptHasPhoneTags(messages:LlmMessageDTO[]):boolean {
+ for(const message of messages)if(message.__isChatHistory)for(const text of textSegments(message))if(hasPhoneTag(text))return true;
+ return false;
+}
+export function promptNeedsTextAdmission(messages:LlmMessageDTO[],settings:Settings):boolean {
+ if(!settings.apps.Messages||!settings.enabled.messages)return false;
+ const recent=retentionWindow(messages);
+ return messages.some((message,index)=>message.__isChatHistory&&recent(message,index,settings.keepTexts)&&[...textSegments(message)].some(text=>hasPhoneTag(text,"phone-text",true)));
+}
+/** Only admitted, authored texts may remain in the recent prompt window. */
+export function trimPhoneHistory(messages: LlmMessageDTO[], settings: Settings, document?: Document,check:()=>void=()=>{}): LlmMessageDTO[] {
+  check();const recent=retentionWindow(messages);
   const admittedTexts=new Set<string>();
   const textKey=(source:string,from:string,body:string,to:string)=>JSON.stringify([source,normalize(from),body,to]);
   for(const t of document?.state.messages??[]){admittedTexts.add(textKey("id:"+t.at.id,t.from,t.text,t.to??""));admittedTexts.add(textKey("index:"+t.at.index,t.from,t.text,t.to??""));}
   return messages.map((message, index) => {
-    if (!message.__isChatHistory) return message;
+    check();if (!message.__isChatHistory) return message;
     const transform = (text: string) => {
       let out = ""; let offset = 0;
       for (const span of scanTags(text)) {
-        out += text.slice(offset, span.start);
+        check();out += text.slice(offset, span.start);
         let keep = span.complete && span.canonical;
         if (span.name === "phone-state") keep = keep && recent(message, index, settings.keepTrackers);
         else if (span.name === "phone-text") {

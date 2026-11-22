@@ -1,5 +1,17 @@
 # Style your phone
 
+## 0.19.0 sidebar change
+
+The separate Connections/Tracker source section is removed. Setup wizard owns the connection picker. Existing phone styling, classes and opaque surfaces are unchanged.
+
+| Class | Meaning |
+| --- | --- |
+| `lpt-setup-connection` | Saved-connection picker used only for the setup wizard. |
+| `lpt-side-setup` | Existing setup accordion; now includes that picker. |
+
+`lpt-side-source` and the automatic-source selector no longer render. Historical class/section descriptions below may refer to earlier releases. No new theme variables or inline styles were added.
+
+
 ## Per-chat activation
 
 | Class | Purpose |

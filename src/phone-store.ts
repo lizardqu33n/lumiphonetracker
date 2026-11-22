@@ -32,6 +32,7 @@ export function readDocument(raw: string, chatId: string): Document {
   if (!isRecord(value) || value.schema !== 2 || value.chatId !== chatId || !Number.isSafeInteger(value.revision) ||
     !Array.isArray(value.accepted) || !Array.isArray(value.edits)) throw new Error("Invalid saved data");
   const doc = emptyDocument(chatId); doc.revision = value.revision as number;
+  if(value.checkpoint!==undefined){const c=value.checkpoint;if(!isRecord(c)||c.version!==1||typeof c.id!=="string"||!Number.isInteger(c.index)||typeof c.signature!=="string")throw Error("Invalid checkpoint");if(c.lastUser!==undefined){const u=c.lastUser;if(!isRecord(u)||u.chat_id!==chatId||u.role!=="user"||typeof u.id!=="string"||typeof u.content!=="string"||!Number.isInteger(u.index_in_chat)||Number(u.index_in_chat)>Number(c.index)||!Number.isInteger(u.swipe_id))throw Error("Invalid checkpoint source");}doc.checkpoint=c as unknown as Document["checkpoint"];}
   if(value.trackingEnabled!==undefined){if(typeof value.trackingEnabled!=="boolean")throw Error("Invalid tracking state");doc.trackingEnabled=value.trackingEnabled;}
   if (value.rejected !== undefined && (!Array.isArray(value.rejected) || value.rejected.some(x => typeof x !== "string"))) throw new Error("Invalid rejection data");
   if(value.contactInfo!==undefined){if(!isRecord(value.contactInfo))throw Error("Invalid contact details");doc.contactInfo=Object.create(null);for(const [key,raw]of Object.entries(value.contactInfo)){if(!isRecord(raw)||typeof raw.name!=="string"||normalize(raw.name)!==key)throw Error("Invalid contact details");doc.contactInfo![key]=readContactInfo(raw,raw.name);}}
@@ -107,6 +108,9 @@ export function validateEdit(value: unknown): ManualEdit {
   return structuredClone(edit);
 }
 export class PhoneStore {
+  private ready=new Set<string>();
+  private markReady(chat:string):void{this.ready.delete(chat);this.ready.add(chat);while(this.ready.size>128)this.ready.delete(this.ready.values().next().value!);}
+  async openView(chat:string,user:string):Promise<Document>{if(this.ready.has(chat)){const doc=await this.savedView(chat,user);if(this.ready.has(chat))return doc;}return this.sync(user,chat);}
   private queues = new Map<string, Promise<unknown>>();
   private pendingReads=new Map<string,{task:Promise<Document>;started:boolean;persist:boolean}>();
   private readOperation(kind:"sync"|"preview",userId:string,chatId:string):Promise<Document> {
@@ -121,8 +125,9 @@ export class PhoneStore {
       if(entry.persist&&doc.trackingEnabled!==false){
         const raw=await this.io.read(chatId);
         const comparable={...doc,revision:raw?JSON.parse(raw).revision:0};
-        if(JSON.stringify(comparable)!==raw){doc.revision=comparable.revision+1;await this.io.write(chatId,JSON.stringify(doc));}
+        if(!raw||JSON.stringify(comparable,canonicalKeys)!==JSON.stringify(JSON.parse(raw),canonicalKeys)){doc.revision=comparable.revision+1;await this.io.write(chatId,JSON.stringify(doc));}
       }
+      if(entry.persist&&doc.trackingEnabled!==false)this.markReady(chatId);
       return doc;
     });
     this.pendingReads.set(key,entry);
@@ -139,18 +144,19 @@ export class PhoneStore {
     const cleanup = () => { if (this.queues.get(chatId) === task) this.queues.delete(chatId); };
     void task.then(cleanup, cleanup); return task;
   }
-  private async build(chatId: string, userId: string): Promise<{ doc: Document; rows: StoryRow[] }> {
+  private async build(chatId: string, userId: string,check:()=>void=()=>{}): Promise<{ doc: Document; rows: StoryRow[] }> {
     if (!chatId || chatId.length > 256) throw new Error("Missing chat");
-    const raw = await this.io.read(chatId);
+    check();const raw = await this.io.read(chatId);check();
     const legacy=!raw&&this.io.legacy?await this.io.legacy(userId,chatPath(chatId)):null;
-    if((!raw&&!legacy)||(raw&&JSON.parse(raw).trackingEnabled===false)){const value=raw?JSON.parse(raw):null;const doc=emptyDocument(chatId);if(value){if(value.schema!==2||value.chatId!==chatId||!Number.isSafeInteger(value.revision)||value.revision<0)throw Error("Invalid saved data");doc.revision=value.revision;doc.settings=readSettings(value.settings);}doc.trackingEnabled=false;return {doc,rows:[]};}
-    const rows = await this.io.history(chatId);
-    const player = await this.io.player(chatId, userId);
+    check();if((!raw&&!legacy)||(raw&&JSON.parse(raw).trackingEnabled===false)){const value=raw?JSON.parse(raw):null;const doc=emptyDocument(chatId);if(value){if(value.schema!==2||value.chatId!==chatId||!Number.isSafeInteger(value.revision)||value.revision<0)throw Error("Invalid saved data");doc.revision=value.revision;doc.settings=readSettings(value.settings);}doc.trackingEnabled=false;return {doc,rows:[]};}
+    const rows = await this.io.history(chatId);check();
+    const player = await this.io.player(chatId, userId);check();
     const names=await this.io.names?.(chatId,userId)??[];
+    check();
     // Validate every input afresh. There is no time-based or timestamp-only cache hit.
     const proof=JSON.stringify([chatId,userId,raw,rows.map(rowSignature),player,names,legacy]);
     const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(proof));
-    const key=Array.from(new Uint8Array(digest),value=>value.toString(16).padStart(2,"0")).join("");
+    check();const key=Array.from(new Uint8Array(digest),value=>value.toString(16).padStart(2,"0")).join("");
     if(this.replayCache?.key===key)return {doc:structuredClone(this.replayCache.doc),rows};
     let doc = readDocument(raw, chatId);
     if (!raw && legacy !== null) {
@@ -165,6 +171,8 @@ export class PhoneStore {
     doc = replay(doc, rows, player ? [player] : [], (row, issues) => this.skips.record(chatId, row, issues));
     doc.currentPlayer = player ?? undefined;
     projectContacts(doc,names);
+    const last=[...rows].sort((a,b)=>a.index_in_chat-b.index_in_chat).at(-1);
+    if(last)doc.checkpoint={version:1,id:last.id,index:last.index_in_chat,signature:await sourceHash(last),lastUser:[...rows].reverse().find(r=>r.role==="user")};
     // One entry, at most 2 MiB of serialized data. Large portrait-heavy chats skip reuse.
     const bytes=new TextEncoder().encode(JSON.stringify(doc)).byteLength;
     this.replayCache=bytes<=2*1024*1024?{key,doc:structuredClone(doc),bytes}:undefined;
@@ -185,11 +193,49 @@ export class PhoneStore {
   /** Read-only preview with a trusted user and an authorized chat. Never writes. */
   preview(chatId:string,userId:string):Promise<Document>{return this.readOperation("preview",userId,chatId);}
   sync(userId:string,chatId:string):Promise<Document>{return this.readOperation("sync",userId,chatId);}
-  /** Authorized routing/settings only: no history, persona expansion or replay. */
-  settingsPreview(userId:string,chatId:string):Promise<Document>{
+  savedView(chatId:string,userId:string):Promise<Document>{
+    if(!this.ready.has(chatId))return this.preview(chatId,userId);
     return this.serial(chatId,async()=>{
       if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");
-      const raw=await this.io.read(chatId),doc=emptyDocument(chatId);
+      const raw=await this.io.read(chatId),doc=materialized(raw,chatId);
+      if(!doc){this.ready.delete(chatId);return (await this.build(chatId,userId)).doc;}
+      doc.settings.source="main";
+      const player=await this.io.player(chatId,userId);doc.currentPlayer=player??undefined;
+      if(player&&!doc.playerNames.some(n=>normalize(n)===normalize(player)))doc.playerNames.push(player);
+      for(const contact of doc.state.contacts)if(doc.playerNames.some(n=>normalize(n)===normalize(contact.name))){contact.player=true;delete contact.fields.roles;delete contact.fields.mood;delete contact.fields.thoughts;}
+      return doc;
+    });
+  }
+  /** Called only for a trusted saved-message event, never frontend-supplied content. */
+  receiveSaved(userId:string,chatId:string,row:StoryRow):Promise<Document>{
+    return this.serial(chatId,async()=>{
+      if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");
+      if(row.chat_id!==chatId||!row.id||!Number.isSafeInteger(row.index_in_chat)||typeof row.content!=="string")throw Error("Invalid saved message");
+      const raw=await this.io.read(chatId),doc=materialized(raw,chatId),signature=await sourceHash(row);
+      if(doc?.trackingEnabled===false)return doc;
+      if(this.ready.has(chatId)&&doc?.checkpoint?.id===row.id&&doc.checkpoint.signature===signature)return doc;
+      const safe=this.ready.has(chatId)&&doc?.checkpoint&&row.index_in_chat===doc.checkpoint.index+1&&!doc.accepted.some(e=>e.at.id===row.id)&&doc.edits.every(e=>!e.remove&&!e.rename&&!["call","email","bank","transaction"].includes(e.target))&&!Object.keys(doc.contactMerges??{}).length&&!row.content.includes("notes=")&&!row.content.includes("details=");
+      let next:Document;
+      if(safe){
+        const player=await this.io.player(chatId,userId),players=[...doc!.playerNames,...(player?[player]:[])];
+        if(normalize(player??"")!==normalize(doc!.currentPlayer??""))next=(await this.build(chatId,userId)).doc;else {next=replay(doc!,[row],players,(r,issues)=>this.skips.record(chatId,r,issues),{lastUser:doc!.checkpoint!.lastUser});
+        next.currentPlayer=player??undefined;projectContacts(next,await this.io.names?.(chatId,userId)??[]);
+        next.checkpoint={version:1,id:row.id,index:row.index_in_chat,signature,lastUser:row.role==="user"?row:doc!.checkpoint!.lastUser};}
+      }else next=(await this.build(chatId,userId)).doc;
+      if(next.trackingEnabled===false)return next;
+      next.settings.source="main";next.revision=(raw?JSON.parse(raw).revision:0)+1;
+      await this.io.write(chatId,JSON.stringify(next));this.markReady(chatId);this.replayCache=undefined;return next;
+    });
+  }
+  /** A cancelled queued prompt must never begin history work. */
+  promptPreview(chatId:string,userId:string,signal:AbortSignal):Promise<Document>{
+    return this.serial(chatId,async()=>{const check=()=>signal.throwIfAborted();check();if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");check();if(this.ready.has(chatId)){const raw=await this.io.read(chatId);check();const saved=materialized(raw,chatId);if(saved)return saved;}return (await this.build(chatId,userId,check)).doc;});
+  }
+  /** Authorized routing/settings only: no history, persona expansion or replay. */
+  settingsPreview(userId:string,chatId:string,signal?:AbortSignal):Promise<Document>{
+    return this.serial(chatId,async()=>{
+      signal?.throwIfAborted();if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");
+      signal?.throwIfAborted();const raw=await this.io.read(chatId),doc=emptyDocument(chatId);signal?.throwIfAborted();
       if(!raw){doc.trackingEnabled=false;return doc;}
       const value:unknown=JSON.parse(raw);
       if(!isRecord(value)||value.schema!==2||value.chatId!==chatId||!Number.isSafeInteger(value.revision)||Number(value.revision)<0||value.trackingEnabled!==undefined&&typeof value.trackingEnabled!=="boolean")throw Error("Invalid saved data");
@@ -324,3 +370,18 @@ export class PhoneStore {
 export interface HelperTicket { doc: Document; recent: StoryRow[]; history: string }
 
 function canonicalKeys(_key:string,value:unknown):unknown{return isRecord(value)?Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b))):value;}
+
+async function sourceHash(row:StoryRow):Promise<string>{const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(rowSignature(row)));return Array.from(new Uint8Array(digest),n=>n.toString(16).padStart(2,"0")).join("");}
+/** Saved derived state is used only after this version has made an authoritative checkpoint. */
+function materialized(raw:string,chatId:string):Document|null {
+ if(!raw)return null;const value:unknown=JSON.parse(raw);if(!isRecord(value))throw Error("Invalid saved data");
+ const doc=readDocument(raw,chatId);if(doc.trackingEnabled===false)return doc;
+ if(!doc.checkpoint)return null;
+ const s=value.state;if(!isRecord(s)||!isRecord(s.scene)||!isRecord(s.notes)||!["contacts","locations","messages","calls","emails","bank","transactions","notices"].every(k=>Array.isArray(s[k]))||!SECTIONS.every(k=>Array.isArray((s.notes as Record<string,unknown>)[k])))throw Error("Invalid saved state");
+ const origin=(v:unknown)=>isRecord(v)&&typeof v.id==="string"&&Number.isInteger(v.index)&&typeof v.variant==="string";
+ const cell=(v:unknown)=>isRecord(v)&&origin(v.at)&&["ai","user"].includes(String(v.by))&&typeof v.inferred==="boolean";
+ if(Object.values(s.scene).some(v=>!cell(v))||s.weather!==undefined&&!cell(s.weather)||(s.contacts as unknown[]).some((c:unknown)=>!isRecord(c)||typeof c.name!=="string"||typeof c.player!=="boolean"||!isRecord(c.fields)||Object.values(c.fields).some(v=>!cell(v)))||(s.messages as unknown[]).some((m:unknown)=>!isRecord(m)||typeof m.id!=="string"||typeof m.from!=="string"||typeof m.text!=="string"||!["incoming","outgoing"].includes(String(m.direction))||!origin(m.at)))throw Error("Invalid saved state");
+ if(!Array.isArray(value.playerNames)||value.playerNames.some(v=>typeof v!=="string")||value.currentPlayer!==undefined&&typeof value.currentPlayer!=="string")throw Error("Invalid player identity");
+ doc.playerNames=value.playerNames as string[];doc.currentPlayer=value.currentPlayer as string|undefined;
+ doc.state=s as unknown as Document["state"];return doc;
+}

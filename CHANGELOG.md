@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.19.0 - Saved-message tracking and wizard-only AI
+
+- Replaced blocked frontend UUID calls with the documented ctx.uuid.v4() helper (passed through to the emoji picker) and added a built-bundle guard. Backend IDs are unchanged.
+- Removed automatic Helper/Custom connection extraction and its generation subscriptions. The only production model request is explicit Run setup.
+- Moved saved-connection selection into Setup wizard. No default connection is guessed; old IDs are preserved for wizard use. Removed Helper wording selection and message-count/source controls while retaining old data for compatibility.
+- Added a saved-message append path, duplicate-source checkpoint and cached current-state reads for UI/macros. Ordinary replies and field corrections avoid repeated full-history fetch/replay. Startup, Refresh and source/identity changes retain authoritative rebuilding.
+- Kept old Helper facts, edits, locks, read receipts, source-aware call counts, custom styling and chat/user scopes. No old story data is deleted.
+- Included the local 0.18.15 interceptor cancellation/fast-path protections. Added replay-equivalence, no-history, restart/persona and wizard-only model-call regressions.
+
+
+## 0.18.15 - Local prompt-interceptor timeout candidate (not published)
+
+- Return immediately for untagged history and skip full history replay for tracker/email-only cleanup, old text tags and disabled Messages.
+- Honor host cancellation/deadline metadata, add a cooperative 1.5-second pass-through budget, and bound outstanding cleanup work without queuing duplicates or retrying automatically.
+- Retain existing recent-text admission checks. Late cancelled reads skip subsequent persona/card/replay work. Already-dispatched history reads cannot be forcibly cancelled through the documented API.
+- Added targeted failure and no-history regression tests. This does not establish the cause of the real server memory stall.
+
+
 ## 0.18.14 - Per-chat tracking and lighter refreshes
 
 - Added Turn on/Turn off for this chat on Home. Existing tracked chats stay on; new chats start off. Turning off keeps story data, settings and portraits.
