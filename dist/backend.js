@@ -1,4 +1,88 @@
 // @bun
+// src/diagnostics.ts
+class SkipLogger {
+  warn;
+  limit;
+  seen = new Map;
+  constructor(warn, limit = 1000) {
+    this.warn = warn;
+    this.limit = limit;
+  }
+  record(chatId, row, issues) {
+    const key = JSON.stringify([chatId, row.id, row.swipe_id]);
+    if (!issues.length) {
+      this.seen.delete(key);
+      return;
+    }
+    let hash = 2166136261;
+    for (let i = 0;i < row.content.length; i++)
+      hash = Math.imul(hash ^ row.content.charCodeAt(i), 16777619);
+    const signature = JSON.stringify([hash >>> 0, row.content.length, issues]);
+    if (this.seen.get(key) === signature)
+      return;
+    this.seen.delete(key);
+    this.seen.set(key, signature);
+    while (this.seen.size > this.limit)
+      this.seen.delete(this.seen.keys().next().value);
+    if (issues.some((i) => i.field === "phone-text" && i.reason === "recipient is not a confirmed player"))
+      this.warn("Lumi Phone Tracker: text tag ignored: recipient is not a confirmed player.");
+    issues = issues.filter((i) => i.field !== "phone-text");
+    if (!issues.length)
+      return;
+    const count = issues.length;
+    this.warn(`Lumi Phone Tracker: skipped invalid tracker data ${JSON.stringify({
+      chatId,
+      messageId: row.id,
+      swipe: row.swipe_id,
+      issues: issues.slice(0, 20),
+      ...count > 20 ? { additionalIssues: count - 20 } : {}
+    })}`);
+  }
+}
+
+class OperationFailure extends Error {
+  operation;
+  original;
+  constructor(operation, original) {
+    super(original instanceof Error ? original.message : "Host operation failed");
+    this.operation = operation;
+    this.original = original;
+  }
+}
+async function atOperation(operation, action) {
+  try {
+    return await action();
+  } catch (error) {
+    throw error instanceof OperationFailure ? error : new OperationFailure(operation, error);
+  }
+}
+function failureDetails(error) {
+  const operation = error instanceof OperationFailure ? error.operation : undefined;
+  const original = error instanceof OperationFailure ? error.original : error;
+  const message = original instanceof Error ? original.message : typeof original === "string" ? original : "";
+  const exact = {
+    "userId is required for operator-scoped extensions": "missing-user-context",
+    "Chat unavailable": "chat-unavailable",
+    "Allow chat access in Extensions.": "permission-missing",
+    "Invalid saved data": "saved-data-validation",
+    "Invalid saved source": "saved-source-validation",
+    "Invalid saved contact": "saved-contact-validation",
+    "Invalid saved state": "saved-state-validation",
+    "Invalid saved text": "saved-text-validation",
+    "Invalid checkpoint": "checkpoint-validation",
+    "Invalid checkpoint source": "checkpoint-source-validation",
+    "Invalid edit": "edit-validation",
+    "Invalid contact details": "contact-validation"
+  };
+  const category = (Object.hasOwn(exact, message) ? exact[message] : undefined) ?? (/^The (tracker|story) changed\./.test(message) ? "revision-conflict" : /timed? out|timeout|deadline/i.test(message) ? "timeout" : /permission|forbidden|unauthori[sz]ed|access denied/i.test(message) ? "permission-denied" : /ECONNRESET|ECONNREFUSED|socket.*closed|network error/i.test(message) ? "connection-failure" : /SQLITE_BUSY|database is locked/i.test(message) ? "database-busy" : original instanceof SyntaxError ? "invalid-json" : original instanceof RangeError ? "range-error" : original instanceof TypeError ? "type-error" : "unclassified-error");
+  return { category, ...operation ? { operation } : {} };
+}
+function logFailure(warn, context, error) {
+  try {
+    warn(`Lumi Phone Tracker: operation failed ${JSON.stringify({ ...context, ...failureDetails(error) })}`);
+  } catch {}
+}
+
 // src/record-values.ts
 var placeholder = (s) => /^(?:absent|n\/?a|none|unknown|unspecified|not known|not applicable|not stated|not specified|unavailable|offscreen|off-screen|not present|null|undefined|tbd|[?\u2014-])\.?$/i.test(s.trim());
 function recordText(v, max = 100, wordLimit) {
@@ -3740,47 +3824,6 @@ function applyManualValue(state, edit, players, tombstones, allowPlayer = false)
   tombstones.delete(`note/${section}/${newKey}`);
 }
 
-// src/diagnostics.ts
-class SkipLogger {
-  warn;
-  limit;
-  seen = new Map;
-  constructor(warn, limit = 1000) {
-    this.warn = warn;
-    this.limit = limit;
-  }
-  record(chatId, row, issues) {
-    const key = JSON.stringify([chatId, row.id, row.swipe_id]);
-    if (!issues.length) {
-      this.seen.delete(key);
-      return;
-    }
-    let hash = 2166136261;
-    for (let i = 0;i < row.content.length; i++)
-      hash = Math.imul(hash ^ row.content.charCodeAt(i), 16777619);
-    const signature = JSON.stringify([hash >>> 0, row.content.length, issues]);
-    if (this.seen.get(key) === signature)
-      return;
-    this.seen.delete(key);
-    this.seen.set(key, signature);
-    while (this.seen.size > this.limit)
-      this.seen.delete(this.seen.keys().next().value);
-    if (issues.some((i) => i.field === "phone-text" && i.reason === "recipient is not a confirmed player"))
-      this.warn("Lumi Phone Tracker: text tag ignored: recipient is not a confirmed player.");
-    issues = issues.filter((i) => i.field !== "phone-text");
-    if (!issues.length)
-      return;
-    const count = issues.length;
-    this.warn(`Lumi Phone Tracker: skipped invalid tracker data ${JSON.stringify({
-      chatId,
-      messageId: row.id,
-      swipe: row.swipe_id,
-      issues: issues.slice(0, 20),
-      ...count > 20 ? { additionalIssues: count - 20 } : {}
-    })}`);
-  }
-}
-
 // src/phone-store.ts
 var DOCUMENT_KEY = "lpt_phone_v2";
 function readDocument(raw, chatId) {
@@ -4662,21 +4705,21 @@ var messageReads = new MessageReads({
   write: (userId, chatId, value) => spindle.userStorage.setJson(`message-reads/${chatPath(chatId)}`, value, { userId })
 });
 var store = new PhoneStore({
-  names: (chat, user) => cardNames(spindle, chat, user),
+  names: (chat, user) => atOperation("card.names", () => cardNames(spindle, chat, user)),
   warn: (text) => warn(text),
-  authorize: async (chatId, userId) => (await spindle.chats.get(chatId, userId))?.id === chatId,
-  history: async (chatId) => readStoryHistory(spindle, chatId),
-  read: async (chatId) => spindle.variables.chat.get(chatId, DOCUMENT_KEY),
-  write: async (chatId, data) => spindle.variables.chat.set(chatId, DOCUMENT_KEY, data),
+  authorize: async (chatId, userId) => (await atOperation("chat.authorize", () => spindle.chats.get(chatId, userId)))?.id === chatId,
+  history: async (chatId) => atOperation("history.read", () => readStoryHistory(spindle, chatId)),
+  read: async (chatId) => atOperation("tracker.read", () => spindle.variables.chat.get(chatId, DOCUMENT_KEY)),
+  write: async (chatId, data) => atOperation("tracker.write", () => spindle.variables.chat.set(chatId, DOCUMENT_KEY, data)),
   player: async (chatId, userId) => {
-    const result = await spindle.macros.resolve("{{user}}", { chatId, userId, commit: false });
+    const result = await atOperation("player.resolve", () => spindle.macros.resolve("{{user}}", { chatId, userId, commit: false }));
     const name = result.text.trim();
     return result.diagnostics.length || !name || name.includes("{{") ? null : name;
   },
   legacy: async (userId, path) => {
-    if (!await spindle.userStorage.exists(path, userId))
+    if (!await atOperation("legacy.exists", () => spindle.userStorage.exists(path, userId)))
       return null;
-    return JSON.parse(await spindle.userStorage.read(path, userId));
+    return JSON.parse(await atOperation("legacy.read", () => spindle.userStorage.read(path, userId)));
   }
 });
 async function loadPhoneDocument(chatId, userId) {
@@ -4868,8 +4911,10 @@ spindle.onFrontendMessage((payload, userId) => {
   const requestId = payload.requestId;
   if (payload.type === "phone_update" && (typeof payload.chatId !== "string" || !payload.chatId))
     return;
+  let stage = "permissions", committed = false;
   (async () => {
     requireReadPermissions();
+    stage = "chat.resolve";
     const chatId = typeof payload.chatId === "string" ? payload.chatId : payload.chatId === null ? null : (await spindle.chats.getActive(userId))?.id;
     if (!chatId) {
       spindle.sendToFrontend({ type: "phone_snapshot", requestId, chatId: null }, userId);
@@ -4877,20 +4922,29 @@ spindle.onFrontendMessage((payload, userId) => {
     }
     if (isRecord(payload.settings) && payload.settings.source === "helper")
       throw Error("Automatic connection tracking was removed.");
+    stage = payload.type === "phone_update" ? "tracker.update" : "tracker.open";
     let snapshot = payload.type === "phone_update" ? await store.update(userId, chatId, typeof payload.revision === "number" ? payload.revision : -1, { trackingEnabled: payload.trackingEnabled, settings: payload.settings, edit: payload.edit, dismissNotice: payload.dismissNotice, portrait: payload.portrait, contactInfo: payload.contactInfo, fieldControl: payload.fieldControl, mergeContacts: payload.mergeContacts }) : await store.openView(chatId, userId);
+    committed = payload.type === "phone_update";
     if (payload.type === "phone_update") {
       if (payload.trackingEnabled === true)
         snapshot = await store.sync(userId, chatId);
     }
+    stage = "receipts.read";
     const reads = snapshot.trackingEnabled === false ? emptyReads() : await messageReads.read(userId, chatId);
+    stage = "chat.metadata";
     const chatName = (await spindle.chats.get(chatId, userId))?.name ?? "";
+    stage = "frontend.notify";
     spindle.sendToFrontend({ type: "phone_snapshot", requestId, chatId, chatName, snapshot: phoneSnapshot(snapshot), reads: snapshotReads(reads, phoneSnapshot(snapshot)), helperBusy: false }, userId);
   })().catch((error) => {
     const reason = error instanceof Error ? error.message : "";
     const known = ["Invalid contact details", "Reopen this contact.", "Outgoing player entries need", "This app is full.", "An account with that name", "The tracker changed.", "The story changed.", "This section is full.", "Contacts is full", "Locations is full", "A contact with that name", "A place with that name", "A note with that name"];
     const message = known.some((s) => reason.startsWith(s)) ? reason : "Could not save or open this chat. Check extension permissions and try again.";
-    spindle.sendToFrontend({ type: "phone_error", requestId, message }, userId);
-    warn("Lumi Phone Tracker: chat sync failed; saved data retained.");
+    logFailure(warn, { operation: stage, event: String(payload.type), outcome: committed ? "update-committed" : "operation-not-completed" }, error);
+    try {
+      spindle.sendToFrontend({ type: "phone_error", requestId, message }, userId);
+    } catch (notifyError) {
+      logFailure(warn, { operation: "frontend.error-notify", event: String(payload.type), outcome: "notification-failed" }, notifyError);
+    }
   });
 });
 for (const event of ["MESSAGE_SENT", "MESSAGE_EDITED", "MESSAGE_DELETED", "MESSAGE_SWIPED", "SWIPE_EDITED", "CHAT_CHANGED"]) {
@@ -4900,7 +4954,13 @@ for (const event of ["MESSAGE_SENT", "MESSAGE_EDITED", "MESSAGE_DELETED", "MESSA
     const { chatId, message: m } = payload;
     const row = event === "MESSAGE_SENT" && isRecord(m) && typeof m.id === "string" && m.chat_id === chatId && Number.isInteger(m.index_in_chat) && typeof m.content === "string" && Number.isInteger(m.swipe_id) && typeof m.is_user === "boolean" && !(isRecord(m.extra) && m.extra.spindle_role !== undefined) ? { id: m.id, chat_id: chatId, index_in_chat: m.index_in_chat, content: m.content, swipe_id: m.swipe_id, swipe_dates: Array.isArray(m.swipe_dates) ? m.swipe_dates : undefined, role: m.is_user ? "user" : "assistant", ...typeof m.name === "string" ? { name: m.name } : {} } : null;
     const work = row ? store.receiveSaved(userId, chatId, row) : store.sync(userId, chatId);
-    work.then(() => spindle.sendToFrontend({ type: "phone_tracker_changed", chatId }, userId)).catch(() => warn("Lumi Phone Tracker: saved-message update failed; data retained."));
+    work.then(() => {
+      try {
+        spindle.sendToFrontend({ type: "phone_tracker_changed", chatId }, userId);
+      } catch (error) {
+        logFailure(warn, { operation: "frontend.notify", event, outcome: "tracker-operation-completed" }, error);
+      }
+    }, (error) => logFailure(warn, { operation: row ? "tracker.append" : "tracker.sync", event, outcome: "operation-not-completed" }, error));
   });
 }
 spindle.log.info(`${EXTENSION_NAME}: saved-message tracking loaded. Model requests are setup-wizard only.`);

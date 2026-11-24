@@ -2,7 +2,7 @@
 
 A small story phone with Scene, Weather, Locations, Notes, Contacts and Messages, plus optional Calls, Email and Bank.
 
-**Version 0.19.0.** Source, manifest, built files, tests and guides are included.
+**Version 0.19.1.** Source, manifest, built files, tests and guides are included.
 
 The main story model writes compact hidden tags. The extension reads saved messages, updates the phone and supplies short continuity through macros. There is no background Helper AI. Saved connections are used only when you explicitly run the setup wizard.
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.19.1 - Safe failure diagnostics
+
+- Replace generic chat-sync and saved-message warnings with safe operation, event, outcome and error-category labels. Distinguish tracker/history reads, writes, persona resolution, unread reads and frontend notification failures. No raw exceptions, story values, keys, headers or user/chat IDs are logged.
+- A failed notification after a completed tracker operation no longer reports a failed save. Failed error delivery is caught as well, avoiding an unhandled rejection when a frontend is disconnected.
+- No retries, extra history requests, tracking rules, storage changes or model calls added. These diagnostics do not establish the cause of the November 24 failures or server memory pressure.
+
+
 ## 0.19.0 - Saved-message tracking and wizard-only AI
 
 - Replaced blocked frontend UUID calls with the documented ctx.uuid.v4() helper (passed through to the emoji picker) and added a built-bundle guard. Backend IDs are unchanged.

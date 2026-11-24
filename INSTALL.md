@@ -1,3 +1,5 @@
+Version 0.19.1 adds safe failure logging; the server cause is still unconfirmed.
+
 # Install and use Lumi Phone Tracker
 
 Version 0.19.0 includes saved-message tracking and wizard-only AI. Built files are included; users do not need to compile the extension.

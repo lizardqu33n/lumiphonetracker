@@ -14,7 +14,7 @@ test("actual backend: render/prompt hooks, scoped receipts, saved-message safety
   let deliver: (p: Record<string, unknown>, user: string) => void = () => {};
   let registrationOptions: unknown;
   const calls: string[] = []; const warnings: string[] = [];
-  let failReads = false;let failReceipts=false;let setupMode=false;
+  let failReads = false;let failReceipts=false;let setupMode=false;let failNotifications=false;let failWrites=false;
   const scoped = (user: unknown, method: string) => {
     if (typeof user !== "string" || !user.trim()) throw new Error("userId is required for operator-scoped extensions");
     calls.push(method);
@@ -24,7 +24,7 @@ test("actual backend: render/prompt hooks, scoped receipts, saved-message safety
     registerMacro: (definition: {name:string;handler:(ctx:Record<string,unknown>)=>Promise<string>}) => { macros.set(definition.name,definition.handler); },
     variables: { chat: {
       get: async (chat: string, key: string) => { if(failReads)throw new Error("PRIVATE story/field value"); return String(persisted.get(`${chat}/${key}`) ?? JSON.stringify(emptyDocument(chat))); },
-      set: async (chat: string, key: string, value: string) => { persisted.set(`${chat}/${key}`, value); },
+      set: async (chat: string, key: string, value: string) => { if(failWrites)throw Error("RPC timed out PRIVATE write body");persisted.set(`${chat}/${key}`, value); },
     } },
     macros: { resolve: async (_text:string, options?:{userId?:string;commit?:boolean}) => { scoped(options?.userId,"macros.resolve"); expect(options?.commit).toBe(false); return { text: "Player", diagnostics: [] }; } },
     host: { capabilities: { "required-interceptors-v1": 1 } },
@@ -45,7 +45,7 @@ test("actual backend: render/prompt hooks, scoped receipts, saved-message safety
       getJson: async (path: string, options: { userId: string; fallback: unknown }) => {scoped(options?.userId,"userStorage.getJson");if(failReceipts&&path.startsWith("message-reads/"))throw Error("PRIVATE receipt failure");return structuredClone(persisted.get(`${options.userId}/${path}`) ?? options.fallback);},
       setJson: async (path: string, value: unknown, options: { userId: string }) => { scoped(options?.userId,"userStorage.setJson");persisted.set(`${options.userId}/${path}`, value); },
     },
-    sendToFrontend: (p: Record<string, unknown>, user: string) => { scoped(user,"sendToFrontend");deliver(p,user); },
+    sendToFrontend: (p: Record<string, unknown>, user: string) => { scoped(user,"sendToFrontend");if(failNotifications)throw Error("Socket closed PRIVATE notification body");deliver(p,user); },
     log: { info: () => {}, warn: (text:string) => {warnings.push(text);} },
   };
   let interceptorHistoryReads=0;const originalHistory=fake.chat.getMessages;fake.chat.getMessages=async chat=>{interceptorHistoryReads++;return originalHistory(chat);};
@@ -221,6 +221,50 @@ test("actual backend: render/prompt hooks, scoped receipts, saved-message safety
     expect((on.snapshot as any).trackingEnabled).toBe(true);
     expect(generations.length).toBe(modelBefore);
     expect(await nativePull("a","u")).not.toBe("");
+    // The old two generic warnings hid reads, receipt failures and failed notifications.
+    const savedBeforeFailure=persisted.get("a/lpt_phone_v2");
+    failReads=true;
+    const failedOpen=await request({type:"phone_sync",chatId:"a"},"u");
+    expect(failedOpen.type).toBe("phone_error");
+    expect(warnings.at(-1)).toContain('"operation":"tracker.read"');
+    expect(warnings.at(-1)).toContain('"event":"phone_sync"');
+    handlers.get("MESSAGE_SENT")!({chatId:"a"},"u");
+    await Bun.sleep(10);
+    expect(warnings.at(-1)).toContain('"event":"MESSAGE_SENT"');
+    expect(warnings.at(-1)).toContain('"operation":"tracker.read"');
+    expect(persisted.get("a/lpt_phone_v2")).toBe(savedBeforeFailure);
+    failReads=false;
+    failReceipts=true;
+    await request({type:"phone_sync",chatId:"a"},"u");
+    expect(warnings.at(-1)).toContain('"operation":"receipts.read"');
+    failReceipts=false;
+    const stale=await request({type:"phone_update",chatId:"a",revision:-1,settings:{}},"u");
+    expect(stale.type).toBe("phone_error");
+    expect(warnings.at(-1)).toContain('"category":"revision-conflict"');
+    const newSaved={chatId:"a",message:{id:"m2-diagnostic",chat_id:"a",index_in_chat:1,is_user:false,swipe_id:0,content:"<phone-state>\nloc: Garden\n</phone-state>"}};
+    const beforeWrite=persisted.get("a/lpt_phone_v2");
+    failWrites=true;
+    handlers.get("MESSAGE_SENT")!(newSaved,"u");
+    await Bun.sleep(20);
+    expect(warnings.at(-1)).toContain('"operation":"tracker.write"');
+    expect(warnings.at(-1)).toContain('"category":"timeout"');
+    expect(persisted.get("a/lpt_phone_v2")).toBe(beforeWrite);
+    failWrites=false;
+    failNotifications=true;
+    const startWarnings=warnings.length;
+    handlers.get("MESSAGE_SENT")!(newSaved,"u");
+    await Bun.sleep(20);
+    expect(warnings.slice(startWarnings)).toHaveLength(1);
+    expect(JSON.parse(String(persisted.get("a/lpt_phone_v2"))).state.scene.location.value.name).toBe("Garden");
+    expect(warnings.at(-1)).toContain('"operation":"frontend.notify"');
+    expect(warnings.at(-1)).toContain('"outcome":"tracker-operation-completed"');
+    // Both the snapshot and error delivery can fail without an unhandled rejection.
+    receive({type:"phone_sync",chatId:"a",requestId:"disconnected"},"u");
+    await Bun.sleep(20);
+    expect(warnings.at(-1)).toContain('"operation":"frontend.error-notify"');
+    failNotifications=false;
+    expect((await request({type:"phone_sync",chatId:"a"},"u")).type).toBe("phone_snapshot");
+    expect(JSON.stringify(warnings)).not.toContain("PRIVATE");
   } finally { (globalThis as unknown as { spindle?: unknown }).spindle = prior; }
 });
 

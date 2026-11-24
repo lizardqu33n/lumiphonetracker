@@ -1,3 +1,4 @@
+import {atOperation,logFailure} from "./diagnostics";
 import {createPhoneInterceptor} from "./prompt-interceptor";
 import {phoneSnapshot,snapshotReads} from "./ui-snapshot";
 import { readStoryHistory } from "./history";
@@ -35,20 +36,20 @@ const messageReads = new MessageReads({
 });
 
 const store = new PhoneStore({
-  names:(chat,user)=>cardNames(spindle,chat,user),
+  names:(chat,user)=>atOperation("card.names",()=>cardNames(spindle,chat,user)),
   warn: text => warn(text),
-  authorize: async (chatId, userId) => (await spindle.chats.get(chatId, userId))?.id === chatId,
-  history: async chatId => readStoryHistory(spindle,chatId),
-  read: async chatId => spindle.variables.chat.get(chatId, DOCUMENT_KEY),
-  write: async (chatId, data) => spindle.variables.chat.set(chatId, DOCUMENT_KEY, data),
+  authorize: async (chatId, userId) => (await atOperation("chat.authorize",()=>spindle.chats.get(chatId, userId)))?.id === chatId,
+  history: async chatId => atOperation("history.read",()=>readStoryHistory(spindle,chatId)),
+  read: async chatId => atOperation("tracker.read",()=>spindle.variables.chat.get(chatId, DOCUMENT_KEY)),
+  write: async (chatId, data) => atOperation("tracker.write",()=>spindle.variables.chat.set(chatId, DOCUMENT_KEY, data)),
   player: async (chatId, userId) => {
-    const result = await spindle.macros.resolve("{{user}}", { chatId, userId, commit: false });
+    const result = await atOperation("player.resolve",()=>spindle.macros.resolve("{{user}}", { chatId, userId, commit: false }));
     const name = result.text.trim();
     return result.diagnostics.length || !name || name.includes("{{") ? null : name;
   },
   legacy: async (userId, path) => {
-    if (!(await spindle.userStorage.exists(path, userId))) return null;
-    return JSON.parse(await spindle.userStorage.read(path, userId));
+    if (!(await atOperation("legacy.exists",()=>spindle.userStorage.exists(path, userId)))) return null;
+    return JSON.parse(await atOperation("legacy.read",()=>spindle.userStorage.read(path, userId)));
   },
 });
 async function loadPhoneDocument(chatId: string, userId: string) {
@@ -182,25 +183,33 @@ spindle.onFrontendMessage((payload, userId) => {
     payload.requestId.length > 100 || (payload.chatId !== undefined && payload.chatId !== null && typeof payload.chatId !== "string")) return;
   const requestId = payload.requestId;
   if (payload.type === "phone_update" && (typeof payload.chatId !== "string" || !payload.chatId)) return;
+  let stage="permissions", committed=false;
   void (async () => {
     requireReadPermissions();
+    stage="chat.resolve";
     const chatId = typeof payload.chatId === "string" ? payload.chatId : payload.chatId===null?null:(await spindle.chats.getActive(userId))?.id;
     if (!chatId) { spindle.sendToFrontend({ type: "phone_snapshot", requestId, chatId: null }, userId); return; }
     if(isRecord(payload.settings)&&payload.settings.source==="helper")throw Error("Automatic connection tracking was removed.");
+    stage=payload.type === "phone_update"?"tracker.update":"tracker.open";
     let snapshot = payload.type === "phone_update" ? await store.update(userId, chatId,
       typeof payload.revision === "number" ? payload.revision : -1, { trackingEnabled:payload.trackingEnabled, settings: payload.settings, edit: payload.edit, dismissNotice: payload.dismissNotice,portrait:payload.portrait,contactInfo:payload.contactInfo,fieldControl:payload.fieldControl,mergeContacts:payload.mergeContacts }) : await store.openView(chatId,userId);
+    committed=payload.type==="phone_update";
     if(payload.type==="phone_update") {
       if(payload.trackingEnabled===true)snapshot=await store.sync(userId,chatId);
     }
+    stage="receipts.read";
     const reads = snapshot.trackingEnabled===false?emptyReads():await messageReads.read(userId, chatId);
+    stage="chat.metadata";
     const chatName=(await spindle.chats.get(chatId,userId))?.name??"";
+    stage="frontend.notify";
     spindle.sendToFrontend({ type: "phone_snapshot", requestId, chatId, chatName, snapshot:phoneSnapshot(snapshot), reads:snapshotReads(reads,phoneSnapshot(snapshot)), helperBusy:false }, userId);
   })().catch(error => {
     const reason = error instanceof Error ? error.message : "";
     const known = ["Invalid contact details", "Reopen this contact.", "Outgoing player entries need", "This app is full.", "An account with that name", "The tracker changed.", "The story changed.", "This section is full.", "Contacts is full", "Locations is full", "A contact with that name", "A place with that name", "A note with that name"];
     const message = known.some(s => reason.startsWith(s)) ? reason : "Could not save or open this chat. Check extension permissions and try again.";
-    spindle.sendToFrontend({ type: "phone_error", requestId, message }, userId);
-    warn("Lumi Phone Tracker: chat sync failed; saved data retained.");
+    logFailure(warn,{operation:stage,event:String(payload.type),outcome:committed?"update-committed":"operation-not-completed"},error);
+    try { spindle.sendToFrontend({ type: "phone_error", requestId, message }, userId); }
+    catch (notifyError) { logFailure(warn,{operation:"frontend.error-notify",event:String(payload.type),outcome:"notification-failed"},notifyError); }
   });
 });
 // Only trusted saved-message events commit automatic tracker updates. Streaming tokens do not.
@@ -210,7 +219,10 @@ for(const event of ["MESSAGE_SENT","MESSAGE_EDITED","MESSAGE_DELETED","MESSAGE_S
   const chatId=payload.chatId,m=payload.message;
   const row=event==="MESSAGE_SENT"&&isRecord(m)&&typeof m.id==="string"&&m.chat_id===chatId&&Number.isInteger(m.index_in_chat)&&typeof m.content==="string"&&Number.isInteger(m.swipe_id)&&typeof m.is_user==="boolean"&&!(isRecord(m.extra)&&m.extra.spindle_role!==undefined)?{id:m.id,chat_id:chatId,index_in_chat:m.index_in_chat as number,content:m.content,swipe_id:m.swipe_id as number,swipe_dates:Array.isArray(m.swipe_dates)?m.swipe_dates as number[]:undefined,role:m.is_user?"user" as const:"assistant" as const,...(typeof m.name==="string"?{name:m.name}:{})}:null;
   const work=row?store.receiveSaved(userId,chatId,row):store.sync(userId,chatId);
-  void work.then(()=>spindle.sendToFrontend({type:"phone_tracker_changed",chatId},userId)).catch(()=>warn("Lumi Phone Tracker: saved-message update failed; data retained."));
+  void work.then(()=>{
+    try { spindle.sendToFrontend({type:"phone_tracker_changed",chatId},userId); }
+    catch(error) { logFailure(warn,{operation:"frontend.notify",event,outcome:"tracker-operation-completed"},error); }
+  },error=>logFailure(warn,{operation:row?"tracker.append":"tracker.sync",event,outcome:"operation-not-completed"},error));
  });
 }
 spindle.log.info(`${EXTENSION_NAME}: saved-message tracking loaded. Model requests are setup-wizard only.`);

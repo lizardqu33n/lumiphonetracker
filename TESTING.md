@@ -1,3 +1,9 @@
+# 0.19.1 diagnostic verification
+
+Targeted mocks reproduce tracker-read failures, write timeouts, unread-read failures, stale edit revisions, notification failure after a successful persisted update, and failure of both snapshot/error delivery. They verify fixed safe labels, old data surviving a rejected write, no retry, no unhandled rejection, and a subsequent successful open. Classifier tests cover scope errors, permission errors, timeout, database busy, connection failure, saved-source validation, invalid JSON and unknown errors. Raw exception text and private values are not logged.
+
+No real Lumiverse 1.3.0 / c70da166e83a or Bun 1.4.5 server run was available. The reported 44 sync and 28 saved-message warnings cannot be diagnosed retroactively because 0.19.0 discarded their causes. This change adds no host calls, retry loops or UI changes. Browser checks were not repeated for this backend-only change; the prior 48 checks apply to 0.19.0. 316 code tests, type checking, reproducible built-file verification and package validation passed locally (Bun 1.4.4).
+
 # 0.19.0 verification
 
 314 code tests and type checking passed. 48 focused browser checks passed, including the wizard-only connection picker, no automatic-source controls, no model call on selection/input review, one call on Run, preview without saving and explicit confirmation. Existing focused layout/draft/read/Reset regressions remain covered. Reproducible build and package checks passed. The old full browser suite contains retired Helper UI assertions and is not claimed as passing.
