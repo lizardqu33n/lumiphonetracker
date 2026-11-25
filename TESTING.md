@@ -1,3 +1,11 @@
+# 0.20.0 verification
+
+335 code tests pass, including eight macro-split tests. Type checking, reproducible built-file checks, extension validation and packaging pass. The original ZIP failed type checking because fixtures lacked required inferred/locked properties, and its new Contacts macro failed the existing all-switches-off regression; both were corrected before release.
+
+New coverage verifies split output recombines into phone_format, enabled/disabled app and field behavior, trusted pull identity with missing/conflicting context, wording per requesting user, one shared interceptor snapshot across every registered macro, dynamic overrides and safe escaping of stored text. Existing player, unread, syntax, chat-isolation, conflict-recovery, encoding, debounce and asset checks remain passing.
+
+Current local compact styling was preserved. One existing browser assertion was updated to verify centered proportional artwork inside its padded control instead of requiring the image to fill the entire tap target; full target checks remain. All 62 focused browser checks passed. No real Lumiverse server, live provider or model-quality evaluation was available. Custom model compliance, real dry-run assembly and multi-user server behavior still require installation testing. Frontend size remains below the 2.5 MB build budget.
+
 # 0.19.3 local verification
 
 Current candidate: 327 code tests, 62 focused browser checks, type checking, reproducible built-file verification and package validation pass locally. No real-server heap/profile was measured.

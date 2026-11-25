@@ -2,6 +2,8 @@
 
 Built files are included—you do not need to compile the extension. Normal tracking uses saved messages written by your main story model, with optional AI extraction only when you explicitly run the setup wizard.
 
+Version 0.20.0 adds optional split macros. Existing presets with only {{phone_format}} keep working.
+
 ## Install or update
 
 1. Open Lumiverse > Extensions > Install.
@@ -49,3 +51,7 @@ Make up phone/email (fake) is a separate off-by-default wizard option and a deli
 Opening/restarting a chat and Refresh may read history once. Normal new replies are processed from their saved-message event; views/macros read current saved state. Regeneration, swipes, deletion, merges and complex edited histories may need a full rebuild to preserve the correct selected sources. Long stored journals still have a cost. The update does not prove that every server lag or memory-pressure issue is fixed.
 
 If an update appears stale, use Refresh tracker. Keep the preset line above. If generation fails, record the exact server error and time; an interceptor timeout and a model/provider failure are different paths. See TESTING.md and docs/SIMPLE-WORKFLOW.md for the limits of local verification.
+
+## Optional split placement
+
+Keep {{phone_format}} alone for the simplest setup. To separate context from writing instructions, use {{phone_state}} near story context and {{phone_rules}} near the bottom of the preset instead. Do not also add {{phone_format}}, which repeats both parts. The rules macro uses your selected personal prompt wording. The optional {{phone_contacts}} provides contact status; the older {{phone_scene}} already includes contact continuity, so combining them overlaps. See README.md for all macro names.

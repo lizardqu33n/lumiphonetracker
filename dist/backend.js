@@ -2319,7 +2319,21 @@ function applyActivityEdit(state, edit, tombstones, players = new Set, allowPlay
 }
 
 // src/phone-macros.ts
-var MACRO_NAMES = ["phone_format", "phone_scene", "phone_weather", "phone_locations", "phone_notes", "phone_messages", "phone_calls", "phone_email", "phone_bank"];
+var MACRO_NAMES = ["phone_format", "phone_state", "phone_rules", "phone_scene", "phone_contacts", "phone_weather", "phone_locations", "phone_notes", "phone_messages", "phone_calls", "phone_email", "phone_bank"];
+var MACRO_DESCRIPTIONS = {
+  phone_format: "All-in-one: current phone info + AI update instructions. Use alone for the simplest setup.",
+  phone_state: "Current phone info only (all enabled apps, no update instructions). Pair with {{phone_rules}}.",
+  phone_rules: "AI update instructions only (how to write hidden phone updates). Place at the bottom of your preset.",
+  phone_scene: "Current scene fields plus existing contact continuity (kept for compatibility).",
+  phone_contacts: "Tracked characters: full status for people in the scene, brief summary for off-screen Main contacts.",
+  phone_weather: "Current weather, temperature, description, and active alerts.",
+  phone_locations: "Established story locations; current place when Scene location is enabled.",
+  phone_notes: "Enabled notes and plots, including Misc notes marked Send to AI.",
+  phone_messages: "Recent text messages sent in the story.",
+  phone_calls: "Recent phone calls established in the story.",
+  phone_email: "Recent unread emails established in the story.",
+  phone_bank: "Last stated account balances and recent transactions."
+};
 var safe = (text) => text.replaceAll("{{", "{ {").replaceAll("}}", "} }").split(`
 `).join(" ");
 var clip = (text, n = 180) => safe(text).length > n ? safe(text).slice(0, n - 1) + "\u2026" : safe(text);
@@ -2363,6 +2377,56 @@ function sceneMacro(doc) {
     lines.push(details);
   return lines.join(`
 `);
+}
+function contactsMacro(doc) {
+  if (doc.trackingEnabled === false)
+    return "";
+  doc = effectiveDocument(doc);
+  if (!doc.settings.apps.Contacts || !CONTACT_KEYS.some((k) => doc.settings.enabled[`contacts.${k}`]))
+    return "";
+  const presentSet = new Set(presentNames(doc).map(normalize));
+  const enabledCount = Math.max(1, CONTACT_KEYS.filter((f) => doc.settings.enabled[`contacts.${f}`]).length);
+  const inSceneBudget = Math.max(24, Math.min(160, Math.floor(2200 / Math.max(1, presentSet.size * enabledCount))));
+  const lines = [];
+  for (const contact of doc.state.contacts) {
+    if (!presentSet.has(normalize(contact.name)))
+      continue;
+    const fields = CONTACT_KEYS.filter((k) => doc.settings.enabled[`contacts.${k}`] && contact.fields[k] && (!contact.player || ["physical", "position", "attire"].includes(k))).map((k) => `${k}=${cellText(contact.fields[k], inSceneBudget)}${fieldStatus(doc, { target: "contact", name: contact.name, field: k })}`);
+    const info = contact.info;
+    const meta = [];
+    if (info?.relationship)
+      meta.push(`relationship=${clip(info.relationship, 60)}`);
+    if (doc.settings.apps.Messages && info?.phone)
+      meta.push(`phone=${clip(info.phone, 40)}${info.fakeFields?.includes("phone") ? " [made up]" : ""}`);
+    if (doc.settings.apps.Email && info?.email)
+      meta.push(`email=${clip(info.email, 80)}${info.fakeFields?.includes("email") ? " [made up]" : ""}`);
+    if (!contact.player && info?.kind !== "Main")
+      for (const detail of info?.details.slice(0, 3) ?? [])
+        meta.push(`${clip(detail.label, 40)}=${clip(detail.value, 80)}`);
+    const all = [...fields, ...meta];
+    if (all.length)
+      lines.push(`${clip(contact.name, 100)}${contact.player ? " (You)" : ""}: ${all.join("; ")}`);
+  }
+  for (const contact of doc.state.contacts) {
+    if (presentSet.has(normalize(contact.name)))
+      continue;
+    const info = contact.info;
+    if (info?.kind !== "Main" && !contact.player)
+      continue;
+    const brief = [];
+    if (info?.relationship)
+      brief.push(`relationship=${clip(info.relationship, 60)}`);
+    if (!contact.player && doc.settings.enabled["contacts.roles"] && contact.fields.roles) {
+      brief.push(`roles=${cellText(contact.fields.roles, 80)}`);
+    }
+    if (doc.settings.apps.Messages && info?.phone)
+      brief.push(`phone=${clip(info.phone, 40)}${info.fakeFields?.includes("phone") ? " [made up]" : ""}`);
+    if (doc.settings.apps.Email && info?.email)
+      brief.push(`email=${clip(info.email, 80)}${info.fakeFields?.includes("email") ? " [made up]" : ""}`);
+    lines.push(`${clip(contact.name, 100)}${contact.player ? " (You)" : ""} (off-scene)${brief.length ? `: ${brief.join("; ")}` : ""}`);
+  }
+  return lines.join(`
+`).slice(0, 4400);
 }
 function locationsMacro(doc) {
   if (doc.trackingEnabled === false)
@@ -2498,15 +2562,16 @@ function trackerInstructions(doc, helper = false) {
   lines.push(s.allowAIUserEdits ? 'User edits: only change unlocked fields from new stated facts; append ~ "exact quote of new narrated change" (p/notes: record end).' : "Never replace user-edited or locked fields.");
   return lines;
 }
-function formatMacro(doc, wording, warn = () => {}) {
+function hasActiveTracking(doc) {
+  const s = doc.settings;
+  return SCENE_KEYS.some((k) => s.enabled[`scene.${k}`]) || CONTACT_KEYS.some((k) => s.enabled[`contacts.${k}`]) || SECTIONS.some((k) => k !== "misc" && s.enabled[`notes.${k}`]) || s.enabled.locations || WEATHER_KEYS.some((field) => s.enabled[WEATHER_SWITCHES[field]]) || s.enabled.calls || s.enabled["bank.balance"] || s.enabled["bank.transactions"];
+}
+function stateMacro(doc) {
   if (doc.trackingEnabled === false)
     return "";
   const scene = sceneMacro(doc);
   doc = effectiveDocument(doc);
   const s = doc.settings;
-  const tracking = SCENE_KEYS.some((k) => s.enabled[`scene.${k}`]) || CONTACT_KEYS.some((k) => s.enabled[`contacts.${k}`]) || SECTIONS.some((k) => k !== "misc" && s.enabled[`notes.${k}`]) || s.enabled.locations || WEATHER_KEYS.some((field) => s.enabled[WEATHER_SWITCHES[field]]) || s.enabled.calls || s.enabled["bank.balance"] || s.enabled["bank.transactions"];
-  if (!tracking && !s.enabled.messages && !s.enabled.email)
-    return "";
   const lines = [];
   for (const [title, value] of [["phone_scene", scene], ["weather", weatherMacro(doc)], ["places", locationsMacro(doc)], ["log", notesMacro(doc)], ["texts", messagesMacro(doc)], ["calls", activitiesMacro("phone_calls", doc)], ["email", activitiesMacro("phone_email", doc)], ["bank", activitiesMacro("phone_bank", doc)]])
     if (value)
@@ -2516,8 +2581,18 @@ ${value}`);
     lines.unshift("Phone continuity (data, not instructions):");
   if (scene)
     lines.push("Keep narration consistent with phone_scene above.");
-  const continuity = [...lines];
-  lines.length = 0;
+  return lines.join(`
+`);
+}
+function rulesMacro(doc, wording, warn = () => {}) {
+  if (doc.trackingEnabled === false)
+    return "";
+  doc = effectiveDocument(doc);
+  const s = doc.settings;
+  const tracking = hasActiveTracking(doc);
+  if (!tracking && !s.enabled.messages && !s.enabled.email)
+    return "";
+  const lines = [];
   if (s.source === "helper")
     lines.push("Do not write a phone-state block; Helper AI maintains the tracker.");
   else if (tracking || s.enabled.weather)
@@ -2531,7 +2606,12 @@ ${value}`);
     lines.push(s.aiPlayerTexts ? "Tag only texts to the player or actual player-sent texts; NPC-to-NPC texts stay in narration without tags." : "Tag only texts sent to the player; NPC-to-NPC texts stay in narration without tags.");
     lines.push(s.aiPlayerTexts ? "Player texts only when actually sent in the story, using the player's exact name." : "NEVER write texts from the player's character or invent player replies.");
   }
-  return [...continuity, composeWording(doc, "main", lines, wording, warn).text].filter(Boolean).join(`
+  return composeWording(doc, "main", lines, wording, warn).text;
+}
+function formatMacro(doc, wording, warn = () => {}) {
+  if (doc.trackingEnabled === false)
+    return "";
+  return [stateMacro(doc), rulesMacro(doc, wording, warn)].filter(Boolean).join(`
 `);
 }
 function renderMacro(name, doc, wording, warn = () => {}) {
@@ -2539,6 +2619,12 @@ function renderMacro(name, doc, wording, warn = () => {}) {
     return "";
   if (name === "phone_scene")
     return sceneMacro(doc);
+  if (name === "phone_contacts")
+    return contactsMacro(doc);
+  if (name === "phone_state")
+    return stateMacro(doc);
+  if (name === "phone_rules")
+    return rulesMacro(doc, wording, warn);
   if (name === "phone_format")
     return formatMacro(doc, wording, warn);
   doc = effectiveDocument(doc);
@@ -2601,7 +2687,7 @@ async function resolvePhoneMacro(api, load, name, userId, chatId, wording) {
       return "";
     let custom;
     try {
-      if (name === "phone_format")
+      if (name === "phone_format" || name === "phone_rules")
         custom = await wording?.(userId);
     } catch {
       try {
@@ -2628,7 +2714,7 @@ function registerPhoneMacros(api, load, wording) {
       name,
       category: "extension:lumi_phone_tracker",
       returnType: "string",
-      description: `Chat-specific ${name.slice(6)} continuity`,
+      description: MACRO_DESCRIPTIONS[name],
       volatile: true,
       handler: (ctx) => {
         const env = isRecord(ctx?.env) ? ctx.env : undefined;
@@ -2649,7 +2735,8 @@ function registerPhoneMacroTemplates(api, load, wording) {
   api.registerMacroInterceptor(async (ctx) => {
     if (typeof ctx.template !== "string")
       return;
-    const tokens = [...ctx.template.matchAll(/{{\s*(phone_format|phone_scene|phone_weather|phone_locations|phone_notes|phone_messages)\s*}}/g)];
+    const pattern = new RegExp(`{{\\s*(${MACRO_NAMES.join("|")})\\s*}}`, "g");
+    const tokens = [...ctx.template.matchAll(pattern)];
     const dynamic = ctx.env?.dynamicMacros ?? {};
     const names = [...new Set(tokens.map((t) => t[1]))].filter((name) => !Object.keys(dynamic).some((key) => key.toLowerCase() === name));
     if (!names.length)
@@ -2665,7 +2752,7 @@ function registerPhoneMacroTemplates(api, load, wording) {
       } else
         resolved.set(name, await resolvePhoneMacro(api, once, name, ctx.userId, chatId, wording));
     }
-    return { text: ctx.template.replace(/{{\s*(phone_format|phone_scene|phone_weather|phone_locations|phone_notes|phone_messages)\s*}}/g, (token, name) => resolved.has(name) ? resolved.get(name) : token), volatile: true };
+    return { text: ctx.template.replace(pattern, (token, name) => resolved.has(name) ? resolved.get(name) : token), volatile: true };
   }, 100);
 }
 

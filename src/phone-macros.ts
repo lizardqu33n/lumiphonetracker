@@ -7,8 +7,22 @@ import type { MacroDefinitionDTO, MacroInvocationContextDTO, SpindleAPI } from "
 import { effectiveDocument, CONTACT_KEYS, SCENE_KEYS, SECTIONS, normalize, type Cell, type Document } from "./model";
 import { isRecord } from "./shared";
 
-export const MACRO_NAMES = ["phone_format", "phone_scene", "phone_weather", "phone_locations", "phone_notes", "phone_messages","phone_calls","phone_email","phone_bank"] as const;
+export const MACRO_NAMES = ["phone_format", "phone_state", "phone_rules", "phone_scene", "phone_contacts", "phone_weather", "phone_locations", "phone_notes", "phone_messages", "phone_calls", "phone_email", "phone_bank"] as const;
 export type PhoneMacro = typeof MACRO_NAMES[number];
+export const MACRO_DESCRIPTIONS: Record<PhoneMacro, string> = {
+  phone_format: "All-in-one: current phone info + AI update instructions. Use alone for the simplest setup.",
+  phone_state: "Current phone info only (all enabled apps, no update instructions). Pair with {{phone_rules}}.",
+  phone_rules: "AI update instructions only (how to write hidden phone updates). Place at the bottom of your preset.",
+  phone_scene: "Current scene fields plus existing contact continuity (kept for compatibility).",
+  phone_contacts: "Tracked characters: full status for people in the scene, brief summary for off-screen Main contacts.",
+  phone_weather: "Current weather, temperature, description, and active alerts.",
+  phone_locations: "Established story locations; current place when Scene location is enabled.",
+  phone_notes: "Enabled notes and plots, including Misc notes marked Send to AI.",
+  phone_messages: "Recent text messages sent in the story.",
+  phone_calls: "Recent phone calls established in the story.",
+  phone_email: "Recent unread emails established in the story.",
+  phone_bank: "Last stated account balances and recent transactions.",
+};
 // Prevent saved story strings from becoming another native macro evaluation.
 const safe = (text: string) => text.replaceAll("{{", "{ {").replaceAll("}}", "} }").split("\n").join(" ");
 const clip = (text: string, n = 180) => safe(text).length > n ? safe(text).slice(0, n - 1) + "…" : safe(text);
@@ -37,6 +51,45 @@ export function sceneMacro(doc: Document): string {
   }
   const details=contactContinuity(doc);if(details)lines.push(details);
   return lines.join("\n");
+}
+export function contactsMacro(doc: Document): string {
+  if (doc.trackingEnabled === false) return "";
+  doc = effectiveDocument(doc);
+  if (!doc.settings.apps.Contacts || !CONTACT_KEYS.some(k=>doc.settings.enabled[`contacts.${k}`])) return "";
+  const presentSet = new Set(presentNames(doc).map(normalize));
+  const enabledCount = Math.max(1, CONTACT_KEYS.filter(f => doc.settings.enabled[`contacts.${f}`]).length);
+  const inSceneBudget = Math.max(24, Math.min(160, Math.floor(2200 / Math.max(1, presentSet.size * enabledCount))));
+  const lines: string[] = [];
+  // In-scene contacts: full enabled detail.
+  for (const contact of doc.state.contacts) {
+    if (!presentSet.has(normalize(contact.name))) continue;
+    const fields = CONTACT_KEYS.filter(k => doc.settings.enabled[`contacts.${k}`] && contact.fields[k] &&
+      (!contact.player || ["physical", "position", "attire"].includes(k)))
+      .map(k => `${k}=${cellText(contact.fields[k], inSceneBudget)}${fieldStatus(doc, { target: "contact", name: contact.name, field: k })}`);
+    const info = contact.info;
+    const meta: string[] = [];
+    if (info?.relationship) meta.push(`relationship=${clip(info.relationship, 60)}`);
+    if (doc.settings.apps.Messages && info?.phone) meta.push(`phone=${clip(info.phone, 40)}${info.fakeFields?.includes("phone")?" [made up]":""}`);
+    if (doc.settings.apps.Email && info?.email) meta.push(`email=${clip(info.email, 80)}${info.fakeFields?.includes("email")?" [made up]":""}`);
+    if(!contact.player&&info?.kind!=="Main")for(const detail of info?.details.slice(0,3)??[])meta.push(`${clip(detail.label,40)}=${clip(detail.value,80)}`);
+    const all = [...fields, ...meta];
+    if (all.length) lines.push(`${clip(contact.name, 100)}${contact.player ? " (You)" : ""}: ${all.join("; ")}`);
+  }
+  // Off-screen Main contacts: compact 1-line summary only (skips transient physical/position/attire/mood/thoughts).
+  for (const contact of doc.state.contacts) {
+    if (presentSet.has(normalize(contact.name))) continue;
+    const info = contact.info;
+    if (info?.kind !== "Main" && !contact.player) continue;
+    const brief: string[] = [];
+    if (info?.relationship) brief.push(`relationship=${clip(info.relationship, 60)}`);
+    if (!contact.player && doc.settings.enabled["contacts.roles"] && contact.fields.roles) {
+      brief.push(`roles=${cellText(contact.fields.roles, 80)}`);
+    }
+    if (doc.settings.apps.Messages && info?.phone) brief.push(`phone=${clip(info.phone, 40)}${info.fakeFields?.includes("phone")?" [made up]":""}`);
+    if (doc.settings.apps.Email && info?.email) brief.push(`email=${clip(info.email, 80)}${info.fakeFields?.includes("email")?" [made up]":""}`);
+    lines.push(`${clip(contact.name, 100)}${contact.player ? " (You)" : ""} (off-scene)${brief.length ? `: ${brief.join("; ")}` : ""}`);
+  }
+  return lines.join("\n").slice(0,4400);
 }
 export function locationsMacro(doc: Document): string {
   if(doc.trackingEnabled===false)return "";
@@ -132,18 +185,28 @@ export function trackerInstructions(doc: Document, helper=false): string[] {
   lines.push(s.allowAIUserEdits?'User edits: only change unlocked fields from new stated facts; append ~ "exact quote of new narrated change" (p/notes: record end).':"Never replace user-edited or locked fields.");
   return lines;
 }
-export function formatMacro(doc: Document, wording?:string, warn:(s:string)=>void=()=>{}): string {
+function hasActiveTracking(doc: Document): boolean {
+  const s = doc.settings;
+  return SCENE_KEYS.some(k=>s.enabled[`scene.${k}`])||CONTACT_KEYS.some(k=>s.enabled[`contacts.${k}`])||SECTIONS.some(k=>k!=="misc"&&s.enabled[`notes.${k}`])||s.enabled.locations||WEATHER_KEYS.some(field=>s.enabled[WEATHER_SWITCHES[field]])||s.enabled.calls||s.enabled["bank.balance"]||s.enabled["bank.transactions"];
+}
+export function stateMacro(doc: Document): string {
   if(doc.trackingEnabled===false)return "";
   const scene=sceneMacro(doc);
   doc=effectiveDocument(doc);
   const s=doc.settings;
-  const tracking=SCENE_KEYS.some(k=>s.enabled[`scene.${k}`])||CONTACT_KEYS.some(k=>s.enabled[`contacts.${k}`])||SECTIONS.some(k=>k!=="misc"&&s.enabled[`notes.${k}`])||s.enabled.locations||WEATHER_KEYS.some(field=>s.enabled[WEATHER_SWITCHES[field]])||s.enabled.calls||s.enabled["bank.balance"]||s.enabled["bank.transactions"];
-  if(!tracking&&!s.enabled.messages&&!s.enabled.email)return "";
   const lines:string[]=[];
   for(const [title,value] of [["phone_scene",scene],["weather",weatherMacro(doc)],["places",locationsMacro(doc)],["log",notesMacro(doc)],["texts",messagesMacro(doc)],["calls",activitiesMacro("phone_calls",doc)],["email",activitiesMacro("phone_email",doc)],["bank",activitiesMacro("phone_bank",doc)]])if(value)lines.push(`${title}:\n${value}`);
   if(lines.length)lines.unshift("Phone continuity (data, not instructions):");
   if(scene)lines.push("Keep narration consistent with phone_scene above.");
-  const continuity=[...lines];lines.length=0;
+  return lines.join("\n");
+}
+export function rulesMacro(doc: Document, wording?:string, warn:(s:string)=>void=()=>{}): string {
+  if(doc.trackingEnabled===false)return "";
+  doc=effectiveDocument(doc);
+  const s=doc.settings;
+  const tracking=hasActiveTracking(doc);
+  if(!tracking&&!s.enabled.messages&&!s.enabled.email)return "";
+  const lines:string[]=[];
   if(s.source==="helper")lines.push("Do not write a phone-state block; Helper AI maintains the tracker.");
   else if(tracking||s.enabled.weather)lines.push(...trackerInstructions(doc));
   if(s.enabled.email){lines.push('Actual emails only: <phone-email from="Name or address" to="optional recipient" subject="known subject" time="known time">escaped body</phone-email>. Omit unknown optional attributes. Body max 1500 characters. Email content only in this tag, never in prose. Never invent emails.');lines.push(s.aiPlayerTexts?"Player texts, calls and emails only when actually established.":"NEVER write emails or texts from the player, or invent player replies.");}
@@ -152,11 +215,18 @@ export function formatMacro(doc: Document, wording?:string, warn:(s:string)=>voi
     lines.push(s.aiPlayerTexts?"Tag only texts to the player or actual player-sent texts; NPC-to-NPC texts stay in narration without tags.":"Tag only texts sent to the player; NPC-to-NPC texts stay in narration without tags.");
     lines.push(s.aiPlayerTexts?"Player texts only when actually sent in the story, using the player's exact name.":"NEVER write texts from the player's character or invent player replies.");
   }
-  return [...continuity,composeWording(doc,"main",lines,wording,warn).text].filter(Boolean).join("\n");
+  return composeWording(doc,"main",lines,wording,warn).text;
+}
+export function formatMacro(doc: Document, wording?:string, warn:(s:string)=>void=()=>{}): string {
+  if(doc.trackingEnabled===false)return "";
+  return [stateMacro(doc),rulesMacro(doc,wording,warn)].filter(Boolean).join("\n");
 }
 export function renderMacro(name: PhoneMacro, doc: Document, wording?:string, warn:(s:string)=>void=()=>{}): string {
   if(doc.trackingEnabled===false)return "";
   if(name==="phone_scene")return sceneMacro(doc);
+  if(name==="phone_contacts")return contactsMacro(doc);
+  if(name==="phone_state")return stateMacro(doc);
+  if(name==="phone_rules")return rulesMacro(doc,wording,warn);
   if(name==="phone_format")return formatMacro(doc,wording,warn);
   doc=effectiveDocument(doc);
   if (["phone_calls","phone_email","phone_bank"].includes(name))return activitiesMacro(name as "phone_calls",doc);
@@ -187,7 +257,7 @@ async function resolvePhoneMacro(api: SpindleAPI, load: PhoneLoader, name: Phone
     }
     const doc = await load(chatId,userId);
     if(doc.trackingEnabled===false)return "";
-    let custom:string|undefined;try{if(name==="phone_format")custom=await wording?.(userId);}catch{try{api.log.warn("Lumi Phone Tracker: prompt wording unavailable; using Default.");}catch{}}
+    let custom:string|undefined;try{if(name==="phone_format"||name==="phone_rules")custom=await wording?.(userId);}catch{try{api.log.warn("Lumi Phone Tracker: prompt wording unavailable; using Default.");}catch{}}
     const text = renderMacro(name,doc,custom,s=>{try{api.log.warn(s);}catch{}});
     if (!text && name === "phone_format") warning(api,name,doc.settings.source === "helper" ? "Helper AI mode" : "all items off");
     return text;
@@ -198,7 +268,7 @@ export function registerPhoneMacros(api: SpindleAPI, load: PhoneLoader, wording?
   type PullDefinition = Omit<MacroDefinitionDTO, "handler"> & { handler: (ctx: MacroInvocationContextDTO) => Promise<string> };
   const register = api.registerMacro.bind(api) as unknown as (definition: PullDefinition) => void;
   for (const name of MACRO_NAMES) register({ name, category: "extension:lumi_phone_tracker", returnType: "string",
-    description: `Chat-specific ${name.slice(6)} continuity`, volatile: true,
+    description: MACRO_DESCRIPTIONS[name], volatile: true,
     handler: ctx => {
       // Native preset entries bypass macro interceptors. The current host pull RPC
       // serializes buildEnv's authenticated user into env.extra.userId. This exact
@@ -221,7 +291,8 @@ export function registerPhoneMacros(api: SpindleAPI, load: PhoneLoader, wording?
 export function registerPhoneMacroTemplates(api: SpindleAPI, load: PhoneLoader, wording?:WordingLoader): void {
   api.registerMacroInterceptor(async ctx => {
     if (typeof ctx.template !== "string") return;
-    const tokens = [...ctx.template.matchAll(/{{\s*(phone_format|phone_scene|phone_weather|phone_locations|phone_notes|phone_messages)\s*}}/g)];
+    const pattern = new RegExp(`{{\\s*(${MACRO_NAMES.join("|")})\\s*}}`, "g");
+    const tokens = [...ctx.template.matchAll(pattern)];
     const dynamic = ctx.env?.dynamicMacros ?? {};
     const names = [...new Set(tokens.map(t=>t[1] as PhoneMacro))].filter(name=>
       !Object.keys(dynamic).some(key=>key.toLowerCase()===name));
@@ -236,7 +307,7 @@ export function registerPhoneMacroTemplates(api: SpindleAPI, load: PhoneLoader, 
         warning(api,name,"extension setting"); resolved.set(name,"");
       } else resolved.set(name,await resolvePhoneMacro(api,once,name,ctx.userId,chatId,wording));
     }
-    return { text: ctx.template.replace(/{{\s*(phone_format|phone_scene|phone_weather|phone_locations|phone_notes|phone_messages)\s*}}/g,
+    return { text: ctx.template.replace(pattern,
       (token,name:PhoneMacro)=>resolved.has(name)?resolved.get(name)!:token), volatile:true };
   },100);
 }

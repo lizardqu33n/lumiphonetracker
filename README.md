@@ -2,7 +2,7 @@
 
 A floating story phone for [Lumiverse](https://docs.lumiverse.chat/) that tracks **Scene**, **Weather**, **Locations**, **Notes**, **Contacts**, and **Messages**—plus optional **Calls**, **Email**, and **Bank** apps.
 
-Local candidate **0.19.3** (not published). Built files (`dist/`) are included, so you don't need to compile anything to install it.
+Version **0.20.0**. Built files (`dist/`) are included, so you don't need to compile anything to install it.
 
 ## Quick start
 
@@ -11,11 +11,48 @@ Local candidate **0.19.3** (not published). Built files (`dist/`) are included, 
 3. Open a chat, open the floating phone, and select **Turn on for this chat**.
    - New chats start with tracking **off**. Existing tracked chats stay on.
    - Turning tracking off keeps all saved data.
-4. Add this single line to your active preset and save:
+4. Add `{{phone_format}}` to your active preset (or split the macros—see **Prompt macros** below) and save.
+
+## Prompt macros (where to put them)
+
+The model writes hidden update tags at the end of its reply. They stay in saved messages for rebuilding but are hidden from the displayed story. Tracker blocks are removed from outgoing history by default (`Keep tracker blocks = 0`); recent text tags follow the separate retention setting, defaulting to the last 3 chat messages. Macros supply current phone information and writing instructions.
+
+Pick whichever setup fits your preset:
+
+### Option 1: Simplest (1 macro)
+Drop this at the bottom of your preset (post-history / instructions):
 
 ```text
 {{phone_format}}
 ```
+
+This inserts **both** your current phone info and the AI update instructions together.
+
+Use one setup below. Combining `{{phone_format}}` with state/rules/app macros repeats their content.
+
+### Option 2: Clean split (2 macros)
+If you want story context near the top of your preset and formatting rules at the bottom:
+
+* Put **`{{phone_state}}`** near the top (system prompt / story context) — inserts all enabled phone info without update rules.
+* Put **`{{phone_rules}}`** at the bottom (post-history / instructions) — tells the AI how to write hidden phone updates.
+
+### Option 3: Custom placement (mix and match)
+Place individual app macros wherever you want them in your preset, and put **`{{phone_rules}}`** at the bottom:
+
+| Macro | What it inserts | Suggested spot |
+| --- | --- | --- |
+| `{{phone_format}}` | **All-in-one:** current phone info + AI update instructions. | Bottom of preset (alone) |
+| `{{phone_state}}` | All enabled phone info without update instructions. | Top / story context |
+| `{{phone_rules}}` | AI update instructions only (respects custom wording). | Bottom / post-history |
+| `{{phone_scene}}` | Scene fields plus legacy contact continuity. It overlaps `phone_contacts`; use both only if you want that repetition. | Story context |
+| `{{phone_contacts}}` | Full status for characters in the scene; compact summary for off-screen `Main` contacts (minor off-screen NPCs are omitted to save tokens). | Character / story context |
+| `{{phone_weather}}` | Current weather, temperature, description, and active alerts. Scene carries season. | Story context |
+| `{{phone_locations}}` | Current place and recently established story locations. | World / story context |
+| `{{phone_notes}}` | Enabled notes and plots, including Misc notes marked Send to AI. | Story context / memory |
+| `{{phone_messages}}` | Recent text messages sent in the story. | Near recent history |
+| `{{phone_calls}}` | Recent phone calls established in the story. | Story context |
+| `{{phone_email}}` | Recent unread emails established in the story. | Story context |
+| `{{phone_bank}}` | Last stated account balances and recent transactions. | Story context |
 
 ## How it works
 

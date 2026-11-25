@@ -730,7 +730,7 @@ try {
   check(await corrections.locator(".lpt-note").first().evaluate(n=>{const title=n.querySelector(".lpt-note-line")!.textContent;return !n.querySelector(".lpt-note-full")!.textContent!.includes(title!);}),"Note body omits the repeated title");
   await corrections.locator(".harness-widget").screenshot({path:".test-artifacts/corrections-notes.png"});
   await home(corrections);await open(corrections,"Contacts");await corrections.locator(".lpt-contact-row").filter({hasText:"Ada"}).click();
-  check(await corrections.locator(".lpt-contact-link img").first().evaluate(n=>getComputedStyle(n).objectFit==="contain"&&Math.abs(n.getBoundingClientRect().width-n.parentElement!.clientWidth)<1),"Contact message artwork is larger and cannot shrink or stretch");
+  check(await corrections.locator(".lpt-contact-link img").first().evaluate(n=>{const art=n.getBoundingClientRect(),box=n.parentElement!.getBoundingClientRect();return getComputedStyle(n).objectFit==="contain"&&art.width>=16&&Math.abs(art.width-art.height)<1&&art.width<=box.width&&Math.abs((art.left+art.width/2)-(box.left+box.width/2))<1;}),"Contact message artwork stays proportional and centered within the current padded button");
   await corrections.locator(".harness-widget").screenshot({path:".test-artifacts/corrections-contact.png"});
   await home(corrections);await corrections.locator(".harness-widget").screenshot({path:".test-artifacts/corrections-home.png"});
   await section(corrections,"apps");

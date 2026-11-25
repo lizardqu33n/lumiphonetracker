@@ -1,6 +1,15 @@
 # Changelog
 
-## 0.19.3 - Local lightweight update candidate
+## 0.20.0 - Split prompt macros and clearer macro descriptions
+
+- Add phone_state for continuity only and phone_rules for update instructions, including the generating user's selected wording. Existing phone_format remains the all-in-one option; its preset line still works.
+- Add optional phone_contacts with enabled in-scene status, confirmed NPC details, marked made-up addresses and brief off-scene Main summaries. Respect the Contacts app and field switches, player restrictions, macro escaping and a bounded output size.
+- Give every registered macro a plain description. The macro interceptor now recognizes all registered names, including Calls, Email and Bank, while retaining trusted user/chat checks and dynamic-macro overrides.
+- Correct the supplied test fixtures and all-switches-off leak; add coverage for new pull handlers, personal wording, shared interceptor reads, disabled apps, escaped data and enabled Misc continuity.
+- Document the one-macro and split setups, their overlap and the real prompt-retention defaults. Preserve the current local compact styling and all previous encoding, refresh, asset-size and conflict fixes.
+
+
+## 0.19.3 - Lightweight tracking updates
 
 - Reduce the frontend from 7,296,378 to 2,024,318 bytes (72.3%) by embedding proportion-preserving nearest-neighbor PNG derivatives: emoji/contact controls fit 64px, weather 192px. No trimming, recoloring, external loading or font/layout changes. Original source-cell audit and approved sleepy-Z correction remain recorded; the resized pixels are not source-resolution lossless copies.
 - Compare accepted-history length and tail first, then canonical entries individually. Earlier message drift remains detectable and no edit protection is removed. Unchanged journals remain linear work, with smaller intermediate JSON allocations.

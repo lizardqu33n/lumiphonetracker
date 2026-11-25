@@ -3206,7 +3206,7 @@ var styles_default = `/* =======================================================
   --lpt-shadow-hard: #4b2478;
 
   /* ---- Gloss (a light overlay painted over a solid color) ---- */
-  --lpt-gloss: linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0, rgba(255, 255, 255, 0.22) 48%, rgba(255, 255, 255, 0) 50%, rgba(255, 255, 255, 0) 100%);
+  --lpt-gloss: linear-gradient(180deg, rgba(255, 255, 255, 0.36) 0%, rgba(255, 255, 255, 0.1) 46%, rgba(255, 255, 255, 0) 52%);
 
   /* ---- Hardware details ---- */
   --lpt-notch-bg: var(--lpt-outline);
@@ -3275,18 +3275,18 @@ var styles_default = `/* =======================================================
   --lpt-marker-color: var(--lpt-pink-1);
 
   /* ---- Toggle switch ---- */
-  --lpt-toggle-width: 52px;
-  --lpt-toggle-height: 30px;
+  --lpt-toggle-width: 44px;
+  --lpt-toggle-height: 24px;
   --lpt-toggle-thumb: #ffffff;
   --lpt-toggle-off-bg: #3d2059;
   --lpt-toggle-off-thumb: var(--lpt-lilac-1);
 
   /* ---- Radii and spacing ---- */
-  --lpt-radius: 14px;
+  --lpt-radius: 12px;
   --lpt-card-radius: 14px;
-  --lpt-icon-radius: 22px;
-  --lpt-frame-radius: 44px;
-  --lpt-space: 6px;
+  --lpt-icon-radius: 18px;
+  --lpt-frame-radius: 34px;
+  --lpt-space: 8px;
 
   /* ---- Type (bundled Google Fonts override these fallbacks below) ---- */
   --lpt-font: ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN", "Arial Rounded MT Bold", "Varela Round", system-ui, sans-serif;
@@ -3307,13 +3307,13 @@ var styles_default = `/* =======================================================
   --lpt-launcher-shadow-blur: 3px;
   --lpt-launcher-shadow-y: 2px;
   --lpt-icon-size: 26px;
-  --lpt-app-image-size: 44px;
-  --lpt-app-tile-size: 66px;
+  --lpt-app-image-size: 36px;
+  --lpt-app-tile-size: 58px;
   --lpt-icon-stroke-size: 2px;
   --lpt-control-size: 44px;
-  --lpt-border-size: 2px;
-  --lpt-card-border-size: 2px;
-  --lpt-frame-border-size: 4px;
+  --lpt-border-size: 1px;
+  --lpt-card-border-size: 1.5px;
+  --lpt-frame-border-size: 3px;
   --lpt-focus-size: 3px;
   --lpt-opacity-disabled: 0.55;
   --lpt-grid-columns: 3;
@@ -3321,10 +3321,10 @@ var styles_default = `/* =======================================================
 
   /* ---- Shadows and timing ---- */
   --lpt-shadow:
-    0 5px 0 0 var(--lpt-shadow-hard),
-    0 16px 26px -10px rgba(10, 3, 20, 0.6),
-    inset 0 4px 0 0 rgba(255, 255, 255, 0.4),
-    inset 0 -3px 0 0 rgba(66, 6, 66, 0.55);
+    0 2px 0 0 rgba(75, 36, 120, 0.55),
+    0 14px 28px -10px rgba(10, 3, 20, 0.65),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.28),
+    inset 0 -2px 0 0 rgba(66, 6, 66, 0.45);
   --lpt-icon-fill: var(--lpt-lilac-2);
   --lpt-transition: 140ms cubic-bezier(0.22, 1, 0.36, 1);
 
@@ -4870,7 +4870,7 @@ var styles_default = `/* =======================================================
   --lpt-weather-chip-radius: var(--lpt-contact-chip-radius);
   --lpt-weather-border: var(--lpt-contact-border);
   --lpt-weather-border-width: var(--lpt-contact-line-width);
-  --lpt-weather-icon-size: 84px;
+  --lpt-weather-icon-size: 64px;
   --lpt-weather-temperature-size: 2rem;
   --lpt-weather-condition-size: 0.95rem;
   --lpt-weather-small-size: var(--lpt-small-font-size);
@@ -5053,7 +5053,7 @@ var styles_default = `/* =======================================================
 .lpt-thread .lpt-reply-status,.lpt-thread .lpt-manual-tag {grid-column:1/-1;}
 .lpt-thread .lpt-manual-tag {max-height:calc(var(--lpt-control-size)*2);}
 
-.lpt-emoji {display:inline-block;width:var(--lpt-emoji-size);height:var(--lpt-emoji-size);object-fit:contain;image-rendering:pixelated;vertical-align:middle;background:none;border:0;}
+.lpt-emoji {display:inline-block;width:var(--lpt-emoji-size);height:var(--lpt-emoji-size);object-fit:contain;image-rendering:auto;vertical-align:middle;background:none;border:0;}
 .lpt-emoji-toggle {display:grid;place-items:center;min-width:var(--lpt-control-size);min-height:var(--lpt-control-size);padding:var(--lpt-emoji-gap);border:var(--lpt-border-size) solid var(--lpt-border);border-radius:var(--lpt-radius);background-color:var(--lpt-card-bg);color:var(--lpt-text);cursor:pointer;}
 .lpt-emoji-toggle:focus-visible,.lpt-emoji-option:focus-visible,.lpt-emoji-close:focus-visible {outline:var(--lpt-focus-size) solid var(--lpt-focus-color);outline-offset:calc(-1 * var(--lpt-focus-size));}
 .lpt-emoji-picker {position:absolute;z-index:3;left:0;right:0;bottom:100%;max-height:var(--lpt-emoji-picker-max);max-height:min(var(--lpt-emoji-picker-max),calc(100cqh - var(--lpt-control-size) * 2));overflow:auto;overscroll-behavior:contain;padding:var(--lpt-space);border:var(--lpt-border-size) solid var(--lpt-border);border-radius:var(--lpt-radius);background-color:var(--lpt-card-bg);color:var(--lpt-text);}
@@ -5168,9 +5168,11 @@ var styles_default = `/* =======================================================
 .lpt-contact-actions .lpt-merge-confirm {flex-basis:100%;}
 .lpt-reply-label {padding-top:0;}
 
-/* Image actions use one square size for the target and its contained artwork. */
+/* Sleek Y2K x modern icon buttons: full 44px square tap target, compact centered artwork. */
 .lpt-root {
   --lpt-image-button-size:var(--lpt-control-size);
+  --lpt-image-art-size:22px;
+  --lpt-field-art-size:18px;
 }
 .lpt-root :is(.lpt-image-action,.lpt-icon-action,.lpt-field-lock,.lpt-field-restore,.lpt-back,.lpt-close,.lpt-contact-link):has(> img:only-child) {
   display:inline-grid;place-items:center;box-sizing:border-box;
@@ -5179,10 +5181,18 @@ var styles_default = `/* =======================================================
   max-width:var(--lpt-image-button-size);max-height:var(--lpt-image-button-size);
   flex:0 0 var(--lpt-image-button-size);padding:0;gap:0;
   justify-self:start;vertical-align:middle;
+  border-radius:12px;transition:background-color var(--lpt-transition),transform var(--lpt-transition);
 }
-.lpt-root :is(.lpt-image-action,.lpt-icon-action,.lpt-field-lock,.lpt-field-restore,.lpt-back,.lpt-close,.lpt-contact-link) > img:only-child {
-  display:block;width:100%;height:100%;max-width:100%;max-height:100%;
-  object-fit:contain;object-position:center;aspect-ratio:1;flex:none;
+.lpt-root :is(.lpt-image-action,.lpt-icon-action,.lpt-field-lock,.lpt-field-restore,.lpt-back,.lpt-close,.lpt-contact-link):has(> img:only-child):hover:not(:disabled) {
+  background-color:rgba(222,198,246,0.12);
+}
+.lpt-root :is(.lpt-image-action,.lpt-icon-action,.lpt-back,.lpt-close,.lpt-contact-link) > img:only-child {
+  display:block;width:var(--lpt-image-art-size);height:var(--lpt-image-art-size);max-width:100%;max-height:100%;
+  object-fit:contain;object-position:center;aspect-ratio:1;flex:none;image-rendering:auto;
+}
+.lpt-root :is(.lpt-field-lock,.lpt-field-restore) > img:only-child {
+  display:block;width:var(--lpt-field-art-size);height:var(--lpt-field-art-size);max-width:100%;max-height:100%;
+  object-fit:contain;object-position:center;aspect-ratio:1;flex:none;image-rendering:auto;
 }
 .lpt-root :is(.lpt-button,.lpt-save,.lpt-cancel,.lpt-delete):not(:has(> img:only-child)) {
   width:fit-content;justify-self:start;
@@ -5251,6 +5261,68 @@ var styles_default = `/* =======================================================
 /* Per-chat tracking switch, separate from App Store membership. */
 .lpt-root .lpt-chat-toggle { margin:0 0 var(--lpt-space); max-width:100%; }
 .lpt-root .lpt-chat-off { margin:0; }
+
+/* Sleek Y2K x modern proportions: airy spacing, softer depth, compact pills. */
+.lpt-frame {
+  padding-inline: 12px;
+}
+.lpt-content {
+  padding: 10px 10px 14px;
+  gap: 10px;
+}
+.lpt-header {
+  padding: 6px 8px;
+  gap: 6px;
+}
+.lpt-card,
+.lpt-contact-page,
+.lpt-weather-card {
+  border-width: 1px;
+  border-radius: var(--lpt-card-radius);
+  box-shadow: 0 2px 10px rgba(10, 3, 20, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+.lpt-contact-page,
+.lpt-weather-card {
+  padding: 10px 12px;
+}
+.lpt-field-unit {
+  padding: 8px 10px;
+}
+.lpt-field-unit:has(> .lpt-location) {
+  border-width: 1.5px;
+  box-shadow: 0 3px 12px rgba(10, 3, 20, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+.lpt-root :is(.lpt-button,.lpt-save,.lpt-cancel,.lpt-delete):not(:has(> img:only-child)) {
+  min-height: 34px;
+  padding: 6px 13px;
+  border-width: 1px;
+  border-radius: 999px;
+  font-size: 13px;
+  box-shadow: 0 1px 0 rgba(66, 6, 66, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.lpt-root .lpt-form :is(input.lpt-input,select.lpt-input,.lpt-textarea,.lpt-number) {
+  border-width: 1px;
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+.lpt-home {
+  gap: 10px 8px;
+  padding: 6px 2px;
+}
+.lpt-home .lpt-app-icon {
+  box-shadow: 0 2px 0 rgba(66, 6, 66, 0.45), 0 6px 12px -4px rgba(10, 3, 20, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.48);
+}
+.lpt-marker,
+.lpt-contact-chip {
+  border-width: 1px;
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.lpt-thread .lpt-text-message {
+  border-width: 1px;
+  padding: 7px 11px;
+  box-shadow: 0 1px 4px rgba(10, 3, 20, 0.25);
+}
 `;
 
 // src/message-reads.ts
@@ -6427,59 +6499,76 @@ var sidebar_default = `/* Sidebar only: protected from the phone Shadow DOM/cust
   .lpt-store-button,.lpt-toggle-chip,.lpt-side-number,.lpt-helper-source,.lpt-helper-connection,.lpt-personal-button,.lpt-personal-input,.lpt-personal-select,.lpt-setup-button,.lpt-css-file::file-selector-button {min-height:var(--lpt-side-target);}
 }
 
-/* Compact pastel stationery typography, with the protected toolbar intact. */
+/* Sleek Y2K x modern sidebar: compact controls, breathable spacing, protected toolbar intact. */
 .lpt-sidebar {
   --lpt-side-font:"LPT Sour Gummy","Verdana",sans-serif;
   --lpt-side-heading-font:"LPT Cherry Bomb One","Arial Rounded MT Bold",sans-serif;
-  --lpt-side-font-size:12px;--lpt-side-gap:4px;--lpt-side-space:6px;
-  --lpt-side-toolbar-icon:24px;--lpt-side-section-icon:18px;--lpt-side-app-icon:20px;
-  --lpt-side-store-action-size:28px;
-  font-family:var(--lpt-side-font);font-size:var(--lpt-side-font-size);line-height:1.4;
+  --lpt-side-ui-font:"LPT DynaPuff",sans-serif;
+  --lpt-side-decorative-font:"LPT Shrikhand",serif;
+  --lpt-side-font-size:12px;
+  --lpt-side-gap:6px;
+  --lpt-side-space:10px;
+  --lpt-side-radius:10px;
+  --lpt-side-toolbar-icon:20px;
+  --lpt-side-section-icon:18px;
+  --lpt-side-app-icon:30px;
+  --lpt-side-store-action-size:22px;
+  font-family:var(--lpt-side-font);
+  font-size:var(--lpt-side-font-size);
+  line-height:1.4;
 }
-.lpt-toolbar-button {min-height:44px;}
-.lpt-side-summary {min-height:34px;gap:6px;}
-.lpt-side-heading {font-family:var(--lpt-side-heading-font);font-size:13px;font-weight:700;}
-.lpt-side-legend {font-family:var(--lpt-side-heading-font);font-size:12px;padding-bottom:2px;}
-.lpt-side-group {gap:4px;margin:4px 0 6px;}
-.lpt-toggle-chip {min-height:26px;padding:2px 5px;gap:4px;border-radius:6px;font-size:11px;}
+.lpt-recovery-actions {padding:4px var(--lpt-side-space);}
+.lpt-toolbar-button {min-height:40px;border-radius:10px;}
+.lpt-toolbar-icon,.lpt-side-icon,.lpt-store-action-image {image-rendering:auto;}
+.lpt-side-summary {min-height:36px;gap:8px;padding:6px 4px;}
+.lpt-side-heading {font-family:var(--lpt-side-heading-font);font-weight:400;font-size:14px;}
+.lpt-sidebar button,.lpt-toggle-chip,.lpt-side-legend,.lpt-store-name,.lpt-side-scope {
+  font-family:var(--lpt-side-ui-font);font-weight:400;
+}
+.lpt-sidebar input,.lpt-sidebar textarea,.lpt-sidebar select {font-family:var(--lpt-side-font);}
+.lpt-side-legend {font-size:12px;padding:2px 0 4px;}
+.lpt-side-group {gap:5px;margin:6px 0 10px;}
+.lpt-toggle-chip {min-height:26px;padding:3px 8px;gap:5px;border-radius:999px;font-size:11px;transition:background-color 120ms ease,border-color 120ms ease;}
 .lpt-side-checkbox {width:12px;height:12px;}
-.lpt-store-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;}
-.lpt-store-row {grid-template-columns:var(--lpt-side-app-icon) minmax(0,1fr) var(--lpt-side-store-action-size);gap:4px;padding:4px;}
-.lpt-store-row .lpt-side-label {grid-column:2;grid-row:1;text-align:left;}
-.lpt-store-name {font-family:var(--lpt-side-font);font-size:11px;font-weight:700;}
-.lpt-store-button {grid-column:3;grid-row:1;display:grid;place-items:center;width:var(--lpt-side-store-action-size);height:var(--lpt-side-store-action-size);min-height:0;padding:0;border:0;background:transparent;box-shadow:none;}
-.lpt-store-action-image {display:block;width:100%;height:100%;object-fit:contain;image-rendering:pixelated;}
-.lpt-side-number,.lpt-helper-source,.lpt-helper-connection,.lpt-personal-input,.lpt-personal-select {min-height:28px;padding:3px 6px;font-size:12px;}
-@container (min-width:300px) {.lpt-store-grid {grid-template-columns:repeat(2,minmax(0,1fr));}}
-@container (max-width:219px) {.lpt-store-grid {grid-template-columns:1fr;}}
+.lpt-personal-button {min-height:28px;padding:4px 10px;border-radius:999px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.35);}
+.lpt-side-number,.lpt-helper-source,.lpt-helper-connection,.lpt-personal-input,.lpt-personal-select,.lpt-fake-domain {
+  min-height:30px;padding:4px 8px;font-size:12px;border-radius:8px;
+}
+.lpt-store-grid {grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 6px;padding:4px 0 var(--lpt-side-space);}
+.lpt-store-row {
+  grid-template-columns:minmax(0,1fr);
+  grid-template-rows:auto auto auto;
+  justify-items:center;
+  align-content:start;
+  gap:4px;
+  padding:8px 4px 6px;
+  border-radius:12px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.lpt-store-icon {
+  grid-column:1;grid-row:1;display:grid;place-items:center;
+  width:38px;height:38px;border-radius:11px;
+  background:var(--lpt-side-btn-bg);
+  box-shadow:0 1px 0 rgba(66,6,66,0.45),inset 0 1px 0 rgba(255,255,255,0.45);
+}
+.lpt-store-row .lpt-side-label {grid-column:1;grid-row:2;text-align:center;}
+.lpt-store-name {font-size:10.5px;line-height:1.3;}
+.lpt-store-button {
+  grid-column:1;grid-row:3;justify-self:center;display:grid;place-items:center;
+  width:var(--lpt-side-store-action-size);height:var(--lpt-side-store-action-size);
+  min-height:0;padding:0;border:0;border-radius:8px;background:transparent;box-shadow:none;
+}
+.lpt-store-button:hover:not(:disabled) {background-color:var(--lpt-side-hover);}
+.lpt-store-action-image {display:block;width:100%;height:100%;object-fit:contain;}
+@container (min-width:300px) {.lpt-store-grid {grid-template-columns:repeat(3,minmax(0,1fr));}}
+@container (max-width:229px) {.lpt-store-grid {grid-template-columns:repeat(2,minmax(0,1fr));}}
+@container (max-width:185px) {.lpt-store-grid {grid-template-columns:1fr;}}
 @media (pointer:coarse) {
   .lpt-toggle-chip,.lpt-side-summary {min-height:36px;}
   .lpt-store-row {min-height:44px;}
   .lpt-store-button {position:relative;}
   .lpt-store-button::after {content:"";position:absolute;inset:-8px 0;}
 }
-
-/* Matching font roles and app tiles, with the add/remove action beneath each app. */
-.lpt-sidebar {
-  --lpt-side-font:"LPT Sour Gummy",sans-serif;
-  --lpt-side-heading-font:"LPT Cherry Bomb One",sans-serif;
-  --lpt-side-ui-font:"LPT DynaPuff",sans-serif;
-  --lpt-side-decorative-font:"LPT Shrikhand",serif;
-  --lpt-side-app-icon:34px;
-}
-.lpt-side-heading {font-family:var(--lpt-side-heading-font);font-weight:400;font-size:14px;}
-.lpt-sidebar button,.lpt-toggle-chip,.lpt-side-legend,.lpt-store-name,.lpt-side-scope {
-  font-family:var(--lpt-side-ui-font);font-weight:400;
-}
-.lpt-sidebar input,.lpt-sidebar textarea,.lpt-sidebar select {font-family:var(--lpt-side-font);}
-.lpt-store-grid {grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;}
-.lpt-store-row {grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto;justify-items:center;align-content:start;gap:3px;padding:5px 2px;}
-.lpt-store-icon {grid-column:1;grid-row:1;display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:var(--lpt-side-btn-bg);box-shadow:0 2px 0 var(--lpt-side-outline);}
-.lpt-store-row .lpt-side-label {grid-column:1;grid-row:2;text-align:center;}
-.lpt-store-name {font-size:10px;line-height:1.4;}
-.lpt-store-button {grid-column:1;grid-row:3;justify-self:center;}
-@container (min-width:300px) {.lpt-store-grid {grid-template-columns:repeat(3,minmax(0,1fr));}}
-@container (max-width:229px) {.lpt-store-grid {grid-template-columns:repeat(2,minmax(0,1fr));}}
 `;
 
 // src/helper-status.ts

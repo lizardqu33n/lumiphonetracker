@@ -43,7 +43,7 @@
   --lpt-shadow-hard: #4b2478;
 
   /* ---- Gloss (a light overlay painted over a solid color) ---- */
-  --lpt-gloss: linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0, rgba(255, 255, 255, 0.22) 48%, rgba(255, 255, 255, 0) 50%, rgba(255, 255, 255, 0) 100%);
+  --lpt-gloss: linear-gradient(180deg, rgba(255, 255, 255, 0.36) 0%, rgba(255, 255, 255, 0.1) 46%, rgba(255, 255, 255, 0) 52%);
 
   /* ---- Hardware details ---- */
   --lpt-notch-bg: var(--lpt-outline);
@@ -112,18 +112,18 @@
   --lpt-marker-color: var(--lpt-pink-1);
 
   /* ---- Toggle switch ---- */
-  --lpt-toggle-width: 52px;
-  --lpt-toggle-height: 30px;
+  --lpt-toggle-width: 44px;
+  --lpt-toggle-height: 24px;
   --lpt-toggle-thumb: #ffffff;
   --lpt-toggle-off-bg: #3d2059;
   --lpt-toggle-off-thumb: var(--lpt-lilac-1);
 
   /* ---- Radii and spacing ---- */
-  --lpt-radius: 14px;
+  --lpt-radius: 12px;
   --lpt-card-radius: 14px;
-  --lpt-icon-radius: 22px;
-  --lpt-frame-radius: 44px;
-  --lpt-space: 6px;
+  --lpt-icon-radius: 18px;
+  --lpt-frame-radius: 34px;
+  --lpt-space: 8px;
 
   /* ---- Type (bundled Google Fonts override these fallbacks below) ---- */
   --lpt-font: ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN", "Arial Rounded MT Bold", "Varela Round", system-ui, sans-serif;
@@ -144,13 +144,13 @@
   --lpt-launcher-shadow-blur: 3px;
   --lpt-launcher-shadow-y: 2px;
   --lpt-icon-size: 26px;
-  --lpt-app-image-size: 44px;
-  --lpt-app-tile-size: 66px;
+  --lpt-app-image-size: 36px;
+  --lpt-app-tile-size: 58px;
   --lpt-icon-stroke-size: 2px;
   --lpt-control-size: 44px;
-  --lpt-border-size: 2px;
-  --lpt-card-border-size: 2px;
-  --lpt-frame-border-size: 4px;
+  --lpt-border-size: 1px;
+  --lpt-card-border-size: 1.5px;
+  --lpt-frame-border-size: 3px;
   --lpt-focus-size: 3px;
   --lpt-opacity-disabled: 0.55;
   --lpt-grid-columns: 3;
@@ -158,10 +158,10 @@
 
   /* ---- Shadows and timing ---- */
   --lpt-shadow:
-    0 5px 0 0 var(--lpt-shadow-hard),
-    0 16px 26px -10px rgba(10, 3, 20, 0.6),
-    inset 0 4px 0 0 rgba(255, 255, 255, 0.4),
-    inset 0 -3px 0 0 rgba(66, 6, 66, 0.55);
+    0 2px 0 0 rgba(75, 36, 120, 0.55),
+    0 14px 28px -10px rgba(10, 3, 20, 0.65),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.28),
+    inset 0 -2px 0 0 rgba(66, 6, 66, 0.45);
   --lpt-icon-fill: var(--lpt-lilac-2);
   --lpt-transition: 140ms cubic-bezier(0.22, 1, 0.36, 1);
 
@@ -1707,7 +1707,7 @@
   --lpt-weather-chip-radius: var(--lpt-contact-chip-radius);
   --lpt-weather-border: var(--lpt-contact-border);
   --lpt-weather-border-width: var(--lpt-contact-line-width);
-  --lpt-weather-icon-size: 84px;
+  --lpt-weather-icon-size: 64px;
   --lpt-weather-temperature-size: 2rem;
   --lpt-weather-condition-size: 0.95rem;
   --lpt-weather-small-size: var(--lpt-small-font-size);
@@ -1890,7 +1890,7 @@
 .lpt-thread .lpt-reply-status,.lpt-thread .lpt-manual-tag {grid-column:1/-1;}
 .lpt-thread .lpt-manual-tag {max-height:calc(var(--lpt-control-size)*2);}
 
-.lpt-emoji {display:inline-block;width:var(--lpt-emoji-size);height:var(--lpt-emoji-size);object-fit:contain;image-rendering:pixelated;vertical-align:middle;background:none;border:0;}
+.lpt-emoji {display:inline-block;width:var(--lpt-emoji-size);height:var(--lpt-emoji-size);object-fit:contain;image-rendering:auto;vertical-align:middle;background:none;border:0;}
 .lpt-emoji-toggle {display:grid;place-items:center;min-width:var(--lpt-control-size);min-height:var(--lpt-control-size);padding:var(--lpt-emoji-gap);border:var(--lpt-border-size) solid var(--lpt-border);border-radius:var(--lpt-radius);background-color:var(--lpt-card-bg);color:var(--lpt-text);cursor:pointer;}
 .lpt-emoji-toggle:focus-visible,.lpt-emoji-option:focus-visible,.lpt-emoji-close:focus-visible {outline:var(--lpt-focus-size) solid var(--lpt-focus-color);outline-offset:calc(-1 * var(--lpt-focus-size));}
 .lpt-emoji-picker {position:absolute;z-index:3;left:0;right:0;bottom:100%;max-height:var(--lpt-emoji-picker-max);max-height:min(var(--lpt-emoji-picker-max),calc(100cqh - var(--lpt-control-size) * 2));overflow:auto;overscroll-behavior:contain;padding:var(--lpt-space);border:var(--lpt-border-size) solid var(--lpt-border);border-radius:var(--lpt-radius);background-color:var(--lpt-card-bg);color:var(--lpt-text);}
@@ -2005,9 +2005,11 @@
 .lpt-contact-actions .lpt-merge-confirm {flex-basis:100%;}
 .lpt-reply-label {padding-top:0;}
 
-/* Image actions use one square size for the target and its contained artwork. */
+/* Sleek Y2K x modern icon buttons: full 44px square tap target, compact centered artwork. */
 .lpt-root {
   --lpt-image-button-size:var(--lpt-control-size);
+  --lpt-image-art-size:22px;
+  --lpt-field-art-size:18px;
 }
 .lpt-root :is(.lpt-image-action,.lpt-icon-action,.lpt-field-lock,.lpt-field-restore,.lpt-back,.lpt-close,.lpt-contact-link):has(> img:only-child) {
   display:inline-grid;place-items:center;box-sizing:border-box;
@@ -2016,10 +2018,18 @@
   max-width:var(--lpt-image-button-size);max-height:var(--lpt-image-button-size);
   flex:0 0 var(--lpt-image-button-size);padding:0;gap:0;
   justify-self:start;vertical-align:middle;
+  border-radius:12px;transition:background-color var(--lpt-transition),transform var(--lpt-transition);
 }
-.lpt-root :is(.lpt-image-action,.lpt-icon-action,.lpt-field-lock,.lpt-field-restore,.lpt-back,.lpt-close,.lpt-contact-link) > img:only-child {
-  display:block;width:100%;height:100%;max-width:100%;max-height:100%;
-  object-fit:contain;object-position:center;aspect-ratio:1;flex:none;
+.lpt-root :is(.lpt-image-action,.lpt-icon-action,.lpt-field-lock,.lpt-field-restore,.lpt-back,.lpt-close,.lpt-contact-link):has(> img:only-child):hover:not(:disabled) {
+  background-color:rgba(222,198,246,0.12);
+}
+.lpt-root :is(.lpt-image-action,.lpt-icon-action,.lpt-back,.lpt-close,.lpt-contact-link) > img:only-child {
+  display:block;width:var(--lpt-image-art-size);height:var(--lpt-image-art-size);max-width:100%;max-height:100%;
+  object-fit:contain;object-position:center;aspect-ratio:1;flex:none;image-rendering:auto;
+}
+.lpt-root :is(.lpt-field-lock,.lpt-field-restore) > img:only-child {
+  display:block;width:var(--lpt-field-art-size);height:var(--lpt-field-art-size);max-width:100%;max-height:100%;
+  object-fit:contain;object-position:center;aspect-ratio:1;flex:none;image-rendering:auto;
 }
 .lpt-root :is(.lpt-button,.lpt-save,.lpt-cancel,.lpt-delete):not(:has(> img:only-child)) {
   width:fit-content;justify-self:start;
@@ -2088,3 +2098,65 @@
 /* Per-chat tracking switch, separate from App Store membership. */
 .lpt-root .lpt-chat-toggle { margin:0 0 var(--lpt-space); max-width:100%; }
 .lpt-root .lpt-chat-off { margin:0; }
+
+/* Sleek Y2K x modern proportions: airy spacing, softer depth, compact pills. */
+.lpt-frame {
+  padding-inline: 12px;
+}
+.lpt-content {
+  padding: 10px 10px 14px;
+  gap: 10px;
+}
+.lpt-header {
+  padding: 6px 8px;
+  gap: 6px;
+}
+.lpt-card,
+.lpt-contact-page,
+.lpt-weather-card {
+  border-width: 1px;
+  border-radius: var(--lpt-card-radius);
+  box-shadow: 0 2px 10px rgba(10, 3, 20, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+.lpt-contact-page,
+.lpt-weather-card {
+  padding: 10px 12px;
+}
+.lpt-field-unit {
+  padding: 8px 10px;
+}
+.lpt-field-unit:has(> .lpt-location) {
+  border-width: 1.5px;
+  box-shadow: 0 3px 12px rgba(10, 3, 20, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+.lpt-root :is(.lpt-button,.lpt-save,.lpt-cancel,.lpt-delete):not(:has(> img:only-child)) {
+  min-height: 34px;
+  padding: 6px 13px;
+  border-width: 1px;
+  border-radius: 999px;
+  font-size: 13px;
+  box-shadow: 0 1px 0 rgba(66, 6, 66, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.lpt-root .lpt-form :is(input.lpt-input,select.lpt-input,.lpt-textarea,.lpt-number) {
+  border-width: 1px;
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+.lpt-home {
+  gap: 10px 8px;
+  padding: 6px 2px;
+}
+.lpt-home .lpt-app-icon {
+  box-shadow: 0 2px 0 rgba(66, 6, 66, 0.45), 0 6px 12px -4px rgba(10, 3, 20, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.48);
+}
+.lpt-marker,
+.lpt-contact-chip {
+  border-width: 1px;
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.lpt-thread .lpt-text-message {
+  border-width: 1px;
+  padding: 7px 11px;
+  box-shadow: 0 1px 4px rgba(10, 3, 20, 0.25);
+}

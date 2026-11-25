@@ -148,56 +148,73 @@
   .lpt-store-button,.lpt-toggle-chip,.lpt-side-number,.lpt-helper-source,.lpt-helper-connection,.lpt-personal-button,.lpt-personal-input,.lpt-personal-select,.lpt-setup-button,.lpt-css-file::file-selector-button {min-height:var(--lpt-side-target);}
 }
 
-/* Compact pastel stationery typography, with the protected toolbar intact. */
+/* Sleek Y2K x modern sidebar: compact controls, breathable spacing, protected toolbar intact. */
 .lpt-sidebar {
   --lpt-side-font:"LPT Sour Gummy","Verdana",sans-serif;
   --lpt-side-heading-font:"LPT Cherry Bomb One","Arial Rounded MT Bold",sans-serif;
-  --lpt-side-font-size:12px;--lpt-side-gap:4px;--lpt-side-space:6px;
-  --lpt-side-toolbar-icon:24px;--lpt-side-section-icon:18px;--lpt-side-app-icon:20px;
-  --lpt-side-store-action-size:28px;
-  font-family:var(--lpt-side-font);font-size:var(--lpt-side-font-size);line-height:1.4;
+  --lpt-side-ui-font:"LPT DynaPuff",sans-serif;
+  --lpt-side-decorative-font:"LPT Shrikhand",serif;
+  --lpt-side-font-size:12px;
+  --lpt-side-gap:6px;
+  --lpt-side-space:10px;
+  --lpt-side-radius:10px;
+  --lpt-side-toolbar-icon:20px;
+  --lpt-side-section-icon:18px;
+  --lpt-side-app-icon:30px;
+  --lpt-side-store-action-size:22px;
+  font-family:var(--lpt-side-font);
+  font-size:var(--lpt-side-font-size);
+  line-height:1.4;
 }
-.lpt-toolbar-button {min-height:44px;}
-.lpt-side-summary {min-height:34px;gap:6px;}
-.lpt-side-heading {font-family:var(--lpt-side-heading-font);font-size:13px;font-weight:700;}
-.lpt-side-legend {font-family:var(--lpt-side-heading-font);font-size:12px;padding-bottom:2px;}
-.lpt-side-group {gap:4px;margin:4px 0 6px;}
-.lpt-toggle-chip {min-height:26px;padding:2px 5px;gap:4px;border-radius:6px;font-size:11px;}
+.lpt-recovery-actions {padding:4px var(--lpt-side-space);}
+.lpt-toolbar-button {min-height:40px;border-radius:10px;}
+.lpt-toolbar-icon,.lpt-side-icon,.lpt-store-action-image {image-rendering:auto;}
+.lpt-side-summary {min-height:36px;gap:8px;padding:6px 4px;}
+.lpt-side-heading {font-family:var(--lpt-side-heading-font);font-weight:400;font-size:14px;}
+.lpt-sidebar button,.lpt-toggle-chip,.lpt-side-legend,.lpt-store-name,.lpt-side-scope {
+  font-family:var(--lpt-side-ui-font);font-weight:400;
+}
+.lpt-sidebar input,.lpt-sidebar textarea,.lpt-sidebar select {font-family:var(--lpt-side-font);}
+.lpt-side-legend {font-size:12px;padding:2px 0 4px;}
+.lpt-side-group {gap:5px;margin:6px 0 10px;}
+.lpt-toggle-chip {min-height:26px;padding:3px 8px;gap:5px;border-radius:999px;font-size:11px;transition:background-color 120ms ease,border-color 120ms ease;}
 .lpt-side-checkbox {width:12px;height:12px;}
-.lpt-store-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;}
-.lpt-store-row {grid-template-columns:var(--lpt-side-app-icon) minmax(0,1fr) var(--lpt-side-store-action-size);gap:4px;padding:4px;}
-.lpt-store-row .lpt-side-label {grid-column:2;grid-row:1;text-align:left;}
-.lpt-store-name {font-family:var(--lpt-side-font);font-size:11px;font-weight:700;}
-.lpt-store-button {grid-column:3;grid-row:1;display:grid;place-items:center;width:var(--lpt-side-store-action-size);height:var(--lpt-side-store-action-size);min-height:0;padding:0;border:0;background:transparent;box-shadow:none;}
-.lpt-store-action-image {display:block;width:100%;height:100%;object-fit:contain;image-rendering:pixelated;}
-.lpt-side-number,.lpt-helper-source,.lpt-helper-connection,.lpt-personal-input,.lpt-personal-select {min-height:28px;padding:3px 6px;font-size:12px;}
-@container (min-width:300px) {.lpt-store-grid {grid-template-columns:repeat(2,minmax(0,1fr));}}
-@container (max-width:219px) {.lpt-store-grid {grid-template-columns:1fr;}}
+.lpt-personal-button {min-height:28px;padding:4px 10px;border-radius:999px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.35);}
+.lpt-side-number,.lpt-helper-source,.lpt-helper-connection,.lpt-personal-input,.lpt-personal-select,.lpt-fake-domain {
+  min-height:30px;padding:4px 8px;font-size:12px;border-radius:8px;
+}
+.lpt-store-grid {grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 6px;padding:4px 0 var(--lpt-side-space);}
+.lpt-store-row {
+  grid-template-columns:minmax(0,1fr);
+  grid-template-rows:auto auto auto;
+  justify-items:center;
+  align-content:start;
+  gap:4px;
+  padding:8px 4px 6px;
+  border-radius:12px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.lpt-store-icon {
+  grid-column:1;grid-row:1;display:grid;place-items:center;
+  width:38px;height:38px;border-radius:11px;
+  background:var(--lpt-side-btn-bg);
+  box-shadow:0 1px 0 rgba(66,6,66,0.45),inset 0 1px 0 rgba(255,255,255,0.45);
+}
+.lpt-store-row .lpt-side-label {grid-column:1;grid-row:2;text-align:center;}
+.lpt-store-name {font-size:10.5px;line-height:1.3;}
+.lpt-store-button {
+  grid-column:1;grid-row:3;justify-self:center;display:grid;place-items:center;
+  width:var(--lpt-side-store-action-size);height:var(--lpt-side-store-action-size);
+  min-height:0;padding:0;border:0;border-radius:8px;background:transparent;box-shadow:none;
+}
+.lpt-store-button:hover:not(:disabled) {background-color:var(--lpt-side-hover);}
+.lpt-store-action-image {display:block;width:100%;height:100%;object-fit:contain;}
+@container (min-width:300px) {.lpt-store-grid {grid-template-columns:repeat(3,minmax(0,1fr));}}
+@container (max-width:229px) {.lpt-store-grid {grid-template-columns:repeat(2,minmax(0,1fr));}}
+@container (max-width:185px) {.lpt-store-grid {grid-template-columns:1fr;}}
 @media (pointer:coarse) {
   .lpt-toggle-chip,.lpt-side-summary {min-height:36px;}
   .lpt-store-row {min-height:44px;}
   .lpt-store-button {position:relative;}
   .lpt-store-button::after {content:"";position:absolute;inset:-8px 0;}
 }
-
-/* Matching font roles and app tiles, with the add/remove action beneath each app. */
-.lpt-sidebar {
-  --lpt-side-font:"LPT Sour Gummy",sans-serif;
-  --lpt-side-heading-font:"LPT Cherry Bomb One",sans-serif;
-  --lpt-side-ui-font:"LPT DynaPuff",sans-serif;
-  --lpt-side-decorative-font:"LPT Shrikhand",serif;
-  --lpt-side-app-icon:34px;
-}
-.lpt-side-heading {font-family:var(--lpt-side-heading-font);font-weight:400;font-size:14px;}
-.lpt-sidebar button,.lpt-toggle-chip,.lpt-side-legend,.lpt-store-name,.lpt-side-scope {
-  font-family:var(--lpt-side-ui-font);font-weight:400;
-}
-.lpt-sidebar input,.lpt-sidebar textarea,.lpt-sidebar select {font-family:var(--lpt-side-font);}
-.lpt-store-grid {grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;}
-.lpt-store-row {grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto;justify-items:center;align-content:start;gap:3px;padding:5px 2px;}
-.lpt-store-icon {grid-column:1;grid-row:1;display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:var(--lpt-side-btn-bg);box-shadow:0 2px 0 var(--lpt-side-outline);}
-.lpt-store-row .lpt-side-label {grid-column:1;grid-row:2;text-align:center;}
-.lpt-store-name {font-size:10px;line-height:1.4;}
-.lpt-store-button {grid-column:1;grid-row:3;justify-self:center;}
-@container (min-width:300px) {.lpt-store-grid {grid-template-columns:repeat(3,minmax(0,1fr));}}
-@container (max-width:229px) {.lpt-store-grid {grid-template-columns:repeat(2,minmax(0,1fr));}}

@@ -1,6 +1,6 @@
 # Architecture
 
-Version 0.19.2 uses the main story model's saved tags for normal tracking. A separate model runs only when the user explicitly runs the setup wizard. See [the saved-message workflow](SIMPLE-WORKFLOW.md) and [the format reference](BLOCK-FORMAT.md).
+Version 0.20.0 uses the main story model's saved tags for normal tracking. A separate model runs only when the user explicitly runs the setup wizard. See [the saved-message workflow](SIMPLE-WORKFLOW.md) and [the format reference](BLOCK-FORMAT.md).
 
 ## Data and identity
 
@@ -16,7 +16,7 @@ Tags stay in saved messages so data can be rebuilt. Documented tag interceptors 
 
 ## Macros
 
-The user's preset needs only `{{phone_format}}`. It combines enabled writing instructions and compact continuity. Disabled apps and fields contribute no instructions or continuity. Separate continuity macros remain available.
+The user's preset still needs only `{{phone_format}}`. It combines enabled writing instructions and compact continuity. Optional `{{phone_state}}` and `{{phone_rules}}` separate those parts; rules use the generating user's personal wording. `{{phone_contacts}}` is optional contact-focused continuity; the older scene macro keeps its existing contact content for compatibility, so using both overlaps. Disabled apps and fields contribute no instructions or continuity. Separate continuity macros remain available.
 
 Native preset assembly may bypass a macro interceptor. Pull handlers use trusted invocation context, including the host-built compatibility fields `env.extra.userId` and `env.chat.id` when present, checking agreement with top-level IDs. These fields were verified against host source but are not guaranteed by the minimal older DTO. If context is unavailable, handlers return empty safely and log a fixed reason. They do not guess the active chat.
 
