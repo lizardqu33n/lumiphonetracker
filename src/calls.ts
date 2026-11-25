@@ -15,7 +15,7 @@ export function helperCallSource(call:CallData,rows:StoryRow[]):StoryRow|undefin
     const escaped=name.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
     if(name!=="unknown caller" && !new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?:$|[^\\p{L}\\p{N}])`,"u").test(quote))return;
     if(!/\b(?:call|calls|called|calling|caller|dial|dialed|rang|ring|rings|ringing|phoned|phone)\b/.test(quote))return;
-    if(/\b(?:not|never|no|if|would|might|plan|pretend|cancel|try)\b|n['’]t/.test(quote))return;
+    if(/\b(?:not|never|no|if|would|might|plan|pretend|cancel|try)\b|n['â€™]t/.test(quote))return;
     if(call.direction==="missed" && !/\b(?:missed|unanswered)\b/.test(quote))return;
     if(call.time && !quote.includes(normalize(call.time)))return;
     if((call.count??1)>1){

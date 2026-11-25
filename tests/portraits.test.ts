@@ -63,3 +63,10 @@ test("a full shared portrait budget rejects a new upload without evicting existi
  const store=new PhoneStore({authorize:async(c,u)=>c==="c"&&u==="u",read:async()=>disk,write:async(c,v)=>{disk=v;},history:async()=>[],player:async()=>"Player"});let doc=await store.sync("u","c");const before=disk;
  await expect(store.update("u","c",doc.revision,{portrait:{name:`Person ${allowed}`,data:padded}})).rejects.toThrow("full");expect(disk).toBe(before);doc=await store.sync("u","c");expect(Object.keys(doc.portraits??{}).length).toBe(allowed);
 });
+
+test("optional avatar read failures remain a safe fallback and can be logged",async()=>{
+ const failures:{operation:string;error:unknown}[]=[];
+ const api={permissions:{has:()=>true},chats:{get:async()=>({id:"shared",character_id:"card"})},characters:{get:async()=>{throw Error("PRIVATE character read");}},personas:{getActive:async()=>{throw Error("PRIVATE persona read");}}};
+ expect(await loadPortraitSources(api as never,"shared","u","Player",(operation,error)=>failures.push({operation,error}))).toEqual({characters:[]});
+ expect(failures.map(f=>f.operation)).toEqual(["portraits.character","portraits.persona"]);
+});

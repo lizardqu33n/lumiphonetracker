@@ -153,6 +153,11 @@ export class PhoneView {
     this.render(); this.setOpen(false);
   }
   receive(doc: PhoneDocument | null, reads?: ReadState): void {
+    // Shared state and portraits are revisioned; player projection is per requesting user.
+    // Read receipts have their own revision and must still update on this fast path.
+    if(doc&&this.doc&&doc.chatId===this.doc.chatId&&doc.revision===this.doc.revision&&doc.currentPlayer===this.doc.currentPlayer){
+      this.doc=doc;if(reads&&reads.revision>this.reads.revision)this.receiveReads(reads);return;
+    }
     const key=JSON.stringify([doc?.chatId,doc?.trackingEnabled,doc?.settings,doc?.state,doc?.fieldLocks,doc?.contactInfo,doc?.portraits,doc?.currentPlayer,doc?.playerNames]);
     const displayChanged=key!==this.displayKey;this.displayKey=key;
     const changedChat = doc?.chatId !== this.doc?.chatId;
@@ -672,7 +677,7 @@ export class PhoneView {
     }
     if(!thread.messages.length)this.empty("No texts sent here yet. Your reply appears after you send it from the chat input.",list);card.append(list);
     if(thread.key){
-      if(!this.prefs.dismissed.includes("Draft hint")){const hint=el("div","lpt-draft-hint"),hide=button("×","lpt-dismiss",()=>{void this.actions.preferences({dismiss:"Draft hint"}).then(p=>{this.receivePreferences(p);hint.remove();}).catch(()=>this.setError("Could not hide the explanation."));});hide.setAttribute("aria-label","Hide draft explanation");hint.append(el("small","lpt-help","Adds to the chat input for you to review. It does not send."),hide);card.append(hint);}
+      if(!this.prefs.dismissed.includes("Draft hint")){const hint=el("div","lpt-draft-hint"),hide=button("Ã—","lpt-dismiss",()=>{void this.actions.preferences({dismiss:"Draft hint"}).then(p=>{this.receivePreferences(p);hint.remove();}).catch(()=>this.setError("Could not hide the explanation."));});hide.setAttribute("aria-label","Hide draft explanation");hint.append(el("small","lpt-help","Adds to the chat input for you to review. It does not send."),hide);card.append(hint);}
       const form=el("form","lpt-reply"),label=el("label","lpt-reply-label",`Reply to ${thread.name}`),input=el("textarea","lpt-textarea lpt-reply-input");input.rows=1;input.maxLength=3000;input.required=true;input.placeholder="Write a reply";input.value=this.replyDrafts.get(thread.key)??"";label.append(input);const selection=this.replySelections.get(thread.key);if(selection)input.setSelectionRange(selection.start,selection.end);input.addEventListener("select",()=>{if(epoch===this.chatEpoch&&input.isConnected)this.replySelections.set(thread.key,{start:input.selectionStart,end:input.selectionEnd});});
       const grow=()=>{const bottom=list.scrollHeight-list.clientHeight-list.scrollTop<30;input.rows=1;const css=getComputedStyle(input),height=input.scrollHeight-parseFloat(css.paddingTop)-parseFloat(css.paddingBottom);input.rows=Math.min(4,Math.max(1,Math.ceil(height/parseFloat(css.lineHeight))));if(bottom)list.scrollTop=list.scrollHeight;};input.addEventListener("input",()=>{if(epoch!==this.chatEpoch)return;this.replyDrafts.set(thread.key,input.value);grow();});requestAnimationFrame(grow);
       const add=el("button","lpt-button lpt-add-draft","Add to draft");add.type="submit";const status=el("p","lpt-reply-status lpt-help");status.setAttribute("aria-live","polite");const fallback=el("textarea","lpt-textarea lpt-manual-tag");fallback.readOnly=true;fallback.setAttribute("aria-label","Text tag to copy into the chat input");fallback.value=this.manualDrafts.get(thread.key)??"";fallback.hidden=!fallback.value;form.append(label,add,status,fallback);const emoji=attachEmojiPicker(form,input,status,()=>epoch===this.chatEpoch&&this.doc?.chatId===chatId&&form.isConnected,this.actions.uuid);form.insertBefore(emoji,add);

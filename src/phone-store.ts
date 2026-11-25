@@ -256,7 +256,7 @@ export class PhoneStore {
       }
       let { doc, rows } = await this.build(chatId, userId);
       if(doc.trackingEnabled===false)throw Error("Turn on the tracker for this chat first.");
-      if (JSON.stringify(doc.accepted,canonicalKeys) !== JSON.stringify(saved.accepted,canonicalKeys) && raw) { this.ready.delete(chatId); throw new Error("The story changed. Reopen the tracker and try again."); }
+      if (raw && !sameAccepted(doc.accepted,saved.accepted)) { this.ready.delete(chatId); throw new Error("The story changed. Reopen the tracker and try again."); }
       if (update.settings !== undefined) {
         if (!isRecord(update.settings)) throw new Error("Invalid settings");
         if(update.settings.apps!==undefined&&!isRecord(update.settings.apps))throw new Error("Invalid apps");
@@ -306,7 +306,7 @@ export class PhoneStore {
   }
   setupApply(userId:string,chatId:string,revision:number,input:SetupData,names:string[],decisions?:unknown):Promise<Document>{
     return this.serial(chatId,async()=>{
-      if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");const raw=await this.io.read(chatId),saved=readDocument(raw,chatId);if(saved.revision!==revision)throw Error("The tracker changed. Nothing was saved.");let {doc,rows}=await this.build(chatId,userId);if(doc.trackingEnabled===false)throw Error("Turn on the tracker for this chat first.");if(JSON.stringify(doc.accepted,canonicalKeys)!==JSON.stringify(saved.accepted,canonicalKeys)){this.ready.delete(chatId);throw Error("The story changed. Nothing was saved.");}const data=setupCandidates(doc,resolveSetup(doc,input,decisions)),last=[...rows].sort((a,b)=>a.index_in_chat-b.index_in_chat).at(-1);
+      if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");const raw=await this.io.read(chatId),saved=readDocument(raw,chatId);if(saved.revision!==revision)throw Error("The tracker changed. Nothing was saved.");let {doc,rows}=await this.build(chatId,userId);if(doc.trackingEnabled===false)throw Error("Turn on the tracker for this chat first.");if(!sameAccepted(doc.accepted,saved.accepted)){this.ready.delete(chatId);throw Error("The story changed. Nothing was saved.");}const data=setupCandidates(doc,resolveSetup(doc,input,decisions)),last=[...rows].sort((a,b)=>a.index_in_chat-b.index_in_chat).at(-1);
       const add=(target:ManualEdit["target"],name:string,value:unknown,section?:Section)=>doc.edits.push(validateEdit({id:crypto.randomUUID(),target,name,value,source:"setup",...(target==="contact"?{playerAtEdit:doc.playerNames.some(n=>normalize(n)===normalize(name))}:{}),...(section?{section}:{}),after:last?.id??null,index:last?.index_in_chat??-1}));
       for(const c of data.contacts){const old=doc.state.contacts.find(x=>normalize(x.name)===normalize(c.name));const values=Object.fromEntries(CONTACT_KEYS.filter(k=>c[k]!==undefined).map(k=>[k,c[k]]));if(!old||Object.keys(values).length)add("contact",c.name,values);const prior=doc.contactInfo?.[normalize(c.name)]??old?.info??emptyContactInfo(c.name);const fields=Object.keys(c).filter(k=>["phone","email","relationship","details"].includes(k));const info=readContactInfo({...prior,...c,fakeFields:[...new Set([...(prior.fakeFields??[]),...(c.fakeFields??[])])],kind:prior.locked?prior.kind:names.some(n=>normalize(n)===normalize(c.name))?"Main":prior.kind,confirmed:[...new Set([...(prior.confirmed??[]),...fields])]},c.name);(doc.contactInfo??=Object.create(null))[normalize(c.name)]=info;}
       for(const n of data.notes)add("note",n.name,{detail:n.detail,context:n.context,...(n.section==="misc"?{sendToAI:false}:{})},n.section);
@@ -368,6 +368,20 @@ export class PhoneStore {
   }
 }
 export interface HelperTicket { doc: Document; recent: StoryRow[]; history: string }
+
+/** Keep complete drift detection without allocating two whole-journal JSON strings.
+ * Obvious append/removal/tail changes exit before serializing older entries.
+ */
+export function sameAccepted(left:Document["accepted"],right:Document["accepted"]):boolean {
+ if(left===right)return true;
+ if(left.length!==right.length)return false;
+ const last=left.length-1;
+ if(last<0)return true;
+ const equal=(index:number)=>JSON.stringify(left[index],canonicalKeys)===JSON.stringify(right[index],canonicalKeys);
+ if(!equal(last))return false;
+ for(let i=0;i<last;i++)if(!equal(i))return false;
+ return true;
+}
 
 function canonicalKeys(_key:string,value:unknown):unknown{return isRecord(value)?Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b))):value;}
 

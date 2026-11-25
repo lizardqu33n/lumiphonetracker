@@ -107,7 +107,7 @@ try {
   const compactPage=await browser.newPage({viewport:{width:1100,height:900}});await compactPage.goto(`http://127.0.0.1:${server.port}`);await ready(compactPage);await open(compactPage);
   await compactPage.locator(".harness-drawer").evaluate(n=>{(n as HTMLElement).style.width="320px";});await compactPage.waitForTimeout(80);
   const compactSide=compactPage.locator(".lpt-sidebar"),toolbar=compactSide.locator(".lpt-recovery-actions");
-  check(await compactSide.locator(".lpt-toolbar-icon,.lpt-side-icon").count()===10&&await compactSide.locator(".lpt-toolbar-icon,.lpt-side-icon").evaluateAll(nodes=>nodes.every(n=>{const i=n as HTMLImageElement;return i.src.startsWith("data:image/png;base64,")&&((i.naturalWidth===64&&i.naturalHeight===64)||(i.naturalWidth>=443&&i.naturalHeight>=443))&&i.alt===""&&i.getAttribute("aria-hidden")==="true"&&getComputedStyle(i).imageRendering==="auto";})),"Supplied 64px PNGs stay embedded, decorative and smoothly scaled; Settings profiles has its own supplied icon");
+  check(await compactSide.locator(".lpt-toolbar-icon,.lpt-side-icon").count()===10&&await compactSide.locator(".lpt-toolbar-icon,.lpt-side-icon").evaluateAll(nodes=>nodes.every(n=>{const i=n as HTMLImageElement;return i.src.startsWith("data:image/png;base64,")&&((i.naturalWidth===64&&i.naturalHeight===64)||(i.naturalWidth===64&&i.naturalHeight===64))&&i.alt===""&&i.getAttribute("aria-hidden")==="true"&&getComputedStyle(i).imageRendering==="auto";})),"Supplied 64px PNGs stay embedded, decorative and smoothly scaled; Settings profiles has its own supplied icon");
   check(await compactSide.locator(".lpt-toolbar-icon").evaluateAll(nodes=>nodes.every(n=>n.getBoundingClientRect().width===32))&&await compactSide.locator(".lpt-side-icon").evaluateAll(nodes=>nodes.every(n=>n.getBoundingClientRect().width===24)),"Toolbar artwork is 32px; section artwork is 24px");
   check(await compactSide.locator(".lpt-toolbar-button").evaluateAll(nodes=>nodes.every(n=>{const r=n.getBoundingClientRect();return r.width>=44&&r.height>=44;})),"All toolbar buttons keep at least 44px tap targets");
   check(await toolbar.evaluate(n=>Math.abs(n.getBoundingClientRect().top-document.querySelector(".harness-drawer-header")!.getBoundingClientRect().bottom)<1),"Toolbar sits flush under the simulated host title bar despite root padding");
@@ -194,7 +194,7 @@ try {
   await opaqueActivity(activityPage,"Bank");
   await activityPage.locator(".harness-widget").screenshot({path:".test-artifacts/bank-app.png"});
   await home(activityPage);await activityPage.locator('.lpt-island [data-app="Calls"]').click();await activityPage.locator(".lpt-call").getByRole("button",{name:"Edit",exact:true}).click();await activityPage.locator('.lpt-form [name="name"]').fill("Bea");
-  const repeats=activityPage.locator('.lpt-form [name="count"]');check(await repeats.inputValue()==="3"&&await repeats.getAttribute("type")==="number"&&await repeats.getAttribute("min")==="1"&&await repeats.getAttribute("max")==="20","Repeat editor starts at 3 with whole-number 1–20 bounds");await repeats.fill("4");await save(activityPage);check(await activityPage.locator(".lpt-call").count()===1&&(await activityPage.locator(".lpt-call-direction").innerText())==="Missed x4","Editing repeat count updates one call entry");check((await activityPage.locator(".lpt-call").innerText()).includes("Bea"),"User can correct a call log entry");
+  const repeats=activityPage.locator('.lpt-form [name="count"]');check(await repeats.inputValue()==="3"&&await repeats.getAttribute("type")==="number"&&await repeats.getAttribute("min")==="1"&&await repeats.getAttribute("max")==="20","Repeat editor starts at 3 with whole-number 1â€“20 bounds");await repeats.fill("4");await save(activityPage);check(await activityPage.locator(".lpt-call").count()===1&&(await activityPage.locator(".lpt-call-direction").innerText())==="Missed x4","Editing repeat count updates one call entry");check((await activityPage.locator(".lpt-call").innerText()).includes("Bea"),"User can correct a call log entry");
   await activityPage.locator(".lpt-sidebar").getByRole("button",{name:"Remove Calls",exact:true}).click();await activityPage.waitForTimeout(100);check(await activityPage.locator('.lpt-island [data-app="Calls"]').count()===0&&await activityPage.evaluate(()=>(window as any).harness.getDocument().state.calls[0].name)==="Bea","Removing Calls hides it while retaining the user's correction");
   await activityPage.locator(".lpt-sidebar").getByRole("button",{name:"Add Calls",exact:true}).click();await activityPage.waitForTimeout(100);await activityPage.locator('.lpt-island [data-app="Calls"]').click();check((await activityPage.locator(".lpt-call").innerText()).includes("Bea"),"Re-adding Calls restores its retained entry");
   await activityPage.locator(".lpt-call").getByRole("button",{name:"Edit",exact:true}).click();await activityPage.locator('.lpt-form [name="name"]').fill("Stale form");
@@ -801,7 +801,7 @@ try {
   });
   await corrections.waitForTimeout(350);
   const syncCalls=await corrections.evaluate(()=>(window as any).harness.syncTestCount());
-  check(syncCalls>=1&&syncCalls<=2,"A thousand Main AI completion events produce at most one in-flight sync and one follow-up");
+  check(syncCalls===0,"A thousand failed Main AI completion events request no tracker sync");
 
   await corrections.evaluate(()=>{
     const h=(window as any).harness;h.syncTestDelay(80);
@@ -856,6 +856,7 @@ try {
   await corrections.waitForFunction(()=>(window as any).harness.getDocument().state.scene.time?.value==="11:49 PM");
   check(await corrections.locator(".lpt-island .lpt-frame").isHidden(),"A new story snapshot leaves the closed phone closed");
   await open(corrections);
+  await corrections.locator(".lpt-island .lpt-story-strip").filter({hasText:"11:49 PM"}).waitFor();
   check((await corrections.locator(".lpt-island .lpt-story-strip").innerText()).includes("11:49 PM"),"Reopening renders the latest deferred story values");
   await open(corrections,"Contacts");await corrections.waitForTimeout(100);
   check(await corrections.evaluate(()=>(window as any).harness.backendCounts().phone_portraits)===1,"Contacts requests portraits once when needed");
@@ -907,6 +908,47 @@ try {
   await conflictPage.locator(".lpt-form .lpt-save").click();await conflictPage.waitForTimeout(150);
   check(await conflictPage.evaluate(()=>{const c=(window as any).harness.getDocument().contactInfo.ada;return c.phone==="555-0199"&&c.relationship==="Friend";}),"Save to latest changes the relationship without erasing the newer phone number");
   await conflictPage.close();
+  const passivePage=await browser.newPage({viewport:{width:1100,height:850}});
+  await passivePage.goto(`http://127.0.0.1:${server.port}`);await ready(passivePage);await open(passivePage,"Scene");await passivePage.waitForTimeout(200);
+  await passivePage.evaluate(()=>(window as any).harness.syncTestDelay(0));
+  await passivePage.evaluate(()=>(window as any).harness.emitTag("phone-state",false,false));await passivePage.waitForTimeout(20);
+  await passivePage.evaluate(()=>(window as any).harness.generationEvent("GENERATION_ENDED","burst"));await passivePage.waitForTimeout(20);
+  await passivePage.evaluate(()=>(window as any).harness.passiveNotice("MESSAGE_SENT"));await passivePage.waitForTimeout(20);
+  await passivePage.evaluate(()=>(window as any).harness.passiveNotice("backend"));await passivePage.waitForTimeout(200);
+  check(await passivePage.evaluate(()=>(window as any).harness.syncTestCount())===1,"Staggered tag, generation, message and backend notices coalesce into one phone sync");
+  await passivePage.evaluate(()=>{const h=(window as any).harness;h.syncTestDelay(0);for(let i=0;i<1000;i++)h.generationEvent("GENERATION_ENDED","failed-"+i,"Failed");h.emitTag("phone-state",true,false);});await passivePage.waitForTimeout(160);
+  check(await passivePage.evaluate(()=>(window as any).harness.syncTestCount())===0,"Failed generation notices and incomplete tags trigger no tracker reads in an enabled chat");
+  await passivePage.evaluate(()=>(window as any).harness.activityStory("<phone-state>loc: Quiet Park</phone-state>"));await passivePage.waitForTimeout(240);
+  check(await passivePage.evaluate(()=>(window as any).harness.syncTestCount())===1&&await passivePage.locator(".lpt-location").innerText().then(s=>s.includes("Quiet Park")),"A later completed reply still updates the phone with one coalesced sync");
+  await passivePage.evaluate(()=>{const h=(window as any).harness;h.syncTestDelay(140);h.passiveNotice("MESSAGE_EDITED");});await passivePage.waitForTimeout(100);
+  await passivePage.evaluate(()=>(window as any).harness.activityStory("<phone-state>loc: Harbor</phone-state>"));await passivePage.waitForTimeout(420);
+  check(await passivePage.evaluate(()=>(window as any).harness.syncTestCount())===2&&await passivePage.locator(".lpt-location").innerText().then(s=>s.includes("Harbor")),"A change arriving during an in-flight sync gets one follow-up and retains the latest story value");
+  await passivePage.evaluate(()=>{const h=(window as any).harness;h.syncTestDelay(0);h.passiveNotice("MESSAGE_EDITED");h.switchChat("b");});await passivePage.waitForTimeout(200);
+  check(await passivePage.evaluate(()=>(window as any).harness.syncTestCount())===1,"Chat switching cancels the old passive timer and requests the new chat immediately");
+  await passivePage.evaluate(()=>{const h=(window as any).harness;h.syncTestDelay(0);h.passiveNotice("MESSAGE_EDITED");h.switchChat(null);});await passivePage.waitForTimeout(160);
+  check(await passivePage.evaluate(()=>(window as any).harness.syncTestCount())===0,"Closing the chat cancels a pending passive refresh");
+  await passivePage.evaluate(()=>(window as any).harness.switchChat("a"));await passivePage.waitForTimeout(200);
+  await passivePage.evaluate(()=>{const h=(window as any).harness;h.syncTestDelay(0);h.passiveNotice("MESSAGE_EDITED");h.stop();});await passivePage.waitForTimeout(160);
+  check(await passivePage.evaluate(()=>(window as any).harness.syncTestCount())===0,"Disposing the extension cancels its passive refresh timer");
+  await passivePage.close();
+  const artContext=await browser.newContext({viewport:{width:1100,height:850},deviceScaleFactor:2});const artPage=await artContext.newPage();
+  await artPage.goto(`http://127.0.0.1:${server.port}`);await ready(artPage);
+  const artAudit=await artPage.evaluate(async()=>{
+    const {groups,report}=(window as any).harness.optimizedArt();const results=[];
+    for(const expected of report.assets){
+      const uri=groups[expected.module][expected.name],img=new Image();img.src=uri;await img.decode();
+      const canvas=document.createElement("canvas");canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;const ctx=canvas.getContext("2d")!;ctx.drawImage(img,0,0);const rgba=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+      const bytes=Uint8Array.from(atob(uri.split(",")[1]),c=>c.charCodeAt(0));const sha=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes))).map(b=>b.toString(16).padStart(2,"0")).join("");
+      results.push({size:img.naturalWidth===expected.size[0]&&img.naturalHeight===expected.size[1],hash:sha===expected.png_sha256,transparent:rgba.some((v,i)=>i%4===3&&v===0),visible:expected.alpha_min_max[1]>0&&rgba.some((v,i)=>i%4===3&&v===expected.alpha_min_max[1])});
+    }
+    return results;
+  });
+  check(artAudit.length===44&&artAudit.every(a=>a.size&&a.hash),"All 44 optimized images decode with audited PNG bytes and proportional intrinsic sizes at 2x density");
+  check(artAudit.every(a=>a.transparent&&a.visible),"Optimized emoji, weather and contact artwork retain transparent backgrounds and their audited visible alpha");
+  await open(artPage,"Weather");
+  check(await artPage.locator(".lpt-weather-icon").evaluate(n=>getComputedStyle(n).imageRendering==="pixelated"&&(n as HTMLImageElement).naturalWidth===192),"Weather keeps sharp pixel scaling with a 192px source at 2x density");
+  await home(artPage);await open(artPage,"Contacts");await artPage.locator(".lpt-contact-row").filter({hasText:"Ada"}).click();await artPage.screenshot({path:".test-artifacts/optimized-contact-2x.png"});
+  await artContext.close();
   console.log(`Browser UI verification passed: ${checks} checks. Screenshots in .test-artifacts/. No real Lumiverse instance or provider was used.`);
 } catch(error) { console.error(`Browser stopped after check ${checks}: ${lastCheck}`);for(const [i,page]of browser.contexts().flatMap(c=>c.pages()).entries())try{await page.screenshot({path:`.test-artifacts/failure-${i}.png`});}catch{}throw error;
 } finally { await browser.close(); server.stop(true); }

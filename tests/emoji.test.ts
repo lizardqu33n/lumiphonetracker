@@ -15,11 +15,25 @@ function rgba(png:Buffer){
  for(let y=0;y<h;y++){const filter=data[p++];if(filter>4)throw Error("Unsupported PNG filter");for(let x=0;x<stride;x++){const a=x>=4?out[y*stride+x-4]:0,b=y?out[(y-1)*stride+x]:0,c=y&&x>=4?out[(y-1)*stride+x-4]:0;let predictor=0;if(filter===1)predictor=a;else if(filter===2)predictor=b;else if(filter===3)predictor=Math.floor((a+b)/2);else if(filter===4){const q=a+b-c,pa=Math.abs(q-a),pb=Math.abs(q-b),pc=Math.abs(q-c);predictor=pa<=pb&&pa<=pc?a:pb<=pc?b:c;}out[y*stride+x]=(data[p++]+predictor)&255;}}
  return {w,h,out};
 }
-test("all 28 full-cell PNGs preserve exact audited RGBA, alpha and row-major names",()=>{
- expect(EMOJI_NAMES).toEqual(names as any);let bytes=0;const histogram=Array(256).fill(0);
- for(const [i,name]of EMOJI_NAMES.entries()){const uri=EMOJI_IMAGES[name];expect(uri.startsWith("data:image/png;base64,")).toBe(true);const png=Buffer.from(uri.split(",")[1],"base64"),decoded=rgba(png),cell=report.cells[i];expect(createHash("sha256").update(png).digest("hex")).toBe(cell.sha256);expect([decoded.w,decoded.h]).toEqual(cell.size);expect(createHash("sha256").update(decoded.out).digest("hex")).toBe(cell.rgba_sha256);bytes+=png.length;for(let k=3;k<decoded.out.length;k+=4)histogram[decoded.out[k]]++;}
- expect(bytes).toBe(report.raw_png_bytes);const original=Array.from({length:256},(_,i)=>report.sources.reduce((n:number,s:any)=>n+s.alpha_histogram[i],0));expect(histogram.slice(1)).toEqual(original.slice(1));expect(histogram[0]).toBe(original[0]+362*5);expect(report.cells.find((c:any)=>c.name==="sleepy").size).toEqual([362,367]);
+test("all 28 optimized full-cell PNGs preserve audited provenance, alpha and row-major names",()=>{
+ const optimization=JSON.parse(readFileSync(new URL("../docs/ASSET-OPTIMIZATION.json",import.meta.url),"utf8"));
+ expect(EMOJI_NAMES).toEqual(names as any);let bytes=0;
+ for(const [i,name]of EMOJI_NAMES.entries()){
+  const uri=EMOJI_IMAGES[name];expect(uri.startsWith("data:image/png;base64,")).toBe(true);
+  const png=Buffer.from(uri.split(",")[1],"base64"),decoded=rgba(png),source=report.cells[i],cell=optimization.assets.find((c:any)=>c.module==="emoji-assets.ts"&&c.name===name);
+  expect(cell.source_png_sha256).toBe(source.sha256);expect(cell.source_rgba_sha256).toBe(source.rgba_sha256);
+  expect(createHash("sha256").update(png).digest("hex")).toBe(cell.png_sha256);expect([decoded.w,decoded.h]).toEqual(cell.size);
+  expect(Math.max(decoded.w,decoded.h)).toBe(64);expect(Math.abs(decoded.w/decoded.h-source.size[0]/source.size[1])).toBeLessThan(0.02);
+  expect(createHash("sha256").update(decoded.out).digest("hex")).toBe(cell.rgba_sha256);
+  const histogram=Array(256).fill(0);for(let k=3;k<decoded.out.length;k+=4)histogram[decoded.out[k]]++;
+  expect(histogram).toEqual(cell.alpha_histogram);expect(histogram[0]).toBeGreaterThan(0);bytes+=png.length;
+ }
+ expect(bytes).toBe(optimization.files.find((f:any)=>f.module==="emoji-assets.ts").png_bytes);
+ expect(bytes).toBeLessThan(report.raw_png_bytes/10);
+ // The full source-cell audit and approved sleepy-Z correction remain intact.
+ expect(report.cells.find((c:any)=>c.name==="sleepy").size).toEqual([362,367]);
 });
+
 test("only exact known shortcodes render; unknown names, HTML and ordinary colons stay text",()=>{
  expect(emojiParts('A :smile::heart: :not_known: <img src=x> 12:10 | :SMILE:')).toEqual(['A ',{name:'smile'},{name:'heart'},' :not_known: <img src=x> 12:10 | :SMILE:']);expect(emojiParts(':__proto__:')).toEqual([':__proto__:']);
  expect(insertEmoji('Hello world',6,11,'wink')).toEqual({value:'Hello :wink:',caret:12});expect(insertEmoji('A B',2,2,'heart')).toEqual({value:'A :heart:B',caret:9});expect(insertEmoji('x'.repeat(3000),3000,3000,'smile')).toBeNull();expect(insertEmoji('text',0,4,'not_known')).toBeNull();

@@ -1,3 +1,7 @@
+import {EMOJI_IMAGES} from "../src/emoji-assets";
+import {WEATHER_ICONS} from "../src/weather-icons";
+import {CONTACT_ICONS} from "../src/contact-icons";
+import optimizedAssetReport from "../docs/ASSET-OPTIMIZATION.json";
 import {phoneSnapshot} from "../src/ui-snapshot";
 import {SetupChoiceStore} from "../src/setup-choices";
 import {SetupWizard,SetupError} from "../src/setup-wizard";
@@ -140,6 +144,8 @@ const fixturePast = (chat:string):StoryRow=>({id:`${chat}-past`,chat_id:chat,ind
   content:"Bea and Player meet at the Station. Lantern Cafe is their next meeting place.<phone-state>\nloc: Station\npresent: Bea; Player\nc: Bea | roles=Station keeper | phys=Unhurt\np: Lantern Cafe | Meeting place | East of Station\n</phone-state>"});
 function start() { cleanup = setup(ctx as never); }
 const api = {
+  optimizedArt(){return {report:optimizedAssetReport,groups:{"emoji-assets.ts":EMOJI_IMAGES,"weather-icons.ts":WEATHER_ICONS,"contact-icons.ts":CONTACT_ICONS}};},
+
   async peerContactPhone(name:string,phone:string){const chat=activeChat!;const d=await store.savedView(chat,`owner-${chat}`);await store.update(`owner-${chat}`,chat,d.revision,{contactInfo:{name,phone}});onBackend({type:"phone_tracker_changed",chatId:chat});},
 
   async seed(kind: "empty" | "story" = "story") {
@@ -169,6 +175,8 @@ const api = {
   syncTestDelay(ms:number){syncDelay=ms;syncCount=0;},
   syncTestCount(){return syncCount;},
   backendCounts(){return Object.fromEntries(requestCounts);},
+  passiveNotice(kind:string,chat=activeChat){if(kind==="backend")onBackend({type:"phone_tracker_changed",chatId:chat});else events.get(kind)?.forEach(fn=>fn({chatId:chat}));},
+  stop(){cleanup?.();cleanup=undefined;},
   uuidCalls(){return uuidCalls;},
   generationListenerCounts(){return ["GENERATION_STARTED","GENERATION_ENDED","GENERATION_STOPPED"].map(name=>events.get(name)?.size??0);},
   generationEvent(name:string,id:string,error?:string){for(const fn of events.get(name)??[])fn({chatId:activeChat,generationId:id,error});},

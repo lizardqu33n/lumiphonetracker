@@ -1,5 +1,6 @@
 import {test,expect} from "bun:test";
 import {emptyDocument,emptyPatch,type CallData} from "../src/model";
+import {helperCallSource} from "../src/calls";
 import {replay,helperSourceSignature,type StoryRow} from "../src/engine";
 import {parseExpanded} from "../src/schema";
 import {validateActivity,activityReceipt,activityUnread} from "../src/activity";
@@ -27,7 +28,7 @@ test("repeat count validates independently, defaults to one, and survives legacy
 });
 test("one x3 record has one receipt; continuity includes count only for added Calls",()=>{
  const d=ready([row(0,block(call+" | x3"))]);const c=d.state.calls[0];expect(d.state.calls.length).toBe(1);expect(activityUnread(c,{[c.id]:activityReceipt(c)})).toBe(false);
- expect(formatMacro(d)).not.toContain("x1–x20");d.settings.apps.Calls=true;expect(formatMacro(d)).toContain("x1–x20");expect(formatMacro(d)).toContain("NEW calls");expect(renderMacro("phone_calls",d)).toContain("x3");
+ expect(formatMacro(d)).not.toContain("x1â€“x20");d.settings.apps.Calls=true;expect(formatMacro(d)).toContain("x1â€“x20");expect(formatMacro(d)).toContain("NEW calls");expect(renderMacro("phone_calls",d)).toContain("x3");
 });
 test("Helper call verifies actual source+quote and stays there on repeat helper runs",()=>{
  const rows=[row(0,"Ada has three missed calls at 3 PM."),row(1,"The door opens.")];const d=emptyDocument("c");d.settings.apps.Calls=true;
@@ -75,4 +76,13 @@ test("a real Helper runner journals the establishing message and repeated refres
  let d=await store.sync("trusted","c");d=await store.update("trusted","c",d.revision,{settings:{source:"helper",connection_id:"small",apps:{Calls:true}}});let requests=0;
  const helper=new HelperAI(store,{allowed:()=>true,connections:async u=>{expect(u).toBe("trusted");return [{id:"small",name:"Small",model:"Small"}];},generate:async input=>{requests++;expect(input.userId).toBe("trusted");return {content:call+' | x3 ~ '+JSON.stringify({source:"m0",quote:rows[0].content}),finish_reason:"stop"};},changed:()=>{},warn:()=>{}});
  await helper.refresh("trusted","c");await helper.refresh("trusted","c");d=await store.sync("trusted","c");expect(requests).toBe(2);expect(d.state.calls.length).toBe(1);expect(d.state.calls[0].at.id).toBe("m0");expect(d.state.calls[0].count).toBe(3);
+});
+
+test("curly-apostrophe negations cannot establish a call",()=>{
+ for(const quote of ["Ada didn\u2019t call.","Ada can\u2019t call.","Ada wasn\u2019t calling.","Ada didn't call."]){
+  const r=row(0,quote);
+  expect(helperCallSource({name:"Ada",direction:"in",source:r.id,evidence:quote},[r])).toBeUndefined();
+ }
+ const r=row(0,"Ada called.");
+ expect(helperCallSource({name:"Ada",direction:"in",source:r.id,evidence:r.content},[r])).toBe(r);
 });

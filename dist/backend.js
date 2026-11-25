@@ -2069,7 +2069,7 @@ function helperCallSource(call, rows) {
     return;
   if (!/\b(?:call|calls|called|calling|caller|dial|dialed|rang|ring|rings|ringing|phoned|phone)\b/.test(quote))
     return;
-  if (/\b(?:not|never|no|if|would|might|plan|pretend|cancel|try)\b|n['\u0092]t/.test(quote))
+  if (/\b(?:not|never|no|if|would|might|plan|pretend|cancel|try)\b|n['\u2019]t/.test(quote))
     return;
   if (call.direction === "missed" && !/\b(?:missed|unanswered)\b/.test(quote))
     return;
@@ -2473,7 +2473,7 @@ function trackerInstructions(doc, helper = false) {
     lines.push(s.inferMissing ? 'EMPTY contact fields only: one concrete value may end " ~ inferred"; never re-infer populated fields.' : "Never infer missing values.");
   }
   if (s.enabled.calls)
-    lines.push('call: Name or number | in / out / missed | known time (omit time if unstated). Only NEW calls; optional | x1\x96x20 for stated repeats (default 1). Unknown caller is allowed; never "unknown".', s.aiPlayerTexts ? "Only NEW actual calls." : 'Player outgoing calls only if their own message establishes them; append ~ "exact whole player message" for a simple I call Name statement. Otherwise never write player calls.');
+    lines.push('call: Name or number | in / out / missed | known time (omit time if unstated). Only NEW calls; optional | x1\u2013x20 for stated repeats (default 1). Unknown caller is allowed; never "unknown".', s.aiPlayerTexts ? "Only NEW actual calls." : 'Player outgoing calls only if their own message establishes them; append ~ "exact whole player message" for a simple I call Name statement. Otherwise never write player calls.');
   if (s.enabled["bank.balance"])
     lines.push("bank: account | exact stated balance | known as-of time (omit if unstated)");
   if (s.enabled["bank.transactions"])
@@ -2773,7 +2773,7 @@ var exact = (name) => name.trim().toLocaleLowerCase("en-US");
 var portraitKey = exact;
 
 // src/portrait-sources.ts
-async function loadPortraitSources(api, chatId, userId, player) {
+async function loadPortraitSources(api, chatId, userId, player, onFailure) {
   const result = emptyPortraitSources();
   if (!userId || !chatId)
     return result;
@@ -2787,13 +2787,17 @@ async function loadPortraitSources(api, chatId, userId, player) {
       const c = await api.characters.get(chat.character_id, userId);
       if (c?.image_id)
         result.characters.push({ name: c.name, data: rasterData(await api.images.readBinary(c.image_id, userId)) });
-    } catch {}
+    } catch (error) {
+      onFailure?.("portraits.character", error);
+    }
   if (api.permissions.has("personas") && player)
     try {
       const p = await api.personas.getActive(userId);
       if (p?.image_id && p.name.trim().toLocaleLowerCase("en-US") === player.trim().toLocaleLowerCase("en-US"))
         result.persona = { name: p.name, data: rasterData(await api.images.readBinary(p.image_id, userId)) };
-    } catch {}
+    } catch (error) {
+      onFailure?.("portraits.persona", error);
+    }
   return result;
 }
 
@@ -4341,7 +4345,7 @@ class PhoneStore {
       let { doc, rows } = await this.build(chatId, userId);
       if (doc.trackingEnabled === false)
         throw Error("Turn on the tracker for this chat first.");
-      if (JSON.stringify(doc.accepted, canonicalKeys) !== JSON.stringify(saved.accepted, canonicalKeys) && raw) {
+      if (raw && !sameAccepted(doc.accepted, saved.accepted)) {
         this.ready.delete(chatId);
         throw new Error("The story changed. Reopen the tracker and try again.");
       }
@@ -4485,7 +4489,7 @@ class PhoneStore {
       let { doc, rows } = await this.build(chatId, userId);
       if (doc.trackingEnabled === false)
         throw Error("Turn on the tracker for this chat first.");
-      if (JSON.stringify(doc.accepted, canonicalKeys) !== JSON.stringify(saved.accepted, canonicalKeys)) {
+      if (!sameAccepted(doc.accepted, saved.accepted)) {
         this.ready.delete(chatId);
         throw Error("The story changed. Nothing was saved.");
       }
@@ -4598,6 +4602,22 @@ class PhoneStore {
       await this.io.write(chatId, JSON.stringify(doc));
     });
   }
+}
+function sameAccepted(left, right) {
+  if (left === right)
+    return true;
+  if (left.length !== right.length)
+    return false;
+  const last = left.length - 1;
+  if (last < 0)
+    return true;
+  const equal = (index) => JSON.stringify(left[index], canonicalKeys) === JSON.stringify(right[index], canonicalKeys);
+  if (!equal(last))
+    return false;
+  for (let i = 0;i < last; i++)
+    if (!equal(i))
+      return false;
+  return true;
 }
 function canonicalKeys(_key, value) {
   return isRecord(value) ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : value;
@@ -4748,15 +4768,26 @@ var warn = (text) => {
     spindle.log.warn(text);
   } catch {}
 };
+function secondaryReply(event, payload, userId, operation = "frontend.notify") {
+  try {
+    spindle.sendToFrontend(payload, userId);
+  } catch (error) {
+    logFailure(warn, { operation, event, outcome: "notification-failed" }, error);
+  }
+}
+function secondaryFailure(event, operation, error, response, userId) {
+  logFailure(warn, { operation, event, outcome: "request-not-completed" }, error);
+  secondaryReply(event, response, userId, "frontend.error-notify");
+}
 var preferences = new PreferenceStore({
-  read: async (userId) => spindle.userStorage.getJson("appearance.json", { fallback: defaultPreferences(), userId }),
-  write: async (userId, value) => spindle.userStorage.setJson("appearance.json", value, { userId })
+  read: async (userId) => atOperation("appearance.read", () => spindle.userStorage.getJson("appearance.json", { fallback: defaultPreferences(), userId })),
+  write: async (userId, value) => atOperation("appearance.write", () => spindle.userStorage.setJson("appearance.json", value, { userId }))
 });
-var personal = new PersonalStore({ read: (userId) => spindle.userStorage.getJson("personal-settings.json", { fallback: emptyPersonal(), userId }), write: (userId, value) => spindle.userStorage.setJson("personal-settings.json", value, { userId }), warn });
+var personal = new PersonalStore({ read: (userId) => atOperation("personal.read", () => spindle.userStorage.getJson("personal-settings.json", { fallback: emptyPersonal(), userId })), write: (userId, value) => atOperation("personal.write", () => spindle.userStorage.setJson("personal-settings.json", value, { userId })), warn });
 var mainWording = async (userId) => selectedWording(await personal.read(userId), "main");
 var messageReads = new MessageReads({
-  read: (userId, chatId) => spindle.userStorage.getJson(`message-reads/${chatPath(chatId)}`, { fallback: emptyReads(), userId }),
-  write: (userId, chatId, value) => spindle.userStorage.setJson(`message-reads/${chatPath(chatId)}`, value, { userId })
+  read: (userId, chatId) => atOperation("receipts.read", () => spindle.userStorage.getJson(`message-reads/${chatPath(chatId)}`, { fallback: emptyReads(), userId })),
+  write: (userId, chatId, value) => atOperation("receipts.write", () => spindle.userStorage.setJson(`message-reads/${chatPath(chatId)}`, value, { userId }))
 });
 var store = new PhoneStore({
   names: (chat, user) => atOperation("card.names", () => cardNames(spindle, chat, user)),
@@ -4904,8 +4935,8 @@ spindle.onFrontendMessage((payload, userId) => {
         preview = { text: output, characters: output.length, tokenEstimate: Math.ceil(output.length / 4), warning: note };
       }
       const base = doc ?? emptyDocument("");
-      spindle.sendToFrontend({ type: "phone_personal_result", requestId: payload.requestId, chatId, personal: value, templates: { main: defaultWordingTemplate(base), helper: "" }, snapshot: snapshot ? phoneSnapshot(snapshot) : undefined, preview }, userId);
-    })().catch(() => spindle.sendToFrontend({ type: "phone_personal_error", requestId: payload.requestId, message: "Could not save. Check the name, limits and current chat; then try again." }, userId));
+      secondaryReply("phone_personal", { type: "phone_personal_result", requestId: payload.requestId, chatId, personal: value, templates: { main: defaultWordingTemplate(base), helper: "" }, snapshot: snapshot ? phoneSnapshot(snapshot) : undefined, preview }, userId);
+    })().catch((error) => secondaryFailure("phone_personal", "personal.request", error, { type: "phone_personal_error", requestId: payload.requestId, message: "Could not save. Check the name, limits and current chat; then try again." }, userId));
     return;
   }
   if (isRecord(payload) && payload.type === "phone_portraits" && typeof payload.chatId === "string" && payload.chatId.length <= 256 && typeof payload.requestId === "string" && payload.requestId.length <= 100) {
@@ -4913,13 +4944,13 @@ spindle.onFrontendMessage((payload, userId) => {
       requireReadPermissions();
       const doc = await store.settingsPreview(userId, payload.chatId);
       if (doc.trackingEnabled === false) {
-        spindle.sendToFrontend({ type: "phone_portraits_result", requestId: payload.requestId, chatId: doc.chatId, sources: { characters: [] } }, userId);
+        secondaryReply("phone_portraits", { type: "phone_portraits_result", requestId: payload.requestId, chatId: doc.chatId, sources: { characters: [] } }, userId);
         return;
       }
       const player = await spindle.macros.resolve("{{user}}", { chatId: doc.chatId, userId, commit: false });
-      const sources = await loadPortraitSources(spindle, doc.chatId, userId, !player.diagnostics.length ? player.text.trim() : undefined);
-      spindle.sendToFrontend({ type: "phone_portraits_result", requestId: payload.requestId, chatId: doc.chatId, sources }, userId);
-    })().catch(() => spindle.sendToFrontend({ type: "phone_portraits_result", requestId: payload.requestId, chatId: payload.chatId, sources: { characters: [] } }, userId));
+      const sources = await loadPortraitSources(spindle, doc.chatId, userId, !player.diagnostics.length ? player.text.trim() : undefined, (operation, error) => logFailure(warn, { operation, event: "phone_portraits", outcome: "initials-fallback" }, error));
+      secondaryReply("phone_portraits", { type: "phone_portraits_result", requestId: payload.requestId, chatId: doc.chatId, sources }, userId);
+    })().catch((error) => secondaryFailure("phone_portraits", "portraits.request", error, { type: "phone_portraits_result", requestId: payload.requestId, chatId: payload.chatId, sources: { characters: [] } }, userId));
     return;
   }
   if (isRecord(payload) && ["phone_connections", "phone_refresh", "phone_helper_now"].includes(String(payload.type)) && typeof payload.requestId === "string" && payload.requestId.length <= 100 && typeof payload.chatId === "string" && payload.chatId.length <= 256) {
@@ -4951,13 +4982,13 @@ spindle.onFrontendMessage((payload, userId) => {
       if (snapshot.trackingEnabled === false)
         throw Error("Tracking is off.");
       const reads = await messageReads.mark(userId, snapshot.chatId, payload.key, payload.observed, snapshot.state.messages, snapshot.state);
-      spindle.sendToFrontend({ type: "phone_reads_result", requestId: payload.requestId, chatId: snapshot.chatId, reads: snapshotReads(reads, phoneSnapshot(snapshot)) }, userId);
-    })().catch(() => spindle.sendToFrontend({ type: "phone_reads_error", requestId: payload.requestId, chatId: payload.chatId }, userId));
+      secondaryReply("phone_mark_read", { type: "phone_reads_result", requestId: payload.requestId, chatId: snapshot.chatId, reads: snapshotReads(reads, phoneSnapshot(snapshot)) }, userId);
+    })().catch((error) => secondaryFailure("phone_mark_read", "receipts.mark", error, { type: "phone_reads_error", requestId: payload.requestId, chatId: payload.chatId }, userId));
     return;
   }
   if (isRecord(payload) && ["phone_preferences", "phone_preferences_update"].includes(String(payload.type)) && typeof payload.requestId === "string" && payload.requestId.length <= 100) {
     const task = payload.type === "phone_preferences" ? preferences.read(userId) : preferences.update(userId, payload.change);
-    task.then((value) => spindle.sendToFrontend({ type: "phone_preferences_result", requestId: payload.requestId, preferences: value }, userId)).catch(() => spindle.sendToFrontend({ type: "phone_preferences_error", requestId: payload.requestId, message: "Appearance could not be saved. Try again." }, userId));
+    task.then((value) => secondaryReply(String(payload.type), { type: "phone_preferences_result", requestId: payload.requestId, preferences: value }, userId)).catch((error) => secondaryFailure(String(payload.type), "appearance.request", error, { type: "phone_preferences_error", requestId: payload.requestId, message: "Appearance could not be saved. Try again." }, userId));
     return;
   }
   if (!isRecord(payload) || !["phone_sync", "phone_update"].includes(String(payload.type)) || typeof payload.requestId !== "string" || payload.requestId.length > 100 || payload.chatId !== undefined && payload.chatId !== null && typeof payload.chatId !== "string")

@@ -28,6 +28,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   let pendingSync = "";
   let syncQueued=false;
   let syncTimer:ReturnType<typeof setTimeout>|undefined;
+  let passiveSyncTimer:ReturnType<typeof setTimeout>|undefined;
 
   let portraitRequest="",portraitChat:string|null=null;
   let current: PhoneDocument | null = null;
@@ -62,6 +63,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   disposers.push(removeHostStyle,ctx.dom.addStyle(sidebarCSS),ctx.dom.addStyle(fontCSS));
 
   const sendSync = () => {
+    clearTimeout(passiveSyncTimer);passiveSyncTimer=undefined;
     if(disposed)return;
     if(pendingSync){syncQueued=true;return;}
     pendingSync = nextUiId();
@@ -80,10 +82,20 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     const queued=syncQueued;syncQueued=false;
     if(queued)queueMicrotask(sendSync);
   };
+  // Coalesce completed-tag, mutation and backend notices; explicit actions stay immediate.
+  const scheduleSync = () => {
+    if(disposed||current?.trackingEnabled===false)return;
+    clearTimeout(passiveSyncTimer);
+    const origin=epoch,chat=activeChat;
+    passiveSyncTimer=setTimeout(()=>{
+      passiveSyncTimer=undefined;
+      if(!disposed&&origin===epoch&&chat===activeChat)sendSync();
+    },75);
+  };
   // These attach before any asynchronous UI initialization or DOM work.
   for (const tagName of [TRACKER_TAG, TEXT_TAG,"phone-email"]) disposers.push(ctx.messages.registerTagInterceptor({ tagName, removeFromMessage: true }, payload => {
     if (disposed || payload.isStreaming !== false || !payload.chatId || !payload.messageId || payload.chatId !== activeChat || current?.trackingEnabled===false) return;
-    if (payload.isUser === false || ([TEXT_TAG,"phone-email"].includes(tagName) && payload.isUser === true)) sendSync();
+    if (payload.isUser === false || ([TEXT_TAG,"phone-email"].includes(tagName) && payload.isUser === true)) scheduleSync();
   }));
 
   const requestPortraits=()=>{
@@ -262,7 +274,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
 
     if (disposed || !isRecord(payload)) return;
     if(payload.type==="phone_model_failure"){if(activeChat&&payload.chatId===activeChat)showModelError(typeof payload.message==="string"?safeModelMessage(payload.message):"");return;}
-    if(payload.type==="phone_tracker_changed"||payload.type==="phone_helper_changed") { if(activeChat && payload.chatId===activeChat && current?.trackingEnabled!==false)sendSync();return; }
+    if(payload.type==="phone_tracker_changed"||payload.type==="phone_helper_changed") { if(activeChat && payload.chatId===activeChat && current?.trackingEnabled!==false)scheduleSync();return; }
     if(typeof payload.requestId!=="string")return;
     const sr=setupRequests.get(payload.requestId);if(sr&&["phone_setup_result","phone_setup_error"].includes(String(payload.type))){clearTimeout(sr.timer);setupRequests.delete(payload.requestId);if(sr.epoch!==epoch||sr.chat!==activeChat||payload.chatId!==activeChat){sr.reject(Error("The chat changed. Reopen setup in the original chat."));return;}if(payload.type==="phone_setup_error"){sr.reject(Error(typeof payload.message==="string"?payload.message:"Setup failed. Nothing was saved."));return;}if(!isRecord(payload.result)){sr.reject(Error("Invalid setup response."));return;}if(isRecord(payload.result.snapshot)&&payload.result.snapshot.chatId===activeChat){current=payload.result.snapshot as unknown as PhoneDocument;sidebar?.receive(current,chatName);view?.receive(current,reads);}sr.resolve(payload.result);return;}
     const pr=personalRequests.get(payload.requestId);
@@ -323,6 +335,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     backendBusy=payload.helperBusy===true;updateBusy();
   }));
   const switchChat = (chatId: string | null) => {
+    clearTimeout(passiveSyncTimer);passiveSyncTimer=undefined;
     modelError="";clearTimeout(toolbarTimer);statuses.forEach(n=>{n.textContent="";});portraitChat=null;portraitRequest="";epoch++; refreshPending=false;refreshStatus.textContent="";openStatus.textContent="";backendBusy=false;clearTimeout(syncTimer);syncTimer=undefined;syncQueued=false;pendingSync = ""; activeChat = chatId; current = null; reads = emptyReads(); view?.receive(null, reads);chatName="";sidebar?.receive(null,"");updateBusy();
     for (const [id, p] of readRequests) { clearTimeout(p.timer); p.reject(new Error("The chat changed.")); readRequests.delete(id); }
     for (const [id, p] of updates) { clearTimeout(p.timer); p.reject(new Error("The chat changed. Your original chat keeps its saved changes.")); updates.delete(id); }
@@ -331,14 +344,14 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   };
   disposers.push(ctx.events.on("CHAT_SWITCHED", (payload: unknown) => { if (isRecord(payload)) switchChat(typeof payload.chatId === "string" ? payload.chatId : null); }));
   for (const event of ["MESSAGE_SENT", "MESSAGE_EDITED", "MESSAGE_DELETED", "MESSAGE_SWIPED", "SWIPE_EDITED", "CHAT_CHANGED"]) disposers.push(ctx.events.on(event, (payload: unknown) => {
-    if (isRecord(payload) && activeChat && payload.chatId === activeChat) sendSync();
+    if (isRecord(payload) && activeChat && payload.chatId === activeChat) scheduleSync();
   }));
   for(const name of ["GENERATION_STARTED","GENERATION_ENDED","GENERATION_STOPPED"])disposers.push(ctx.events.on(name,(payload:unknown)=>{
     if(!isRecord(payload)||typeof payload.chatId!=="string"||typeof payload.generationId!=="string")return;
     const ids=streaming.get(payload.chatId)??new Set<string>();
     if(name==="GENERATION_STARTED")ids.add(payload.generationId);else ids.delete(payload.generationId);
     if(ids.size)streaming.set(payload.chatId,ids);else streaming.delete(payload.chatId);
-    if(payload.chatId===activeChat){updateBusy();if(name!=="GENERATION_STARTED"&&current?.trackingEnabled!==false)sendSync();}
+    if(payload.chatId===activeChat)updateBusy(); // Saved-message events drive tracker reads, including after failed/stopped generations.
   }));
   const fit = () => view?.fit(); window.addEventListener("resize", fit); window.visualViewport?.addEventListener("resize", fit);
   disposers.push(() => { window.removeEventListener("resize", fit); window.visualViewport?.removeEventListener("resize", fit); });
@@ -349,7 +362,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   void prefsChange().then(p => { if (disposed || initialAppearanceEpoch !== appearanceEpoch || p.revision < preferences.revision) return; preferences = p;sidebar?.preferences(p); view?.receivePreferences(p); try { view?.applyCSS(p.css);applySidebarStyle(p.sidebarCss??""); } catch { help.textContent = "Saved custom CSS could not be applied. Reset appearance to clear it."; } }).catch(() => { help.textContent = "Appearance could not be loaded. Default styles are in use."; });
   void ensureWidget();
   return () => {
-    disposed = true; epoch++;clearTimeout(syncTimer);syncTimer=undefined;pendingSync="";syncQueued=false;streaming.clear();for(const r of setupRequests.values()){clearTimeout(r.timer);r.reject(Error("Phone closed."));}setupRequests.clear(); widgetResize?.disconnect(); view?.destroy(); widget?.destroy();
+    disposed = true; epoch++;clearTimeout(passiveSyncTimer);passiveSyncTimer=undefined;clearTimeout(syncTimer);syncTimer=undefined;pendingSync="";syncQueued=false;streaming.clear();for(const r of setupRequests.values()){clearTimeout(r.timer);r.reject(Error("Phone closed."));}setupRequests.clear(); widgetResize?.disconnect(); view?.destroy(); widget?.destroy();
     for (const p of updates.values()) { clearTimeout(p.timer); p.reject(new Error("The phone closed before saving completed. Check the chat before trying again.")); }
     for (const p of prefsRequests.values()) { clearTimeout(p.timer); p.reject(new Error("The phone closed.")); }
     for (const p of readRequests.values()) { clearTimeout(p.timer); p.reject(new Error("The phone closed.")); }

@@ -28,6 +28,8 @@ The frontend requests a fresh snapshot after an edit conflict and preserves open
 
 ## Frontend and styling
 
+Phone snapshots use chat ID, document revision and current-player identity to skip duplicate state/portrait serialization. Personal receipts have their own revision and still update on that fast path. A changed identity or revision uses the full display comparison.
+
 The frontend mounts a floating phone and a separate sidebar. Phone custom CSS is isolated from the protected sidebar toolbar and Reset. Theme defaults, variables and stable classes are described in [STYLING.md](../STYLING.md). Phone surfaces stay opaque and AI text is rendered safely.
 
 Messages reply drafting uses the documented composer interface and never invokes Send. User texts are filed only after they are actually sent. Read state remains personal even when story entries are shared.
@@ -42,4 +44,4 @@ Only explicit Run setup dispatches a model request through the selected saved co
 
 Failure logs include fixed operation, event, outcome and category labels. They distinguish revision mismatch, accepted-state drift, host failures, validation failures and failed frontend notification after a completed tracker operation. No arbitrary exception text, story values, private headers or user/chat IDs enter this logger. Unknown errors remain unclassified.
 
-Normal tracking makes no secondary model request. Cached reads and append processing reduce history work, but growing journals still require validation, copying and serialization. Fallback rebuilding still reads history. Local tests do not prove the real server's memory-pressure problem is resolved. See [TESTING.md](../TESTING.md) for measured coverage and limitations.
+Normal tracking makes no secondary model request. Cached reads and append processing reduce history work, but growing journals still require validation, copying and serialization. Fallback rebuilding still reads history. Accepted-history conflict detection checks length/tail first, then compares canonical entries without whole-journal strings; it still checks earlier entries. Embedded emoji/contact/weather PNGs are resized at build-maintenance time, not during runtime or by a remote service. Fonts remain embedded. Local tests do not prove the real server's memory-pressure problem is resolved. See [TESTING.md](../TESTING.md) for measured coverage and limitations.

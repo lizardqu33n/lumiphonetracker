@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.19.3 - Local lightweight update candidate
+
+- Reduce the frontend from 7,296,378 to 2,024,318 bytes (72.3%) by embedding proportion-preserving nearest-neighbor PNG derivatives: emoji/contact controls fit 64px, weather 192px. No trimming, recoloring, external loading or font/layout changes. Original source-cell audit and approved sleepy-Z correction remain recorded; the resized pixels are not source-resolution lossless copies.
+- Compare accepted-history length and tail first, then canonical entries individually. Earlier message drift remains detectable and no edit protection is removed. Unchanged journals remain linear work, with smaller intermediate JSON allocations.
+
+- Skip repeated PhoneView state/portrait serialization when chat, revision and player are unchanged. Personal read receipts still update; changes to chat/revision/player use the existing full comparison, preserving same-length portrait replacement detection on a new revision.
+- Add safe operation/category logging to personal settings, portrait requests, read receipts and appearance handlers. Wrap personal/appearance/receipt storage boundaries, log optional avatar read fallbacks, and catch failed success/error notifications without exposing private exception content.
+- Correct three Windows-1252 bytes in source: curly-apostrophe call negations, the x1-x20 count range dash and the dismiss multiplication sign. Normalize the affected files to UTF-8/LF and repair matching test literals. Package checks now reject invalid UTF-8 source instead of silently accepting replacement characters.
+- Debounce passive completed-tag, chat-mutation and backend notifications by 75 ms. Generation lifecycle events update busy state only; they no longer request tracker snapshots. Explicit Refresh, chat opening and conflict recovery remain immediate.
+- Cancel the passive timer on chat switches, explicit sync and disposal. Preserve the single in-flight request plus follow-up behavior when newer changes arrive. No tracker rules, data scopes, permissions or model calls change.
+
+
 ## 0.19.2 - Preserve edits during conflict recovery
 
 - Distinguish revision mismatches from changed-story conflicts in safe diagnostic categories. Keep revision guards and require an explicit Save to latest; there is no automatic save retry.

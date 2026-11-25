@@ -24,15 +24,26 @@ import { failureCategory } from "./helper-status";
 declare const spindle: SpindleAPI;
 const warn = (text: string): void => { try { spindle.log.warn(text); } catch { /* Logging cannot block generation. */ } };
 
+// Keep secondary request diagnostics visible without allowing disconnected clients
+// or failed error delivery to create another rejected handler promise.
+function secondaryReply(event:string,payload:unknown,userId:string,operation="frontend.notify"):void {
+  try { spindle.sendToFrontend(payload,userId); }
+  catch(error) { logFailure(warn,{operation,event,outcome:"notification-failed"},error); }
+}
+function secondaryFailure(event:string,operation:string,error:unknown,response:unknown,userId:string):void {
+  logFailure(warn,{operation,event,outcome:"request-not-completed"},error);
+  secondaryReply(event,response,userId,"frontend.error-notify");
+}
+
 const preferences = new PreferenceStore({
-  read: async userId => spindle.userStorage.getJson("appearance.json", { fallback: defaultPreferences(), userId }),
-  write: async (userId, value) => spindle.userStorage.setJson("appearance.json", value, { userId }),
+  read: async userId => atOperation("appearance.read",()=>spindle.userStorage.getJson("appearance.json", { fallback: defaultPreferences(), userId })),
+  write: async (userId, value) => atOperation("appearance.write",()=>spindle.userStorage.setJson("appearance.json", value, { userId })),
 });
-const personal=new PersonalStore({read: userId=>spindle.userStorage.getJson("personal-settings.json",{fallback:emptyPersonal(),userId}),write:(userId,value)=>spindle.userStorage.setJson("personal-settings.json",value,{userId}),warn});
+const personal=new PersonalStore({read: userId=>atOperation("personal.read",()=>spindle.userStorage.getJson("personal-settings.json",{fallback:emptyPersonal(),userId})),write:(userId,value)=>atOperation("personal.write",()=>spindle.userStorage.setJson("personal-settings.json",value,{userId})),warn});
 const mainWording=async(userId:string)=>selectedWording(await personal.read(userId),"main");
 const messageReads = new MessageReads({
-  read: (userId, chatId) => spindle.userStorage.getJson(`message-reads/${chatPath(chatId)}`, { fallback: emptyReads(), userId }),
-  write: (userId, chatId, value) => spindle.userStorage.setJson(`message-reads/${chatPath(chatId)}`, value, { userId }),
+  read: (userId, chatId) => atOperation("receipts.read",()=>spindle.userStorage.getJson(`message-reads/${chatPath(chatId)}`, { fallback: emptyReads(), userId })),
+  write: (userId, chatId, value) => atOperation("receipts.write",()=>spindle.userStorage.setJson(`message-reads/${chatPath(chatId)}`, value, { userId })),
 });
 
 const store = new PhoneStore({
@@ -134,11 +145,11 @@ spindle.onFrontendMessage((payload, userId) => {
         preview={text:output,characters:output.length,tokenEstimate:Math.ceil(output.length/4),warning:note};
       }
       const base=doc??emptyDocument("");
-      spindle.sendToFrontend({type:"phone_personal_result",requestId:payload.requestId,chatId,personal:value,templates:{main:defaultWordingTemplate(base),helper:""},snapshot:snapshot?phoneSnapshot(snapshot as import("./model").Document):undefined,preview},userId);
-    })().catch(()=>spindle.sendToFrontend({type:"phone_personal_error",requestId:payload.requestId,message:"Could not save. Check the name, limits and current chat; then try again."},userId));return;
+      secondaryReply("phone_personal",{type:"phone_personal_result",requestId:payload.requestId,chatId,personal:value,templates:{main:defaultWordingTemplate(base),helper:""},snapshot:snapshot?phoneSnapshot(snapshot as import("./model").Document):undefined,preview},userId);
+    })().catch(error=>secondaryFailure("phone_personal","personal.request",error,{type:"phone_personal_error",requestId:payload.requestId,message:"Could not save. Check the name, limits and current chat; then try again."},userId));return;
   }
   if(isRecord(payload)&&payload.type==="phone_portraits"&&typeof payload.chatId==="string"&&payload.chatId.length<=256&&typeof payload.requestId==="string"&&payload.requestId.length<=100){
-    void(async()=>{requireReadPermissions();const doc=await store.settingsPreview(userId,payload.chatId as string);if(doc.trackingEnabled===false){spindle.sendToFrontend({type:"phone_portraits_result",requestId:payload.requestId,chatId:doc.chatId,sources:{characters:[]}},userId);return;}const player=await spindle.macros.resolve("{{user}}",{chatId:doc.chatId,userId,commit:false});const sources=await loadPortraitSources(spindle,doc.chatId,userId,!player.diagnostics.length?player.text.trim():undefined);spindle.sendToFrontend({type:"phone_portraits_result",requestId:payload.requestId,chatId:doc.chatId,sources},userId);})().catch(()=>spindle.sendToFrontend({type:"phone_portraits_result",requestId:payload.requestId,chatId:payload.chatId,sources:{characters:[]}},userId));return;
+    void(async()=>{requireReadPermissions();const doc=await store.settingsPreview(userId,payload.chatId as string);if(doc.trackingEnabled===false){secondaryReply("phone_portraits",{type:"phone_portraits_result",requestId:payload.requestId,chatId:doc.chatId,sources:{characters:[]}},userId);return;}const player=await spindle.macros.resolve("{{user}}",{chatId:doc.chatId,userId,commit:false});const sources=await loadPortraitSources(spindle,doc.chatId,userId,!player.diagnostics.length?player.text.trim():undefined,(operation,error)=>logFailure(warn,{operation,event:"phone_portraits",outcome:"initials-fallback"},error));secondaryReply("phone_portraits",{type:"phone_portraits_result",requestId:payload.requestId,chatId:doc.chatId,sources},userId);})().catch(error=>secondaryFailure("phone_portraits","portraits.request",error,{type:"phone_portraits_result",requestId:payload.requestId,chatId:payload.chatId,sources:{characters:[]}},userId));return;
   }
   if(isRecord(payload) && ["phone_connections","phone_refresh","phone_helper_now"].includes(String(payload.type)) && typeof payload.requestId==="string" && payload.requestId.length<=100 && typeof payload.chatId==="string" && payload.chatId.length<=256) {
     void(async()=>{
@@ -168,15 +179,15 @@ spindle.onFrontendMessage((payload, userId) => {
       const snapshot = await store.preview(payload.chatId as string,userId);
       if(snapshot.trackingEnabled===false)throw Error("Tracking is off.");
       const reads = await messageReads.mark(userId, snapshot.chatId, payload.key as string, payload.observed as { id: string; receipt: string }[], snapshot.state.messages,snapshot.state);
-      spindle.sendToFrontend({ type: "phone_reads_result", requestId: payload.requestId, chatId: snapshot.chatId, reads:snapshotReads(reads,phoneSnapshot(snapshot)) }, userId);
-    })().catch(() => spindle.sendToFrontend({ type: "phone_reads_error", requestId: payload.requestId, chatId: payload.chatId }, userId));
+      secondaryReply("phone_mark_read",{ type: "phone_reads_result", requestId: payload.requestId, chatId: snapshot.chatId, reads:snapshotReads(reads,phoneSnapshot(snapshot)) }, userId);
+    })().catch(error => secondaryFailure("phone_mark_read","receipts.mark",error,{ type: "phone_reads_error", requestId: payload.requestId, chatId: payload.chatId }, userId));
     return;
   }
   if (isRecord(payload) && ["phone_preferences", "phone_preferences_update"].includes(String(payload.type)) &&
     typeof payload.requestId === "string" && payload.requestId.length <= 100) {
     const task = payload.type === "phone_preferences" ? preferences.read(userId) : preferences.update(userId, payload.change);
-    void task.then(value => spindle.sendToFrontend({ type: "phone_preferences_result", requestId: payload.requestId, preferences: value }, userId))
-      .catch(() => spindle.sendToFrontend({ type: "phone_preferences_error", requestId: payload.requestId, message: "Appearance could not be saved. Try again." }, userId));
+    void task.then(value => secondaryReply(String(payload.type),{ type: "phone_preferences_result", requestId: payload.requestId, preferences: value }, userId))
+      .catch(error => secondaryFailure(String(payload.type),"appearance.request",error,{ type: "phone_preferences_error", requestId: payload.requestId, message: "Appearance could not be saved. Try again." }, userId));
     return;
   }
   if (!isRecord(payload) || !["phone_sync", "phone_update"].includes(String(payload.type)) || typeof payload.requestId !== "string" ||

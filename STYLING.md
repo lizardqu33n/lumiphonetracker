@@ -530,7 +530,7 @@ to change the bundled sidebar defaults. No extra appearance settings are added.
 
 ## Emoji (0.13.0)
 
-The original PNG cells retain their RGBA transparency. Only the picker surface
+The supplied full-cell artwork is embedded as smaller optimized PNGs with RGBA transparency. Emoji and contact controls fit within 64px; weather is 192px. CSS uses the existing dimensions and sharp pixel scaling. Enlarging these assets far above the defaults reveals less detail than the original high-resolution source cells. No backgrounds, trimming or new CSS variables were added. Only the picker surface
 gets a solid existing card background. Inline images use nearest-neighbor pixel
 scaling; no external image, background or inline style is introduced. Unknown
 shortcodes stay text. Editors/CSS input remain literal, not image-rendered.

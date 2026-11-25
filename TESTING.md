@@ -1,3 +1,21 @@
+# 0.19.3 local verification
+
+Current candidate: 327 code tests, 62 focused browser checks, type checking, reproducible built-file verification and package validation pass locally. No real-server heap/profile was measured.
+
+Asset checks cover all 44 optimized PNGs, audited hashes, nearest-neighbor decoded RGBA, proportional dimensions, transparent backgrounds and original emoji-cell provenance. Browser checks decode every image at 2x density and verify sharp weather scaling. Fonts and CSS layout are unchanged. Emoji/contact images are capped at 64px, weather at 192px; large custom-CSS enlargement has less source detail. The original sleepy cell remains audited as 362x367 and its derivative is 63x64, preserving the full-cell aspect ratio.
+
+Accepted-history tests cover length/tail early exits, key-order equivalence, and earlier entry/swipe/text drift with an unchanged last entry. A synthetic 1,000-entry comparison (1,133,781 canonical characters, five iterations) measured about 18.1ms old / 18.5ms new for unchanged data, 17.2ms / 0.001ms for appended data, 16.8ms / 0.021ms for changed tail data, and 16.1ms / 0.036ms for a changed earliest entry. These are illustrative local timings, not stable thresholds or evidence that all edits get faster. The new path avoids two whole-journal strings; full build/replay/validation costs remain.
+
+Snapshot regression tests call the actual PhoneView.receive method 1,000 times with serialization sentinels on state and portraits: equal chat/revision/player performs no serialization and newer personal receipts still apply. Changed chat/revision/player reaches the full comparison. Revision changes continue to compare complete portrait data rather than lengths.
+
+Backend mocks inject failures into personal settings, appearance reads/writes, receipt reads and portrait requests. They verify safe domain.code diagnostics, initials fallback, failed error delivery on all four paths, later recovery and no private exception values in logs. Optional card/persona avatar failures also report safe operations without blocking the phone.
+
+Encoding fixes cover three source bytes plus matching legacy test literals. All src files decode as UTF-8; the package check now uses a fatal UTF-8 decoder for TypeScript/CSS source. A curly-apostrophe negation test covers did not/cannot/was not contractions and a positive actual call.
+
+Browser regressions cover staggered tag/message/backend notifications producing one coalesced sync; failed-generation bursts and partial tags producing none; a later saved reply updating the phone; a change arriving during an in-flight read receiving one follow-up; chat switching/closing and extension disposal cancelling the old timer. Existing conflict-recovery and protected-Reset/layout checks remain included. Passive refreshes intentionally wait for a 75 ms quiet interval. Events arriving after that interval or during a slow read can legitimately require another sync.
+
+Real server timing, mobile behavior and main-process memory use remain unverified. This is a local candidate and has not been pushed. Final code/browser/build results are reported with delivery.
+
 # 0.19.2 verification
 
 The revised patch passed 320 code tests, type checking, built-file checks, extension validation and 52 focused browser checks. The prior review's two failure cases now pass: editing a relationship preserves a newer phone number after Save to latest, and detected accepted-history drift invalidates readiness so openView rebuilds and advances the revision. The browser regression is now part of scripts/test-ui.ts, alongside the existing focused UI checks.

@@ -14,7 +14,7 @@ test("actual backend: render/prompt hooks, scoped receipts, saved-message safety
   let deliver: (p: Record<string, unknown>, user: string) => void = () => {};
   let registrationOptions: unknown;
   const calls: string[] = []; const warnings: string[] = [];
-  let failReads = false;let failReceipts=false;let setupMode=false;let failNotifications=false;let failWrites=false;
+  let failReads = false;let failReceipts=false;let setupMode=false;let failNotifications=false;let failWrites=false;let failPersonal=false;let failAppearance=false;let failUserWrites=false;
   const scoped = (user: unknown, method: string) => {
     if (typeof user !== "string" || !user.trim()) throw new Error("userId is required for operator-scoped extensions");
     calls.push(method);
@@ -42,8 +42,8 @@ test("actual backend: render/prompt hooks, scoped receipts, saved-message safety
     userStorage: {
       exists: async (path: string, user: string) => {scoped(user,"userStorage.exists");return persisted.has(`${user}/${path}`);},
       read: async (path: string, user: string) => {scoped(user,"userStorage.read");return JSON.stringify(persisted.get(`${user}/${path}`));},
-      getJson: async (path: string, options: { userId: string; fallback: unknown }) => {scoped(options?.userId,"userStorage.getJson");if(failReceipts&&path.startsWith("message-reads/"))throw Error("PRIVATE receipt failure");return structuredClone(persisted.get(`${options.userId}/${path}`) ?? options.fallback);},
-      setJson: async (path: string, value: unknown, options: { userId: string }) => { scoped(options?.userId,"userStorage.setJson");persisted.set(`${options.userId}/${path}`, value); },
+      getJson: async (path: string, options: { userId: string; fallback: unknown }) => {scoped(options?.userId,"userStorage.getJson");if(failPersonal&&path==="personal-settings.json")throw Error("RPC timed out PRIVATE personal data");if(failAppearance&&path==="appearance.json")throw Error("Permission denied PRIVATE appearance data");if(failReceipts&&path.startsWith("message-reads/"))throw Error("PRIVATE receipt failure");return structuredClone(persisted.get(`${options.userId}/${path}`) ?? options.fallback);},
+      setJson: async (path: string, value: unknown, options: { userId: string }) => { scoped(options?.userId,"userStorage.setJson");if(failUserWrites)throw Error("RPC timed out PRIVATE write data");persisted.set(`${options.userId}/${path}`, value); },
     },
     sendToFrontend: (p: Record<string, unknown>, user: string) => { scoped(user,"sendToFrontend");if(failNotifications)throw Error("Socket closed PRIVATE notification body");deliver(p,user); },
     log: { info: () => {}, warn: (text:string) => {warnings.push(text);} },
@@ -265,6 +265,32 @@ test("actual backend: render/prompt hooks, scoped receipts, saved-message safety
     expect(warnings.at(-1)).toContain('"operation":"frontend.error-notify"');
     failNotifications=false;
     expect((await request({type:"phone_sync",chatId:"a"},"u")).type).toBe("phone_snapshot");
+    failPersonal=true;
+    expect((await request({type:"phone_personal",chatId:"a"},"u")).type).toBe("phone_personal_error");
+    expect(warnings.at(-1)).toContain('"event":"phone_personal"');expect(warnings.at(-1)).toContain('"operation":"personal.read"');expect(warnings.at(-1)).toContain('"category":"host.timeout"');
+    failPersonal=false;failAppearance=true;
+    expect((await request({type:"phone_preferences"},"u")).type).toBe("phone_preferences_error");
+    expect(warnings.at(-1)).toContain('"operation":"appearance.read"');expect(warnings.at(-1)).toContain('"category":"auth.permission_denied"');
+    failAppearance=false;failUserWrites=true;
+    expect((await request({type:"phone_preferences_update",change:{css:""}},"u")).type).toBe("phone_preferences_error");
+    expect(warnings.at(-1)).toContain('"operation":"appearance.write"');
+    failUserWrites=false;failReceipts=true;
+    expect((await request({type:"phone_mark_read",chatId:"a",key:"ada",observed:[]},"u")).type).toBe("phone_reads_error");
+    expect(warnings.at(-1)).toContain('"event":"phone_mark_read"');expect(warnings.at(-1)).toContain('"operation":"receipts.read"');
+    failReceipts=false;failReads=true;
+    const portraitFailure=await request({type:"phone_portraits",chatId:"a"},"u");
+    expect(portraitFailure.sources).toEqual({characters:[]});expect(warnings.at(-1)).toContain('"event":"phone_portraits"');
+    failReads=false;
+    // A disconnected client cannot create a rejected promise in any of these catch paths.
+    failNotifications=true;failPersonal=true;failAppearance=true;failReceipts=true;
+    receive({type:"phone_personal",chatId:"a",requestId:"failed-personal"},"u");
+    receive({type:"phone_preferences",requestId:"failed-appearance"},"u");
+    receive({type:"phone_mark_read",chatId:"a",key:"ada",observed:[],requestId:"failed-receipt"},"u");
+    receive({type:"phone_portraits",chatId:"a",requestId:"failed-avatar"},"other-user");
+    await Bun.sleep(30);
+    for(const event of ["phone_personal","phone_preferences","phone_mark_read","phone_portraits"])expect(warnings.some(w=>w.includes('"event":"'+event+'"')&&w.includes('"operation":"frontend.error-notify"'))).toBe(true);
+    failNotifications=false;failPersonal=false;failAppearance=false;failReceipts=false;
+    expect((await request({type:"phone_preferences"},"u")).type).toBe("phone_preferences_result");
     expect(JSON.stringify(warnings)).not.toContain("PRIVATE");
   } finally { (globalThis as unknown as { spindle?: unknown }).spindle = prior; }
 });

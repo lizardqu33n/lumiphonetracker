@@ -3,6 +3,8 @@ import { execFileSync } from "node:child_process";
 
 // Include an explicit allowlist; never package dependencies or personal inputs.
 const files = [
+  "scripts/optimize-assets.py", "scripts/benchmark-accepted.ts", "docs/ASSET-OPTIMIZATION.json", "tests/accepted-drift.test.ts",
+  "tests/view-receive.test.ts",
   ".gitignore",
   "CHANGELOG.md",
   "INSTALL.md",
