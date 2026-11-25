@@ -140,6 +140,8 @@ const fixturePast = (chat:string):StoryRow=>({id:`${chat}-past`,chat_id:chat,ind
   content:"Bea and Player meet at the Station. Lantern Cafe is their next meeting place.<phone-state>\nloc: Station\npresent: Bea; Player\nc: Bea | roles=Station keeper | phys=Unhurt\np: Lantern Cafe | Meeting place | East of Station\n</phone-state>"});
 function start() { cleanup = setup(ctx as never); }
 const api = {
+  async peerContactPhone(name:string,phone:string){const chat=activeChat!;const d=await store.savedView(chat,`owner-${chat}`);await store.update(`owner-${chat}`,chat,d.revision,{contactInfo:{name,phone}});onBackend({type:"phone_tracker_changed",chatId:chat});},
+
   async seed(kind: "empty" | "story" = "story") {
     cleanup?.();requestCounts.clear(); helper.cancelAll(); docs.clear(); histories.clear(); events.clear(); readFiles.clear(); prefs = defaultPreferences(); activeChat = "a"; granted = ["chats", "chat_mutation", "interceptor", "ui_panels","generation"]; updateDelay = 0;
     wizardChoices.clear();setupCalls=0;setupOutput=null;setupFinish="stop";setupFailure="";helperFailure="";setupFact="Zoe is a guide. Her phone is 555666.";helperCalls.length=0;helperDelay=0;helperOutput='{"weather":"Clear skies"}';helperProfiles=[{id:"small",name:"Saved small connection",model:"Small test model",is_default:true}];

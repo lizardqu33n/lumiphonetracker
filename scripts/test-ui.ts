@@ -895,6 +895,18 @@ try {
   await blocked.getByRole("button",{name:"Choose emoji",exact:true}).click();await blocked.locator('.lpt-emoji-option[data-emoji="heart"]').click();
   check((await blocked.locator(".lpt-reply-input").inputValue()).includes(":heart:")&&blockedErrors.length===0,"Phone and emoji picker work when direct browser UUID calls throw");
   await blocked.close();
+  const conflictPage=await browser.newPage({viewport:{width:1100,height:850}});
+  await conflictPage.goto(`http://127.0.0.1:${server.port}`);await ready(conflictPage);await open(conflictPage,"Contacts");
+  await conflictPage.locator(".lpt-contact-row").filter({hasText:"Ada"}).click();await conflictPage.locator(".lpt-contact-edit").click();
+  await conflictPage.locator('.lpt-form [name="relationship"]').fill("Friend");
+  await conflictPage.evaluate(()=>(window as any).harness.peerContactPhone("Ada","555-0199"));await conflictPage.waitForTimeout(120);
+  await conflictPage.locator(".lpt-form .lpt-save").click();await conflictPage.waitForTimeout(150);
+  check(await conflictPage.locator('.lpt-form [name="relationship"]').inputValue()==="Friend","A conflict preserves typed contact input");
+  check(await conflictPage.locator('.lpt-form .lpt-save').innerText()==="Save to latest","A conflict waits for an explicit save against the refreshed snapshot");
+  check(await conflictPage.evaluate(()=>(window as any).harness.getDocument().contactInfo.ada.phone)==="555-0199","Conflict rejection preserves the concurrently saved phone number");
+  await conflictPage.locator(".lpt-form .lpt-save").click();await conflictPage.waitForTimeout(150);
+  check(await conflictPage.evaluate(()=>{const c=(window as any).harness.getDocument().contactInfo.ada;return c.phone==="555-0199"&&c.relationship==="Friend";}),"Save to latest changes the relationship without erasing the newer phone number");
+  await conflictPage.close();
   console.log(`Browser UI verification passed: ${checks} checks. Screenshots in .test-artifacts/. No real Lumiverse instance or provider was used.`);
 } catch(error) { console.error(`Browser stopped after check ${checks}: ${lastCheck}`);for(const [i,page]of browser.contexts().flatMap(c=>c.pages()).entries())try{await page.screenshot({path:`.test-artifacts/failure-${i}.png`});}catch{}throw error;
 } finally { await browser.close(); server.stop(true); }

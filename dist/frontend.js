@@ -2006,7 +2006,7 @@ class PhoneView {
   }
   async change(change, revision = this.doc?.revision ?? -1) {
     if (!this.doc || this.busy)
-      return;
+      return "error";
     this.busy = true;
     this.setStatus("Saving…");
     const controls = this.root.querySelectorAll(".lpt-setting input, .lpt-helper-source, .lpt-helper-connection, .lpt-form input, .lpt-form textarea, .lpt-form select, .lpt-form button, .lpt-add, .lpt-field, .lpt-delete");
@@ -2020,9 +2020,13 @@ class PhoneView {
       if (this.renderDirty && this.openState)
         this.render();
       this.setStatus("Saved.");
+      return "saved";
     } catch (e) {
       this.setStatus("");
-      this.setError(e instanceof Error ? e.message : "Could not save. Your changes are still here.");
+      const message = e instanceof Error ? e.message : "Could not save. Your changes are still here.";
+      const conflict = isRecord(e) && e.conflict === true || /^The (tracker|story) changed\./.test(message);
+      this.setError(conflict && this.editing ? "The tracker updated while you were editing. Your input is still here—review it and press Save to latest, or Cancel to discard." : message);
+      return conflict ? "conflict" : "error";
     } finally {
       this.busy = false;
       controls.forEach((control) => {
@@ -2035,7 +2039,8 @@ class PhoneView {
       return;
     const originEpoch = this.chatEpoch, originChat = this.doc?.chatId;
     this.editing = true;
-    const revision = this.doc?.revision ?? -1;
+    const baseRevision = this.doc?.revision ?? -1;
+    let conflicted = false;
     const form = el("form", "lpt-form");
     const controls = new Map;
     for (const f of fields) {
@@ -2081,8 +2086,14 @@ class PhoneView {
       const values = {};
       for (const [key, input] of controls)
         values[key] = input instanceof HTMLInputElement && input.type === "checkbox" ? input.checked : input.value.trim();
+      const targetRevision = conflicted ? this.doc?.revision ?? baseRevision : baseRevision;
       try {
-        this.change(save(values), revision);
+        this.change(save(values), targetRevision).then((outcome) => {
+          if (outcome === "conflict" && originEpoch === this.chatEpoch && form.isConnected) {
+            conflicted = true;
+            submit.textContent = "Save to latest";
+          }
+        });
       } catch (error) {
         this.setError(error instanceof Error ? error.message : "Check the form.");
       }
@@ -2495,6 +2506,7 @@ class PhoneView {
     const info = contact?.info ?? emptyContactInfo(contact?.name ?? "");
     let kindTouched = false;
     const details = info.details.map((d) => ({ ...d }));
+    const initialDetails = JSON.stringify(info.details.map((d) => ({ label: d.label.trim(), value: d.value.trim() })));
     const fields = [
       { key: "name", label: "Name", value: contact?.name ?? "", required: true, max: 100 },
       { key: "kind", label: "Tag", value: info.kind, options: [["Main", "Main"], ["NPC", "NPC"]] },
@@ -2518,10 +2530,13 @@ class PhoneView {
       const worn = lines(String(v.worn)), removed = lines(String(v.removed));
       if (JSON.stringify([worn, removed]) !== JSON.stringify([oldWorn, oldRemoved]))
         value.attire = { worn, removed };
+      const cleanedDetails = details.filter((d) => d.label.trim() && d.value.trim()).map((d) => ({ label: d.label.trim(), value: d.value.trim() }));
+      const infoPatch = { ...v.phone !== undefined && (!contact || String(v.phone) !== info.phone) ? { phone: String(v.phone) } : {}, ...v.email !== undefined && (!contact || String(v.email) !== info.email) ? { email: String(v.email) } : {}, ...!contact || String(v.relationship) !== info.relationship ? { relationship: String(v.relationship) } : {}, ...!contact || JSON.stringify(cleanedDetails) !== initialDetails ? { details: cleanedDetails } : {}, ...kindTouched ? { kind: String(v.kind) } : {} };
+      const hasEdit = !contact || name !== contact.name || Object.keys(value).length > 0;
       this.selectedContact = normalize(name);
       return {
-        edit: { target: "contact", name: contact?.name ?? name, ...contact && name !== contact.name ? { rename: name } : {}, value },
-        contactInfo: { name, ...v.phone !== undefined ? { phone: String(v.phone) } : {}, ...v.email !== undefined ? { email: String(v.email) } : {}, relationship: String(v.relationship), details: details.filter((d) => d.label.trim() && d.value.trim()), ...kindTouched ? { kind: String(v.kind) } : {} },
+        ...hasEdit ? { edit: { target: "contact", name: contact?.name ?? name, ...contact && name !== contact.name ? { rename: name } : {}, value } } : {},
+        ...!contact || Object.keys(infoPatch).length ? { contactInfo: { name, ...infoPatch } } : {},
         ...contact && pendingPortrait !== undefined ? { portrait: { name: contact.name, data: pendingPortrait } } : {}
       };
     });
@@ -2675,7 +2690,12 @@ class PhoneView {
       { key: "name", label: "Place name", value: place?.name ?? "", required: true, max: 100 },
       { key: "description", label: "Short description", value: place?.description ?? "", multiline: true },
       { key: "relation", label: "How it relates to another place (optional)", value: place?.relation ?? "" }
-    ], (v) => ({ edit: { target: "location", name: place?.name ?? String(v.name), ...place && v.name !== place.name ? { rename: String(v.name) } : {}, value: { description: v.description, relation: v.relation } } }));
+    ], (v) => {
+      const latest = place ? this.doc?.state.locations.find((p) => normalize(p.name) === normalize(place.name)) : undefined;
+      const description = place && v.description === place.description ? latest?.description ?? v.description : v.description;
+      const relation = place && v.relation === place.relation ? latest?.relation ?? v.relation : v.relation;
+      return { edit: { target: "location", name: place?.name ?? String(v.name), ...place && v.name !== place.name ? { rename: String(v.name) } : {}, value: { description, relation } } };
+    });
   }
   notes() {
     const section = el("section", "lpt-notes");
@@ -2769,10 +2789,10 @@ class PhoneView {
       name: note?.name ?? String(v.name),
       ...note && v.name !== note.name ? { rename: String(v.name) } : {},
       value: {
-        detail: v.detail,
-        context: v.context ?? "",
-        ...key === "plots" ? { resolved: v.resolved } : {},
-        ...key === "misc" ? { sendToAI: v.sendToAI } : {}
+        ...!note || v.detail !== note.detail ? { detail: v.detail } : {},
+        ...!note || (v.context ?? "") !== note.context ? { context: v.context ?? "" } : {},
+        ...key === "plots" && (!note || v.resolved !== note.resolved) ? { resolved: v.resolved } : {},
+        ...key === "misc" && (!note || v.sendToAI !== note.sendToAI) ? { sendToAI: v.sendToAI } : {}
       }
     } }));
   }
@@ -6006,9 +6026,11 @@ class Sidebar {
       this.doc = doc;
       if (doc.settings.source === "main")
         this.status.textContent = "Saved.";
-    } catch {
-      if (epoch === this.epoch)
-        this.status.textContent = "Could not save. Check this chat and try again.";
+    } catch (error) {
+      if (epoch === this.epoch) {
+        const conflict = typeof error === "object" && error !== null && error.conflict === true || error instanceof Error && /^The (tracker|story) changed\./.test(error.message);
+        this.status.textContent = conflict ? "The tracker changed while saving. Settings were refreshed—try your change again." : "Could not save. Check this chat and try again.";
+      }
     } finally {
       if (epoch === this.epoch) {
         this.saving = false;
@@ -7116,7 +7138,11 @@ function setup(ctx) {
         return;
       }
       if (payload.type === "phone_error") {
-        edit.reject(new Error(String(payload.message)));
+        const message = String(payload.message);
+        const conflict = payload.conflict === true || /^The (tracker|story) changed\./.test(message);
+        if (conflict)
+          sendSync();
+        edit.reject(Object.assign(new Error(message), conflict ? { conflict: true } : {}));
         return;
       }
       if (payload.chatId !== activeChat || !isRecord(payload.snapshot) || payload.snapshot.chatId !== activeChat) {

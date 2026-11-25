@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.19.2 - Preserve edits during conflict recovery
+
+- Distinguish revision mismatches from changed-story conflicts in safe diagnostic categories. Keep revision guards and require an explicit Save to latest; there is no automatic save retry.
+- Preserve typed form values after conflicts. Contact and note forms send changed fields; location forms retain untouched values from the refreshed snapshot. Untouched contact phone/email/details are not replaced by stale form values.
+- Invalidate saved-view readiness after detected story drift so the next open rebuilds the tracker instead of returning stale state. Applies to normal updates and setup confirmation.
+- Refresh snapshots after edit conflicts and show a clear sidebar message. Keep chat-switch checks, shared story data, personal settings and setup-only model requests.
+- Clean up the install/readme text and package allowlist. Remove the 29 obsolete historical documents listed in the supplied cleanup package; retain current guides and required emoji asset data.
+
+
 ## 0.19.1 - Safe failure diagnostics
 
 - Replace generic chat-sync and saved-message warnings with safe operation, event, outcome and error-category labels. Distinguish tracker/history reads, writes, persona resolution, unread reads and frontend notification failures. No raw exceptions, story values, keys, headers or user/chat IDs are logged.

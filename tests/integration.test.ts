@@ -240,14 +240,15 @@ test("actual backend: render/prompt hooks, scoped receipts, saved-message safety
     failReceipts=false;
     const stale=await request({type:"phone_update",chatId:"a",revision:-1,settings:{}},"u");
     expect(stale.type).toBe("phone_error");
-    expect(warnings.at(-1)).toContain('"category":"revision-conflict"');
+    expect(stale.conflict).toBe(true);
+    expect(warnings.at(-1)).toContain('"category":"conflict.revision_mismatch"');
     const newSaved={chatId:"a",message:{id:"m2-diagnostic",chat_id:"a",index_in_chat:1,is_user:false,swipe_id:0,content:"<phone-state>\nloc: Garden\n</phone-state>"}};
     const beforeWrite=persisted.get("a/lpt_phone_v2");
     failWrites=true;
     handlers.get("MESSAGE_SENT")!(newSaved,"u");
     await Bun.sleep(20);
     expect(warnings.at(-1)).toContain('"operation":"tracker.write"');
-    expect(warnings.at(-1)).toContain('"category":"timeout"');
+    expect(warnings.at(-1)).toContain('"category":"host.timeout"');
     expect(persisted.get("a/lpt_phone_v2")).toBe(beforeWrite);
     failWrites=false;
     failNotifications=true;

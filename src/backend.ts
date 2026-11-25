@@ -1,4 +1,4 @@
-import {atOperation,logFailure} from "./diagnostics";
+import {atOperation,failureDetails,logFailure} from "./diagnostics";
 import {createPhoneInterceptor} from "./prompt-interceptor";
 import {phoneSnapshot,snapshotReads} from "./ui-snapshot";
 import { readStoryHistory } from "./history";
@@ -207,8 +207,9 @@ spindle.onFrontendMessage((payload, userId) => {
     const reason = error instanceof Error ? error.message : "";
     const known = ["Invalid contact details", "Reopen this contact.", "Outgoing player entries need", "This app is full.", "An account with that name", "The tracker changed.", "The story changed.", "This section is full.", "Contacts is full", "Locations is full", "A contact with that name", "A place with that name", "A note with that name"];
     const message = known.some(s => reason.startsWith(s)) ? reason : "Could not save or open this chat. Check extension permissions and try again.";
+    const conflict = failureDetails(error).category.startsWith("conflict.");
     logFailure(warn,{operation:stage,event:String(payload.type),outcome:committed?"update-committed":"operation-not-completed"},error);
-    try { spindle.sendToFrontend({ type: "phone_error", requestId, message }, userId); }
+    try { spindle.sendToFrontend({ type: "phone_error", requestId, message, ...(conflict ? { conflict: true } : {}) }, userId); }
     catch (notifyError) { logFailure(warn,{operation:"frontend.error-notify",event:String(payload.type),outcome:"notification-failed"},notifyError); }
   });
 });

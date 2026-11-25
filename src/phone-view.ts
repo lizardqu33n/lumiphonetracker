@@ -297,21 +297,28 @@ export class PhoneView {
   }
   private empty(text: string, parent: HTMLElement = this.content): void { parent.append(el("p", "lpt-empty", text)); }
   private enabled(key: string): boolean { return !!this.doc&&effectiveDocument(this.doc).settings.enabled[key]===true; }
-  private async change(change: Parameters<ViewActions["update"]>[0], revision = this.doc?.revision ?? -1): Promise<void> {
-    if (!this.doc || this.busy) return;
+  private async change(change: Parameters<ViewActions["update"]>[0], revision = this.doc?.revision ?? -1): Promise<"saved" | "conflict" | "error"> {
+    if (!this.doc || this.busy) return "error";
     this.busy = true; this.setStatus("Saving…");
     const controls = this.root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLButtonElement | HTMLSelectElement>(".lpt-setting input, .lpt-helper-source, .lpt-helper-connection, .lpt-form input, .lpt-form textarea, .lpt-form select, .lpt-form button, .lpt-add, .lpt-field, .lpt-delete");
     controls.forEach(control => { control.disabled = true; });
     try {
       const doc = await this.actions.update(change, revision); this.editing = false; this.receive(doc);if(this.renderDirty&&this.openState)this.render();
       this.setStatus("Saved.");
-    } catch (e) { this.setStatus(""); this.setError(e instanceof Error ? e.message : "Could not save. Your changes are still here."); }
+      return "saved";
+    } catch (e) {
+      this.setStatus("");
+      const message = e instanceof Error ? e.message : "Could not save. Your changes are still here.";
+      const conflict = (isRecord(e) && e.conflict === true) || /^The (tracker|story) changed\./.test(message);
+      this.setError(conflict && this.editing ? "The tracker updated while you were editing. Your input is still here—review it and press Save to latest, or Cancel to discard." : message);
+      return conflict ? "conflict" : "error";
+    }
     finally { this.busy = false; controls.forEach(control => { control.disabled = false; }); }
   }
   private form(parent: HTMLElement, fields: FormField[], save: (values: Record<string, string | boolean>) => Parameters<ViewActions["update"]>[0]): void {
     if (this.editing||!parent.isConnected) return;
     const originEpoch=this.chatEpoch,originChat=this.doc?.chatId;
-    this.editing = true; const revision = this.doc?.revision ?? -1;
+    this.editing = true; const baseRevision = this.doc?.revision ?? -1; let conflicted = false;
     const form = el("form", "lpt-form"); const controls = new Map<string, HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>();
     for (const f of fields) {
       const label = el("label", "lpt-label", f.label);
@@ -331,7 +338,8 @@ export class PhoneView {
       if(originEpoch!==this.chatEpoch||originChat!==this.doc?.chatId||!form.isConnected)return;
       const values: Record<string, string | boolean> = {};
       for (const [key, input] of controls) values[key] = input instanceof HTMLInputElement && input.type === "checkbox" ? input.checked : input.value.trim();
-      try{void this.change(save(values), revision);}catch(error){this.setError(error instanceof Error?error.message:"Check the form.");}
+      const targetRevision = conflicted ? (this.doc?.revision ?? baseRevision) : baseRevision;
+      try{void this.change(save(values), targetRevision).then(outcome=>{if(outcome==="conflict"&&originEpoch===this.chatEpoch&&form.isConnected){conflicted=true;submit.textContent="Save to latest";}});}catch(error){this.setError(error instanceof Error?error.message:"Check the form.");}
     });
     parent.append(form); controls.values().next().value?.focus();
   }
@@ -518,13 +526,13 @@ export class PhoneView {
     if(this.editing)return;
     if(!contact&&this.doc!.state.contacts.length>=30){this.setError("Contacts is full (30/30). Delete a contact to make room.");return;}
     let pendingPortrait:string|null|undefined;
-    const info=contact?.info??emptyContactInfo(contact?.name??"");let kindTouched=false;const details=info.details.map(d=>({...d}));
+    const info=contact?.info??emptyContactInfo(contact?.name??"");let kindTouched=false;const details=info.details.map(d=>({...d}));const initialDetails=JSON.stringify(info.details.map(d=>({label:d.label.trim(),value:d.value.trim()})));
     const fields:FormField[]=[{key:"name",label:"Name",value:contact?.name??"",required:true,max:100},{key:"kind",label:"Tag",value:info.kind,options:[["Main","Main"],["NPC","NPC"]]},
     ...(this.doc!.settings.apps.Messages?[{key:"phone",label:"Phone",value:info.phone,max:100}]:[]),...(this.doc!.settings.apps.Email?[{key:"email",label:"Email",value:info.email,max:150}]:[]),{key:"relationship",label:"Relationship type",value:info.relationship,max:100},
     ...CONTACT_KEYS.filter(k=>k!=="attire"&&(!contact?.player||["physical","position"].includes(k))).map(k=>({key:k,label:k==="roles"?"Roles (free labels, for example occupation or affiliation)":FIELD_NAMES[k],value:valueText(contact?.fields[k]),multiline:k==="roles",max:500})),{key:"worn",label:"Worn items (one per line)",value:contact?.fields.attire&&typeof contact.fields.attire.value==="object"&&"worn" in contact.fields.attire.value?contact.fields.attire.value.worn.join("\n"):"",multiline:true},{key:"removed",label:"Removed items (one per line)",value:contact?.fields.attire&&typeof contact.fields.attire.value==="object"&&"removed" in contact.fields.attire.value?contact.fields.attire.value.removed.join("\n"):"",multiline:true}];
-    this.form(parent,fields,v=>{if(details.some(d=>!!d.label.trim()!==!!d.value.trim()))throw Error("Give each detail a label and a value, or remove it.");const name=String(v.name),value:Record<string,unknown>={};for(const key of CONTACT_KEYS)if(v[key]&&String(v[key])!==valueText(contact?.fields[key]))value[key]=key==="roles"?String(v[key]).split(/\n|; /).filter(Boolean):String(v[key]);const attire=contact?.fields.attire?.value,oldWorn=attire&&typeof attire==="object"&&"worn" in attire?attire.worn:[],oldRemoved=attire&&typeof attire==="object"&&"removed" in attire?attire.removed:[];const worn=lines(String(v.worn)),removed=lines(String(v.removed));if(JSON.stringify([worn,removed])!==JSON.stringify([oldWorn,oldRemoved]))value.attire={worn,removed};this.selectedContact=normalize(name);return {
-      edit:{target:"contact" as const,name:contact?.name??name,...(contact&&name!==contact.name?{rename:name}:{}),value},
-      contactInfo:{name,...(v.phone!==undefined?{phone:String(v.phone)}:{}),...(v.email!==undefined?{email:String(v.email)}:{}),relationship:String(v.relationship),details:details.filter(d=>d.label.trim()&&d.value.trim()),...(kindTouched?{kind:String(v.kind)}:{})},
+    this.form(parent,fields,v=>{if(details.some(d=>!!d.label.trim()!==!!d.value.trim()))throw Error("Give each detail a label and a value, or remove it.");const name=String(v.name),value:Record<string,unknown>={};for(const key of CONTACT_KEYS)if(v[key]&&String(v[key])!==valueText(contact?.fields[key]))value[key]=key==="roles"?String(v[key]).split(/\n|; /).filter(Boolean):String(v[key]);const attire=contact?.fields.attire?.value,oldWorn=attire&&typeof attire==="object"&&"worn" in attire?attire.worn:[],oldRemoved=attire&&typeof attire==="object"&&"removed" in attire?attire.removed:[];const worn=lines(String(v.worn)),removed=lines(String(v.removed));if(JSON.stringify([worn,removed])!==JSON.stringify([oldWorn,oldRemoved]))value.attire={worn,removed};const cleanedDetails=details.filter(d=>d.label.trim()&&d.value.trim()).map(d=>({label:d.label.trim(),value:d.value.trim()}));const infoPatch:Record<string,unknown>={...(v.phone!==undefined&&(!contact||String(v.phone)!==info.phone)?{phone:String(v.phone)}:{}),...(v.email!==undefined&&(!contact||String(v.email)!==info.email)?{email:String(v.email)}:{}),...(!contact||String(v.relationship)!==info.relationship?{relationship:String(v.relationship)}:{}),...(!contact||JSON.stringify(cleanedDetails)!==initialDetails?{details:cleanedDetails}:{}),...(kindTouched?{kind:String(v.kind)}:{})};const hasEdit=!contact||name!==contact.name||Object.keys(value).length>0;this.selectedContact=normalize(name);return {
+      ...(hasEdit?{edit:{target:"contact" as const,name:contact?.name??name,...(contact&&name!==contact.name?{rename:name}:{}),value}}:{}),
+      ...(!contact||Object.keys(infoPatch).length?{contactInfo:{name,...infoPatch}}:{}),
       ...(contact&&pendingPortrait!==undefined?{portrait:{name:contact.name,data:pendingPortrait}}:{}),
     };});
     const editForm=parent.querySelector<HTMLFormElement>(".lpt-form");if(!editForm)return;
@@ -576,7 +584,12 @@ export class PhoneView {
       { key: "name", label: "Place name", value: place?.name ?? "", required: true, max: 100 },
       { key: "description", label: "Short description", value: place?.description ?? "", multiline: true },
       { key: "relation", label: "How it relates to another place (optional)", value: place?.relation ?? "" },
-    ], v => ({ edit: { target: "location", name: place?.name ?? String(v.name), ...(place && v.name !== place.name ? { rename: String(v.name) } : {}), value: { description: v.description, relation: v.relation } } }));
+    ], v => {
+      const latest = place ? this.doc?.state.locations.find(p => normalize(p.name) === normalize(place.name)) : undefined;
+      const description = place && v.description === place.description ? (latest?.description ?? v.description) : v.description;
+      const relation = place && v.relation === place.relation ? (latest?.relation ?? v.relation) : v.relation;
+      return { edit: { target: "location", name: place?.name ?? String(v.name), ...(place && v.name !== place.name ? { rename: String(v.name) } : {}), value: { description, relation } } };
+    });
   }
   private notes(): void {
     const section = el("section", "lpt-notes"); this.content.append(section); let shown = false;
@@ -630,8 +643,12 @@ export class PhoneView {
     if (key === "plots") fields.push({ key: "resolved", label: "Resolved", value: String(note?.resolved ?? false), check: true });
     if (key === "misc") fields.push({ key: "sendToAI", label: "Send to AI", value: String(note?.sendToAI ?? false), check: true });
     this.form(parent, fields, v => ({ edit: { target: "note", section: key, name: note?.name ?? String(v.name),
-      ...(note && v.name !== note.name ? { rename: String(v.name) } : {}), value: { detail: v.detail, context: v.context ?? "",
-        ...(key === "plots" ? { resolved: v.resolved } : {}), ...(key === "misc" ? { sendToAI: v.sendToAI } : {}) } } }));
+      ...(note && v.name !== note.name ? { rename: String(v.name) } : {}), value: {
+        ...(!note || v.detail !== note.detail ? { detail: v.detail } : {}),
+        ...(!note || (v.context ?? "") !== note.context ? { context: v.context ?? "" } : {}),
+        ...(key === "plots" && (!note || v.resolved !== note.resolved) ? { resolved: v.resolved } : {}),
+        ...(key === "misc" && (!note || v.sendToAI !== note.sendToAI) ? { sendToAI: v.sendToAI } : {}),
+      } } }));
   }
   private messages():void{
     const section=el("section","lpt-messages");this.content.append(section);

@@ -84,7 +84,7 @@ All email body/subject content is literal text, including URL-looking text.
 The existing `.lpt-unread-badge` also shows personal missed-call and email counts.
 No new navigation tabs or Settings screen are added. New App Store entries start
 removed; removed data stays saved. Shared story data/settings and personal
-receipts/appearance/dismissals follow [PART-4.md](docs/PART-4.md).
+receipts/appearance/dismissals follow [the shared-data workflow](docs/SIMPLE-WORKFLOW.md).
 
 ## Sidebar settings (0.12.0)
 
@@ -600,7 +600,7 @@ Give it a desktop-window look and hide the decorative hardware:
 
 Ordinary rules, @media and @supports work. Imports, linked images, font downloads, CSS escape sequences and other at-rules are rejected. An unfinished rule leaves the last working style active and shows a short error. Browsers may silently ignore an unknown property. The protected sidebar Reset stays available if your rules hide the phone.
 
-The protected wrapper receives explicit measured placement bounds independently of the host root's height. Only those numeric bounds are emitted into an instance-scoped rule; appearance defaults stay in styles.css. The original speaker element remains hidden for compatibility. Existing recovery behavior and the zero-height-mount fix are retained. [Recovery details](docs/FIX-0.4.2.md).
+The protected wrapper receives explicit measured placement bounds independently of the host root's height. Only those numeric bounds are emitted into an instance-scoped rule; appearance defaults stay in styles.css. The original speaker element remains hidden for compatibility. Existing recovery behavior and the zero-height-mount fix are retained. [Recovery details](INSTALL.md).
 
 ## 0.14.0: personal presets and prompt wording
 

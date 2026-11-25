@@ -90,9 +90,14 @@ export class Sidebar {
         if (doc.settings.source === "main")
         this.status.textContent = "Saved.";
     }
-    catch {
-        if (epoch === this.epoch)
-            this.status.textContent = "Could not save. Check this chat and try again.";
+    catch (error) {
+        if (epoch === this.epoch) {
+            const conflict = (typeof error === "object" && error !== null && (error as { conflict?: unknown }).conflict === true) ||
+                (error instanceof Error && /^The (tracker|story) changed\./.test(error.message));
+            this.status.textContent = conflict
+                ? "The tracker changed while saving. Settings were refreshed—try your change again."
+                : "Could not save. Check this chat and try again.";
+        }
     }
     finally {
         if (epoch === this.epoch) {

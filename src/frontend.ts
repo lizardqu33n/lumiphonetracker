@@ -304,7 +304,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
       if (!["phone_snapshot", "phone_error"].includes(String(payload.type))) return;
       clearTimeout(edit.timer); updates.delete(payload.requestId);
       if (edit.epoch !== epoch || edit.chatId !== activeChat) { edit.reject(new Error("The chat changed. Check the original chat before editing again.")); return; }
-      if (payload.type === "phone_error") { edit.reject(new Error(String(payload.message))); return; }
+      if (payload.type === "phone_error") { const message = String(payload.message); const conflict = payload.conflict === true || /^The (tracker|story) changed\./.test(message); if (conflict) sendSync(); edit.reject(Object.assign(new Error(message), conflict ? { conflict: true } : {})); return; }
       if (payload.chatId !== activeChat || !isRecord(payload.snapshot) || payload.snapshot.chatId !== activeChat) { edit.reject(new Error("The chat changed.")); return; }
       current = payload.snapshot as unknown as PhoneDocument;chatName=typeof payload.chatName==="string"?payload.chatName:chatName;sidebar?.receive(current,chatName);
       try { const value = readState(payload.reads); if (value.revision >= reads.revision) reads = value; } catch { /* Keep known read state. */ }

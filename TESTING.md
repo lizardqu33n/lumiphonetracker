@@ -1,3 +1,9 @@
+# 0.19.2 verification
+
+The revised patch passed 320 code tests, type checking, built-file checks, extension validation and 52 focused browser checks. The prior review's two failure cases now pass: editing a relationship preserves a newer phone number after Save to latest, and detected accepted-history drift invalidates readiness so openView rebuilds and advances the revision. The browser regression is now part of scripts/test-ui.ts, alongside the existing focused UI checks.
+
+No real Lumiverse server, live provider, multi-user/mobile session or main-process heap was tested locally. A same-field edit still needs the user's explicit choice; this is not automatic field-by-field conflict resolution. This change does not establish the cause of earlier saved-message failures or server memory pressure. The full legacy browser suite still contains retired Helper UI assertions and is not claimed as passing. The 29 obsolete historical documents were removed; current guides and required emoji asset data remain.
+
 # 0.19.1 diagnostic verification
 
 Targeted mocks reproduce tracker-read failures, write timeouts, unread-read failures, stale edit revisions, notification failure after a successful persisted update, and failure of both snapshot/error delivery. They verify fixed safe labels, old data surviving a rejected write, no retry, no unhandled rejection, and a subsequent successful open. Classifier tests cover scope errors, permission errors, timeout, database busy, connection failure, saved-source validation, invalid JSON and unknown errors. Raw exception text and private values are not logged.
