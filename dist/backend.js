@@ -2532,7 +2532,7 @@ function trackerInstructions(doc, helper = false) {
       parts.push(part);
   if (parts.length) {
     lines.push(`c: Name | ${parts.join(" | ")}`);
-    lines.push("New c names must be in confirmed present; no offscreen mentions. Keep absent contacts. Player: phys/pos/attire only.");
+    lines.push("New c names must be named or recurring characters in confirmed present (keep unnamed/one-off background NPCs in present only); no offscreen mentions. Keep absent contacts. Player: phys/pos/attire only.");
     lines.push("phys/mood/pos: max 12 words; attire items: max 6 words. Send both worn/off lists; keep known items. A blank list must be established; never both.");
     lines.push(s.inferMissing ? 'EMPTY contact fields only: one concrete value may end " ~ inferred"; never re-infer populated fields.' : "Never infer missing values.");
   }
@@ -2552,7 +2552,7 @@ function trackerInstructions(doc, helper = false) {
   if (s.enabled["notes.plots"])
     lines.push("done: Plot name");
   if (SECTIONS.some((k) => k !== "misc" && s.enabled[`notes.${k}`])) {
-    lines.push("Note detail: max 14 words. Update by name; never delete. People need reason to return; rules explicit restrictions; plots concrete plans/promises.");
+    lines.push("Note detail: max 14 words. Update by name; never delete. People need reason to return (skip characters already tracked in Contacts); rules explicit restrictions; plots concrete plans/promises.");
     if (s.enabled["notes.items"])
       lines.push("Items need a specific story function (key/evidence/MacGuffin). Skip ordinary props such as a lighter.");
     const full = SECTIONS.filter((k) => k !== "misc" && s.enabled[`notes.${k}`] && doc.state.notes[k].filter((n) => !n.resolved).length >= s.notesPerSection);

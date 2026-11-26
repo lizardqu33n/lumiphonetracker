@@ -846,3 +846,7 @@ Sources: [macros](https://docs.lumiverse.chat/backend-api/macros/), [interceptor
 The earlier real-install v0.4.1 failure was user-reported. Its layout cause was reproduced locally and retained as a regression, but this environment has not validated 0.6.4 in that install. Publishing source to GitHub does not verify native installation or make a model request.
 
 Earlier reports: [Step 5](docs/STEP-5-TESTING.md), [Step 4](docs/STEP-4-TESTING.md), [Step 3](docs/STEP-3-TESTING.md). Previous archives are preserved. All original build steps are delivered. Parts 1 and 2 are complete. Stop after Part 2 for review.
+
+### 0.21 candidate and Home icon
+
+Focused local browser checks cover Here now keyboard navigation and editing, contact Edit/Cancel and Add detail artwork, cross-app Back routing, Email body display, stated Bank balance, the embedded Home image and tight alpha bounds, and preserved Home keyboard behavior. The supplied house background was removed and the image cropped before embedding. Real Lumiverse placement, mobile keyboards, and model compliance with the revised prompt wording remain unverified.

@@ -2099,77 +2099,12 @@
 .lpt-root .lpt-chat-toggle { margin:0 0 var(--lpt-space); max-width:100%; }
 .lpt-root .lpt-chat-off { margin:0; }
 
-/* Sleek Y2K x modern proportions: airy spacing, softer depth, compact pills. */
-.lpt-frame {
-  padding-inline: 12px;
-}
-.lpt-content {
-  padding: 10px 10px 14px;
-  gap: 10px;
-}
-.lpt-header {
-  padding: 6px 8px;
-  gap: 6px;
-}
-.lpt-card,
-.lpt-contact-page,
-.lpt-weather-card {
-  border-width: 1px;
-  border-radius: var(--lpt-card-radius);
-  box-shadow: 0 2px 10px rgba(10, 3, 20, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-}
-.lpt-contact-page,
-.lpt-weather-card {
-  padding: 10px 12px;
-}
-.lpt-field-unit {
-  padding: 8px 10px;
-}
-.lpt-field-unit:has(> .lpt-location) {
-  border-width: 1.5px;
-  box-shadow: 0 3px 12px rgba(10, 3, 20, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-}
-.lpt-root :is(.lpt-button,.lpt-save,.lpt-cancel,.lpt-delete):not(:has(> img:only-child)) {
-  min-height: 34px;
-  padding: 6px 13px;
-  border-width: 1px;
-  border-radius: 999px;
-  font-size: 13px;
-  box-shadow: 0 1px 0 rgba(66, 6, 66, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.35);
-}
-.lpt-root .lpt-form :is(input.lpt-input,select.lpt-input,.lpt-textarea,.lpt-number) {
-  border-width: 1px;
-  border-radius: 10px;
-  padding: 6px 10px;
-}
-.lpt-home {
-  gap: 10px 8px;
-  padding: 6px 2px;
-}
-.lpt-home .lpt-app-icon {
-  box-shadow: 0 2px 0 rgba(66, 6, 66, 0.45), 0 6px 12px -4px rgba(10, 3, 20, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.48);
-}
-.lpt-marker,
-.lpt-contact-chip {
-  border-width: 1px;
-  border-radius: 999px;
-  padding: 1px 8px;
-}
-.lpt-thread .lpt-text-message {
-  border-width: 1px;
-  padding: 7px 11px;
-  box-shadow: 0 1px 4px rgba(10, 3, 20, 0.25);
-}
-
 /* ==========================================================================
-   Flipphone UI Refresh (0.20.1):
-   - Top-lid flip-phone silhouette with soft-key bar & hinge lip so the native
-     mobile keyboard sits right underneath like the phone's keypad half.
-   - Compact 3x3 Home grid sized for all 9 apps without scrolling.
-   - Flat, un-nested detail screens with hairline dividers & quiet lock icons.
-   - Full-width Date/Time forms & sticky Save/Cancel bar above the hinge.
+   Consolidated Flipphone UI (0.20.2+):
+   Single clean layer replacing prior stacked overrides.
    ========================================================================== */
 
+/* ---- 1. Tokens ---- */
 .lpt-root {
   --lpt-frame-radius: 30px;
   --lpt-space: 8px;
@@ -2178,14 +2113,22 @@
   --lpt-input-bg: #e9dbf8;
   --lpt-input-text: #260e38;
   --lpt-input-border: rgba(198, 150, 246, 0.65);
+  --lpt-header-art-size: 32px;
   --lpt-image-art-size: 26px;
   --lpt-field-art-size: 22px;
+  --lpt-call-gap: calc(var(--lpt-space) / 2);
+  --lpt-call-padding: var(--lpt-space);
+  --lpt-call-target: var(--lpt-control-size);
+  --lpt-call-label-size: var(--lpt-small-font-size);
+  --lpt-call-portrait-size: 34px;
+  --lpt-call-icon-size: 20px;
 }
 
-/* Flip-phone top lid + bottom hinge silhouette */
+/* ---- 2. Flip-phone frame, header, soft-key bar & hinge ---- */
 .lpt-frame {
-  border-radius: 30px 30px 18px 18px;
+  padding-inline: 12px;
   padding-bottom: 10px;
+  border-radius: 30px 30px 18px 18px;
 }
 .lpt-frame::after {
   width: min(140px, 48%);
@@ -2195,8 +2138,21 @@
   box-shadow: 0 1px 0 rgba(66, 6, 66, 0.6);
   bottom: 4px;
 }
-
-/* Flip-phone soft-key footer bar (Left | D-pad | Right) right above the hinge */
+.lpt-frame > .lpt-text-notice {
+  margin-inline: 10px;
+}
+.lpt-header {
+  padding: 6px 8px;
+  gap: 6px;
+}
+.lpt-root .lpt-header :is(.lpt-back, .lpt-close) > img:only-child {
+  width: var(--lpt-header-art-size);
+  height: var(--lpt-header-art-size);
+}
+.lpt-content {
+  padding: 10px 10px 14px;
+  gap: 10px;
+}
 .lpt-softkeys {
   flex: none;
   display: grid;
@@ -2211,10 +2167,6 @@
 .lpt-frame[data-editing="true"] .lpt-softkeys,
 .lpt-frame:has(.lpt-content[data-thread="true"]) .lpt-softkeys {
   display: none;
-}
-.lpt-content[data-thread="true"] {
-  min-height: 0;
-  overflow-y: auto;
 }
 .lpt-softkey-slot {
   display: flex;
@@ -2245,6 +2197,54 @@
   background: rgba(210, 174, 246, 0.24);
   border-color: var(--lpt-lilac-2);
 }
+.lpt-root .lpt-softkeys .lpt-softkey-back {
+  display: inline-grid;
+  place-items: center;
+  min-width: 44px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+}
+.lpt-root .lpt-softkeys .lpt-softkey-back > img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  image-rendering: auto;
+}
+.lpt-root .lpt-softkey-track {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  background: linear-gradient(180deg, rgba(222, 198, 246, 0.24), rgba(198, 150, 246, 0.1));
+  border-color: rgba(222, 198, 246, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+.lpt-root .lpt-softkey-track[data-on="false"] {
+  background: rgba(46, 23, 67, 0.7);
+  border-color: rgba(198, 150, 246, 0.24);
+  color: var(--lpt-muted);
+}
+.lpt-track-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--lpt-pink-2);
+  box-shadow: 0 0 6px var(--lpt-pink-2);
+}
+.lpt-softkey-track[data-on="false"] .lpt-track-dot {
+  background: transparent;
+  border: 1.5px solid var(--lpt-muted);
+  box-shadow: none;
+}
+.lpt-root .lpt-softkey-home {
+  padding: 4px 12px;
+  background: linear-gradient(180deg, rgba(222, 198, 246, 0.2), rgba(198, 150, 246, 0.08));
+  border-color: rgba(222, 198, 246, 0.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
 .lpt-dpad {
   width: 24px;
   height: 24px;
@@ -2265,7 +2265,7 @@
   line-height: 1;
 }
 
-/* Home screen: clean centered 3x3 grid with comfortable room for all 9 apps */
+/* ---- 3. Home 3x3 grid, shared pills, cross-app links & hint dismiss ---- */
 .lpt-home {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2281,13 +2281,94 @@
   width: var(--lpt-app-tile-size);
   height: var(--lpt-app-tile-size);
   border-radius: 16px;
+  box-shadow: 0 2px 0 rgba(66, 6, 66, 0.45), 0 6px 12px -4px rgba(10, 3, 20, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.48);
 }
 .lpt-home .lpt-app-label {
   font-size: 11.5px;
   line-height: 1.2;
 }
+.lpt-root :is(.lpt-button, .lpt-save, .lpt-cancel, .lpt-delete):not(:has(> img:only-child)) {
+  min-height: 34px;
+  padding: 6px 13px;
+  border-width: 1px;
+  border-radius: 999px;
+  font-size: 13px;
+  box-shadow: 0 1px 0 rgba(66, 6, 66, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.lpt-marker,
+.lpt-contact-chip {
+  border-width: 1px;
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.lpt-root .lpt-cross-link {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 24px;
+  margin: 4px 0 0;
+  padding: 2px 10px;
+  border: 1px solid rgba(210, 174, 246, 0.42);
+  border-radius: 999px;
+  background: rgba(210, 174, 246, 0.14);
+  color: var(--lpt-lilac-1);
+  font-family: var(--lpt-ui-font);
+  font-size: 11px;
+  line-height: 1.25;
+  cursor: pointer;
+  transition: background-color var(--lpt-transition), border-color var(--lpt-transition);
+}
+.lpt-root .lpt-cross-link:hover {
+  background: rgba(210, 174, 246, 0.26);
+  border-color: var(--lpt-lilac-2);
+}
+.lpt-root .lpt-cross-link:focus-visible {
+  outline: var(--lpt-focus-size) solid var(--lpt-focus-color);
+  outline-offset: 2px;
+}
+.lpt-actions > .lpt-cross-link {
+  margin: 0 auto 0 0;
+}
+.lpt-description .lpt-dismiss,
+.lpt-home-hint .lpt-dismiss,
+.lpt-draft-hint .lpt-dismiss {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  min-height: 26px;
+  padding: 0;
+  border: 1px solid rgba(210, 174, 246, 0.3);
+  border-radius: 50%;
+  background: rgba(210, 174, 246, 0.14);
+  color: var(--lpt-lilac-1);
+  font-size: 14px;
+  line-height: 1;
+  box-shadow: none;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+}
+.lpt-description .lpt-dismiss:hover,
+.lpt-home-hint .lpt-dismiss:hover,
+.lpt-draft-hint .lpt-dismiss:hover {
+  background: rgba(210, 174, 246, 0.26);
+  border-color: var(--lpt-lilac-2);
+}
+.lpt-description .lpt-dismiss::after,
+.lpt-home-hint .lpt-dismiss::after,
+.lpt-draft-hint .lpt-dismiss::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
 
-/* Flatten nested box-in-box borders across Contacts, Weather, and Notes */
+/* ---- 4. Flat screens, Scene, Locations, Notes, Contacts & quiet locks ---- */
+.lpt-card {
+  border-width: 1px;
+  border-radius: var(--lpt-card-radius);
+  box-shadow: 0 2px 10px rgba(10, 3, 20, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
 .lpt-contact-page,
 .lpt-weather-card {
   border: 0;
@@ -2298,6 +2379,90 @@
 }
 .lpt-contacts-header .lpt-contact-list-title {
   display: none;
+}
+.lpt-field-unit {
+  padding: 8px 10px;
+}
+.lpt-field-unit:has(> .lpt-location) {
+  border-width: 1.5px;
+  box-shadow: 0 3px 12px rgba(10, 3, 20, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+.lpt-field-controls {
+  gap: 0;
+}
+.lpt-field-unit > .lpt-field {
+  padding-right: 30px;
+}
+.lpt-field-unit > .lpt-field-controls,
+.lpt-note-part > .lpt-field-controls,
+.lpt-contact-info-row > .lpt-field-controls {
+  margin-right: -8px;
+}
+.lpt-field-lock:not([aria-pressed="true"]) > img {
+  opacity: 0.55;
+  transition: opacity var(--lpt-transition);
+}
+.lpt-field-lock:hover > img,
+.lpt-field-lock[aria-pressed="true"] > img {
+  opacity: 1;
+}
+.lpt-present-field {
+  cursor: default;
+}
+.lpt-present-edit {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin: 0 0 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--lpt-muted);
+  cursor: pointer;
+  text-align: left;
+}
+.lpt-present-edit:hover {
+  color: var(--lpt-text);
+  text-decoration: underline;
+}
+.lpt-present-empty {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--lpt-text);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.lpt-present-item {
+  display: inline-flex;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.lpt-root .lpt-present-link {
+  background-color: var(--lpt-pill-bg);
+  color: var(--lpt-pill-text);
+  border: 1px solid var(--lpt-pill-edge);
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: var(--lpt-ui-font);
+  font-size: var(--lpt-small-font-size);
+  line-height: 1.3;
+  transition: filter var(--lpt-transition), transform var(--lpt-transition);
+}
+.lpt-root .lpt-present-link:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+.lpt-root .lpt-present-link:focus-visible,
+.lpt-root .lpt-present-edit:focus-visible {
+  outline: var(--lpt-focus-size) solid var(--lpt-focus-color);
+  outline-offset: 2px;
+}
+.lpt-place > .lpt-summary {
+  padding-left: 34px;
 }
 .lpt-note-section {
   border: 0;
@@ -2337,150 +2502,51 @@
   gap: 2px;
 }
 
-/* Quiet, compact lock/restore buttons: keep 44px tap box without eating layout width */
-.lpt-field-controls {
-  gap: 0;
-}
-.lpt-field-unit > .lpt-field {
-  padding-right: 30px;
-}
-.lpt-field-unit > .lpt-field-controls,
-.lpt-note-part > .lpt-field-controls,
-.lpt-contact-info-row > .lpt-field-controls {
-  margin-right: -8px;
-}
-.lpt-field-lock:not([aria-pressed="true"]) > img {
-  opacity: 0.55;
-  transition: opacity var(--lpt-transition);
-}
-.lpt-field-lock:hover > img,
-.lpt-field-lock[aria-pressed="true"] > img {
-  opacity: 1;
-}
-
-/* Fix half-width Date/Time edit form in Scene */
+/* ---- 5. Forms & dedicated Contact Edit view ---- */
 .lpt-scene-when > .lpt-form {
   grid-column: 1 / -1;
 }
-
-/* Dedicated clean forms with sticky Save/Cancel bar pinned right above the flip-phone hinge & mobile keyboard */
 .lpt-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   border: 1px solid rgba(210, 174, 246, 0.28);
   border-radius: 12px;
   background: var(--lpt-card-bg);
   padding: 10px 10px 4px;
   box-shadow: none;
 }
+.lpt-root .lpt-form :is(input.lpt-input, select.lpt-input, .lpt-textarea, .lpt-number) {
+  border-width: 1px;
+  border-radius: 10px;
+  padding: 6px 10px;
+}
 .lpt-form > .lpt-actions {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
+  position: static;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin: 8px -10px -4px;
+  margin: 6px -10px -4px;
   padding: 8px 10px;
   border-top: 1px solid var(--lpt-border);
   border-radius: 0 0 12px 12px;
   background: var(--lpt-phone-bg);
 }
-
-/* Compact, subtle dismiss button on hint banners instead of giant bright circle */
-.lpt-description .lpt-dismiss,
-.lpt-home-hint .lpt-dismiss,
-.lpt-draft-hint .lpt-dismiss {
-  position: relative;
-  width: 26px;
-  height: 26px;
-  min-width: 26px;
-  min-height: 26px;
-  padding: 0;
-  border: 1px solid rgba(210, 174, 246, 0.3);
-  border-radius: 50%;
-  background: rgba(210, 174, 246, 0.14);
-  color: var(--lpt-lilac-1);
-  font-size: 14px;
-  line-height: 1;
-  box-shadow: none;
-  display: inline-grid;
-  place-items: center;
-  flex: none;
-}
-.lpt-description .lpt-dismiss:hover,
-.lpt-home-hint .lpt-dismiss:hover,
-.lpt-draft-hint .lpt-dismiss:hover {
-  background: rgba(210, 174, 246, 0.26);
-  border-color: var(--lpt-lilac-2);
-}
-.lpt-description .lpt-dismiss::after,
-.lpt-home-hint .lpt-dismiss::after,
-.lpt-draft-hint .lpt-dismiss::after {
-  content: "";
-  position: absolute;
-  inset: -8px;
-}
-
-/* Larger Back & Exit icons in the top header, and sleek arrow-icon Back pill in the soft-key footer */
-.lpt-root {
-  --lpt-header-art-size: 32px;
-}
-.lpt-root .lpt-header :is(.lpt-back, .lpt-close) > img:only-child {
-  width: var(--lpt-header-art-size);
-  height: var(--lpt-header-art-size);
-}
-.lpt-root .lpt-softkeys .lpt-softkey-back {
-  display: inline-grid;
-  place-items: center;
-  min-width: 44px;
-  height: 30px;
-  min-height: 30px;
-  padding: 0 12px;
-  border-radius: 999px;
-}
-.lpt-root .lpt-softkeys .lpt-softkey-back > img {
-  width: 22px;
-  height: 22px;
-  object-fit: contain;
-  image-rendering: auto;
-}
-
-/* Y2K glowing tracking status pill + Home softkey pill (no duplicate Close) */
-.lpt-root .lpt-softkey-track {
-  display: inline-flex;
+.lpt-contact-delete-wrap {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 11px;
-  background: linear-gradient(180deg, rgba(222, 198, 246, 0.24), rgba(198, 150, 246, 0.1));
-  border-color: rgba(222, 198, 246, 0.45);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
-.lpt-root .lpt-softkey-track[data-on="false"] {
-  background: rgba(46, 23, 67, 0.7);
-  border-color: rgba(198, 150, 246, 0.24);
-  color: var(--lpt-muted);
-}
-.lpt-track-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex: none;
-  background: var(--lpt-pink-2);
-  box-shadow: 0 0 6px var(--lpt-pink-2);
-}
-.lpt-softkey-track[data-on="false"] .lpt-track-dot {
-  background: transparent;
-  border: 1.5px solid var(--lpt-muted);
-  box-shadow: none;
-}
-.lpt-root .lpt-softkey-home {
-  padding: 4px 12px;
-  background: linear-gradient(180deg, rgba(222, 198, 246, 0.2), rgba(198, 150, 246, 0.08));
-  border-color: rgba(222, 198, 246, 0.4);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+.lpt-contact-page:has(> .lpt-form) > :not(.lpt-contact-nav):not(.lpt-form),
+.lpt-contact-page:has(> .lpt-form) .lpt-contact-edit {
+  display: none;
 }
 
-/* Cohesive Messages thread header: Contact pill tucked under her name, plus sleeker reply composer */
+/* ---- 6. Messages thread header, empty card & reply composer ---- */
+.lpt-content[data-thread="true"] {
+  min-height: 0;
+  overflow-y: auto;
+}
 .lpt-thread-header {
   display: grid;
   grid-template-columns: 44px auto minmax(0, 1fr);
@@ -2531,8 +2597,26 @@
   background: rgba(210, 174, 246, 0.25);
   border-color: var(--lpt-lilac-2);
 }
-
-/* Compact, cohesive reply composer box */
+.lpt-thread .lpt-text-message {
+  border-width: 1px;
+  padding: 7px 11px;
+  box-shadow: 0 1px 4px rgba(10, 3, 20, 0.25);
+}
+.lpt-thread .lpt-text-list > .lpt-empty {
+  margin: auto 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.lpt-thread .lpt-text-list > .lpt-empty::before {
+  display: inline;
+  margin: 0 6px 0 0;
+  font-size: 13px;
+}
+@container (max-height: 320px) {
+  .lpt-thread .lpt-text-list { padding-block: 4px; }
+  .lpt-thread .lpt-text-list > .lpt-empty { padding: 5px 10px; font-size: 11.5px; }
+}
 .lpt-thread .lpt-reply {
   gap: 6px;
   padding-top: 6px;
@@ -2562,29 +2646,39 @@
   border-radius: 999px;
 }
 
-/* Calls screen redesign (0.20.1+): avatar + color-coded direction pills + inline quick icons + featured open card */
-.lpt-calls {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.lpt-calls-top {
+/* ---- 7. Calls, Email & Bank cards ---- */
+.lpt-calls-top,
+.lpt-activity-top {
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.lpt-calls-top > .lpt-description {
+.lpt-calls-top > .lpt-description,
+.lpt-activity-top > .lpt-description {
   flex: 1 1 auto;
   min-width: 0;
   margin: 0;
   padding: 6px 10px;
   border-radius: 999px;
 }
-.lpt-calls-top > .lpt-add {
+.lpt-calls-top > .lpt-add,
+.lpt-activity-top > .lpt-add {
   flex: none;
   margin: 0;
 }
-.lpt-call {
+.lpt-calls,
+.lpt-email.lpt-activity,
+.lpt-bank.lpt-activity {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background-color: var(--lpt-screen-bg);
+}
+.lpt-calls {
+  gap: var(--lpt-call-gap);
+}
+.lpt-call,
+.lpt-card.lpt-email {
   border: 1px solid rgba(210, 174, 246, 0.28);
   border-radius: 16px;
   background: var(--lpt-card-bg);
@@ -2592,7 +2686,8 @@
   overflow: hidden;
   transition: border-color var(--lpt-transition), box-shadow var(--lpt-transition);
 }
-.lpt-call[open] {
+.lpt-call[open],
+.lpt-card.lpt-email[open] {
   border-color: var(--lpt-pink-1);
   box-shadow: 0 0 0 1px rgba(246, 162, 210, 0.25), 0 6px 16px rgba(10, 3, 20, 0.35);
 }
@@ -2600,20 +2695,20 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: var(--lpt-call-padding);
+  padding: var(--lpt-call-gap) var(--lpt-call-padding);
   list-style: none;
   cursor: pointer;
 }
 .lpt-call-summary::-webkit-details-marker { display: none; }
 .lpt-call-summary > .lpt-portrait {
-  width: 38px;
-  height: 38px;
+  width: var(--lpt-call-portrait-size);
+  height: var(--lpt-call-portrait-size);
 }
 .lpt-call-info {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: calc(var(--lpt-call-gap) / 2);
   min-width: 0;
 }
 .lpt-call-info > .lpt-card-title {
@@ -2642,35 +2737,27 @@
 .lpt-call-direction.is-in { background: var(--lpt-blue); }
 .lpt-call-direction.is-missed { background: var(--lpt-pink-1); }
 .lpt-call-direction.is-out { background: var(--lpt-lilac-2); }
-.lpt-call-time {
-  font-size: 11.5px;
-  margin: 0;
-}
-.lpt-call-edited {
-  width: fit-content;
-  margin-top: 2px;
-}
+.lpt-call-time { font-size: 11.5px; margin: 0; }
+.lpt-call-edited { width: fit-content; margin-top: 2px; }
 .lpt-call-quick {
   display: flex;
   align-items: center;
+  min-width: 68px;
+  justify-content: flex-end;
 }
-.lpt-call[open] .lpt-call-quick {
-  display: none;
-}
+.lpt-call[open] .lpt-call-quick { display: none; }
 .lpt-call-quick-btn {
   display: inline-grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   padding: 0;
   border: 0;
   border-left: 1px solid rgba(198, 150, 246, 0.22);
   background: transparent;
   cursor: pointer;
 }
-.lpt-call-quick-btn:hover {
-  background: rgba(222, 198, 246, 0.12);
-}
+.lpt-call-quick-btn:hover { background: rgba(222, 198, 246, 0.12); }
 .lpt-call-quick-btn > img {
   width: 18px;
   height: 18px;
@@ -2678,74 +2765,229 @@
   image-rendering: auto;
 }
 .lpt-call-footer {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
   align-items: center;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 6px;
-  padding: 8px 12px;
+  gap: calc(var(--lpt-call-gap) / 2);
+  padding: 4px var(--lpt-call-padding);
   border-top: 1px solid rgba(198, 150, 246, 0.22);
   background: rgba(31, 15, 46, 0.45);
+}
+.lpt-call-footer:not(:has(> .lpt-call-action + .lpt-call-action)) {
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 .lpt-call-action {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 8px;
+  justify-content: center;
+  min-width: 0;
+  min-height: var(--lpt-call-target);
+  gap: var(--lpt-call-gap);
+  padding: 4px 7px;
   border: 0;
   border-radius: 999px;
   background: transparent;
   color: var(--lpt-text);
   font-family: var(--lpt-font);
-  font-size: 12px;
+  font-size: var(--lpt-call-label-size);
+  line-height: 1.2;
   cursor: pointer;
 }
-.lpt-call-action:hover {
-  background: rgba(222, 198, 246, 0.14);
-}
+.lpt-call-action:hover { background: rgba(222, 198, 246, 0.14); }
+.lpt-call-action-label { white-space: nowrap; }
 .lpt-call-action > img {
-  width: 18px;
-  height: 18px;
+  width: var(--lpt-call-icon-size);
+  height: var(--lpt-call-icon-size);
+  flex: none;
   object-fit: contain;
   image-rendering: auto;
 }
 .lpt-call-edit-actions {
+  grid-column: -2 / -1;
   display: inline-flex;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 2px;
-  margin-left: auto;
-}
-
-/* Compact call controls: one action row, with full-size interaction targets. */
-.lpt-root {
-  --lpt-call-gap: calc(var(--lpt-space) / 2);
-  --lpt-call-padding: var(--lpt-space);
-  --lpt-call-target: var(--lpt-control-size);
-  --lpt-call-label-size: var(--lpt-small-font-size);
-  --lpt-call-portrait-size: 32px;
-  --lpt-call-icon-size: 16px;
-}
-.lpt-calls {gap:var(--lpt-call-gap);}
-.lpt-call-summary {gap:var(--lpt-call-padding);padding:var(--lpt-call-gap) var(--lpt-call-padding);}
-.lpt-call-summary > .lpt-portrait {width:var(--lpt-call-portrait-size);height:var(--lpt-call-portrait-size);}
-.lpt-call-info {gap:calc(var(--lpt-call-gap) / 2);}
-.lpt-call-footer {
-  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;
-  gap:calc(var(--lpt-call-gap) / 2);padding:var(--lpt-call-gap) var(--lpt-call-padding);
-  align-items:center;
-}
-.lpt-call-footer:not(:has(> .lpt-call-action + .lpt-call-action)) {grid-template-columns:minmax(0,1fr) auto;}
-.lpt-call-action {
-  min-width:0;min-height:var(--lpt-call-target);justify-content:center;
-  gap:var(--lpt-call-gap);padding:0 calc(var(--lpt-call-gap) / 2);font-size:var(--lpt-call-label-size);line-height:1.2;
-}
-.lpt-call-action-label {white-space:nowrap;}
-.lpt-call-action > img {width:var(--lpt-call-icon-size);height:var(--lpt-call-icon-size);flex:none;object-fit:contain;}
-.lpt-call-edit-actions {
-  grid-column:-2 / -1;display:flex;flex-wrap:nowrap;align-items:center;gap:0;
-  margin:0;padding:0;border:0;
+  gap: 0;
+  margin: -4px -6px -4px auto;
+  padding: 0;
+  border: 0;
 }
 .lpt-call-edit-actions > button {
-  width:var(--lpt-call-target);height:var(--lpt-call-target);
-  min-width:var(--lpt-call-target);min-height:var(--lpt-call-target);margin:0;
+  width: var(--lpt-call-target);
+  height: var(--lpt-call-target);
+  min-width: var(--lpt-call-target);
+  min-height: var(--lpt-call-target);
+  margin: 0;
 }
+.lpt-root .lpt-call-edit-actions > :is(.lpt-button, .lpt-delete) > img:only-child {
+  width: var(--lpt-call-icon-size);
+  height: var(--lpt-call-icon-size);
+}
+
+/* Email cards (icon on top, name under, details under; zero <img> inside .lpt-email) */
+.lpt-email-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  padding: 12px 12px 10px;
+  list-style: none;
+  cursor: pointer;
+  font-family: var(--lpt-font);
+  font-size: var(--lpt-font-size);
+}
+.lpt-email-summary::-webkit-details-marker { display: none; }
+.lpt-email-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  font-family: var(--lpt-heading-font);
+  font-size: 16px;
+  color: var(--lpt-on-pastel);
+  margin-bottom: 2px;
+}
+.lpt-email-from {
+  font-family: var(--lpt-heading-font);
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 1.2;
+}
+.lpt-email-subject {
+  margin: 0;
+  font-size: 13px;
+  color: var(--lpt-text);
+  line-height: 1.3;
+}
+.lpt-email-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+.lpt-email-unread,
+.lpt-email-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-family: var(--lpt-ui-font);
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--lpt-on-pastel);
+  margin: 0;
+}
+.lpt-email-unread { background: var(--lpt-pink-1); }
+.lpt-email-pill.is-out { background: var(--lpt-lilac-2); }
+.lpt-email-card-body {
+  padding: 10px 12px 8px;
+  border-top: 1px solid rgba(198, 150, 246, 0.22);
+  background: rgba(31, 15, 46, 0.35);
+}
+.lpt-email-card-body > .lpt-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(198, 150, 246, 0.16);
+}
+
+/* Bank account & transaction cards (icon on top, name under, details under) */
+.lpt-bank-account,
+.lpt-bank-transaction {
+  border: 1px solid rgba(210, 174, 246, 0.28);
+  border-radius: 16px;
+  background: var(--lpt-card-bg);
+  padding: 12px 12px 8px;
+}
+.lpt-bank-hero,
+.lpt-tx-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+}
+.lpt-bank-avatar,
+.lpt-tx-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--lpt-lilac-1);
+  color: var(--lpt-on-pastel);
+  font-family: var(--lpt-heading-font);
+  font-size: 18px;
+  margin-bottom: 2px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+.lpt-bank-avatar > img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  image-rendering: auto;
+}
+.lpt-tx-avatar {
+  width: 34px;
+  height: 34px;
+  background: var(--lpt-yellow);
+  font-size: 16px;
+}
+.lpt-bank-hero > .lpt-card-title,
+.lpt-tx-hero > .lpt-card-title {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.2;
+}
+.lpt-bank-balance,
+.lpt-transaction-amount {
+  display: inline-flex;
+  align-items: center;
+  margin: 2px 0 0;
+  padding: 2px 11px;
+  border-radius: 999px;
+  background: var(--lpt-blue);
+  color: var(--lpt-on-pastel);
+  font-family: var(--lpt-ui-font);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.lpt-transaction-amount {
+  background: var(--lpt-pink-1);
+}
+.lpt-bank-time,
+.lpt-tx-time {
+  margin: 0;
+  font-size: 11.5px;
+}
+.lpt-bank-account > .lpt-actions,
+.lpt-bank-transaction > .lpt-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 8px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(198, 150, 246, 0.16);
+}
+.lpt-bank-tx-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+.lpt-bank-tx-head > .lpt-section-title {
+  margin: 0;
+  font-size: 14px;
+}
+
+/* Supplied Home artwork; keep its proportions within the existing soft key. */
+.lpt-root { --lpt-home-icon-size: 32px; }
+.lpt-root .lpt-softkey-home { padding: 0; min-width: 44px; min-height: 44px; display: inline-grid; place-items: center; }
+.lpt-root .lpt-home-image { width: var(--lpt-home-icon-size); height: var(--lpt-home-icon-size); object-fit: contain; flex: none; }

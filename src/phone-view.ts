@@ -1,4 +1,5 @@
 import type {PhoneSnapshot as PhoneDocument} from "./ui-snapshot";
+import { HOME_IMAGE } from "./home-icon";
 import { ACTION_IMAGES } from "./action-images";
 import { WEATHER_CONDITIONS, WEATHER_SWITCHES, WEATHER_ALERT_ENDED, displayCondition, temperatureParts, type WeatherDetail } from "./weather-fields";
 import { WEATHER_ICONS } from "./weather-icons";
@@ -106,7 +107,7 @@ export class PhoneView {
   private softkeys = el("footer", "lpt-softkeys");
   private storyStrip=el("div","lpt-story-strip");
   private heading = el("h1", "lpt-heading");
-  private back = button("", "lpt-back", () => this.navigate("Home"));
+  private back = button("", "lpt-back", () => { if(this.app==="Locations"&&this.locationOrigin){this.locationOrigin=null;this.navigate("Scene");}else this.navigate("Home"); });
   private modelError="";
   private error = el("p", "lpt-error");
   private status = el("p", "lpt-status");
@@ -124,7 +125,9 @@ export class PhoneView {
   private pendingThreadScroll=false;
   private viewportFit=()=>this.measure();
   private selectedContact:string|null=null;
-  private contactOrigin:"Contacts"|"Messages"="Contacts";
+  private contactOrigin:App="Contacts";
+  private selectedLocation:string|null=null;
+  private locationOrigin:"Scene"|null=null;
   private contactScroll=0;
   private selectedText: string | null = null;
   private probe = el("div", "lpt-size-probe");
@@ -172,7 +175,7 @@ export class PhoneView {
     if(this.app!=="Home"&&!doc?.settings.apps[this.app])this.app="Home";
     if (changedChat) {
       this.modelError="";
-      this.portraitValidation.clear();this.selectedContact=null;this.contactOrigin="Contacts";this.contactScroll=0;this.portraitEpoch++;this.portraitSources=emptyPortraitSources();this.chatEpoch++; this.pendingReads.clear(); this.reads = reads ?? emptyReads(); this.replyDrafts.clear();this.replySelections.clear(); this.manualDrafts.clear();
+      this.portraitValidation.clear();this.selectedContact=null;this.contactOrigin="Contacts";this.selectedLocation=null;this.locationOrigin=null;this.contactScroll=0;this.portraitEpoch++;this.portraitSources=emptyPortraitSources();this.chatEpoch++; this.pendingReads.clear(); this.reads = reads ?? emptyReads(); this.replyDrafts.clear();this.replySelections.clear(); this.manualDrafts.clear();
       this.clearTextNotice(); this.editing = false; this.app = "Home"; this.selectedText = null;
 
 
@@ -229,7 +232,7 @@ export class PhoneView {
     const closedHeight = this.textNotice.hidden ? height : Math.max(48, Math.ceil(this.root.getBoundingClientRect().height));
     this.actions.size(Math.max(48, width), Math.max(48, this.openState ? height : closedHeight), this.openState);
   }
-  private navigate(app: App | "Home"): void { if(app==="Home")this.selectedContact=null; this.app = app!=="Home"&&!this.doc?.settings.apps[app]?"Home":app; this.editing = false; this.render(); this.content.scrollTop = 0;if(app==="Contacts"||app==="Messages")this.actions.portraits?.(); this.markVisibleActivity(); }
+  private navigate(app: App | "Home"): void { if(app==="Home"){this.selectedContact=null;this.locationOrigin=null;} this.app = app!=="Home"&&!this.doc?.settings.apps[app]?"Home":app; this.editing = false; this.render(); this.content.scrollTop = 0;if(app==="Contacts"||app==="Messages")this.actions.portraits?.(); this.markVisibleActivity(); }
   private render(): void {
     this.renderDirty=false;
     if(this.app==="Contacts"&&this.selectedContact===null&&this.content.querySelector(".lpt-contact-row"))this.contactScroll=this.content.scrollTop;
@@ -286,13 +289,15 @@ export class PhoneView {
       else if (this.app === "Messages") this.messages();
       else if(["Calls","Email","Bank"].includes(this.app))this.activities(this.app as "Calls"|"Email"|"Bank");
       const backSoft = softBtn("", "lpt-softkey-btn lpt-softkey-back", () => {
-        if (this.app === "Contacts" && this.selectedContact !== null) { this.selectedContact = null; this.editing = false; if (this.contactOrigin === "Messages") this.navigate("Messages"); else this.render(); }
+        if (this.app === "Contacts" && this.selectedContact !== null) { const backTo = this.contactOrigin; this.selectedContact = null; this.editing = false; if (backTo !== "Contacts") this.navigate(backTo); else this.render(); }
         else if (this.app === "Messages" && this.selectedText !== null) { this.selectedText = null; this.editing = false; this.render(); }
+        else if(this.app==="Locations"&&this.locationOrigin){this.locationOrigin=null;this.navigate("Scene");}
         else this.navigate("Home");
       });
       backSoft.append(actionImage("back")); backSoft.setAttribute("aria-label", "Back"); backSoft.title = "Back";
-      const homeSoft = softBtn("Home", "lpt-softkey-btn lpt-softkey-home", () => this.navigate("Home"));
-      homeSoft.setAttribute("aria-label", "Go to Home");
+      const homeSoft = softBtn("", "lpt-softkey-btn lpt-softkey-home", () => this.navigate("Home"));
+      homeSoft.setAttribute("aria-label", "Go to Home"); homeSoft.title = "Home";
+      const house = el("img", "lpt-home-image"); house.src = HOME_IMAGE; house.alt = ""; house.draggable = false; house.setAttribute("aria-hidden", "true"); homeSoft.append(house);
       setSoftkeys(backSoft, homeSoft);
     }
     if(this.modelError){const notice=el("div","lpt-notice lpt-model-error");notice.setAttribute("role","status");showCopyableError(notice,this.modelError);this.content.append(notice);}
@@ -368,7 +373,7 @@ export class PhoneView {
   }
   private field(parent: HTMLElement, key: string, cell: Cell | undefined, target: "scene" | "weather" | "contact", contact?: Contact): void {
     const name = FIELD_NAMES[key] ?? "Weather";
-    const b = button("", `lpt-field${key === "location" ? " lpt-location" : ""}`, () => {
+    const openEdit = () => {
       const value = cell?.value;
       const fields: FormField[] = key === "location" ? [
         { key: "value", label: "Exact location", value: valueText(cell), required: true, max: 100 },
@@ -381,12 +386,28 @@ export class PhoneView {
         const value = key === "location" ? { name: values.value, wider: lines(String(values.wider)) } : key === "attire" ? { worn: lines(String(values.worn)), removed: lines(String(values.removed)) } : ["present", "roles"].includes(key) ? lines(String(values.value)) : values.value;
         return { edit: { target, ...(contact ? { name: contact.name, value: { [key]: value } } : { field: key, value }) } };
       });
-    });
-    b.setAttribute("aria-label", `Edit ${name}${contact ? ` for ${contact.name}` : ""}`);
-    b.append(el("span", "lpt-field-label", name));
+    };
+    const b: HTMLElement = key === "present" ? el("div", "lpt-field lpt-present-field") : button("", `lpt-field${key === "location" ? " lpt-location" : ""}`, openEdit);
+    if (key === "present") {
+      const editTrigger = el("button", "lpt-field-label lpt-present-edit", name);
+      editTrigger.type = "button"; editTrigger.setAttribute("aria-label", `Edit ${name}`); editTrigger.title = `Edit ${name}`;
+      editTrigger.addEventListener("click", openEdit);
+      b.append(editTrigger);
+    } else {
+      b.setAttribute("aria-label", `Edit ${name}${contact ? ` for ${contact.name}` : ""}`);
+      b.append(el("span", "lpt-field-label", name));
+    }
     if (key === "present" && Array.isArray(cell?.value)) {
-      const list = el("ul", "lpt-present-list"); for (const name of cell.value) list.append(el("li", "lpt-present-name", name));
-      if (cell.value.length) b.append(list); else b.append(el("span", "lpt-field-value", "No one listed."));
+      const list = el("ul", "lpt-present-list"); for (const person of cell.value) {
+        const matched = this.doc?.settings.apps.Contacts ? this.doc.state.contacts.find(c => normalize(c.name) === normalize(person)) : undefined;
+        if (matched) {
+          const li = el("li", "lpt-present-item");
+          const link = el("button", "lpt-present-name lpt-present-link", person); link.type = "button"; link.title = `Open ${matched.name} in Contacts`;
+          link.addEventListener("click", () => this.openContact(matched.name, "Scene"));
+          li.append(link); list.append(li);
+        } else list.append(el("li", "lpt-present-name", person));
+      }
+      if (cell.value.length) b.append(list); else { const emptyBtn = el("button", "lpt-field-value lpt-present-empty", "No one listed. Tap to add."); emptyBtn.type = "button"; emptyBtn.addEventListener("click", openEdit); b.append(emptyBtn); }
     } else {
       let text = valueText(cell) || "Not established yet. Tap to add.";
       if (key === "roles" && Array.isArray(cell?.value)) text = cell.value.join(" / ") || "No roles listed.";
@@ -395,7 +416,17 @@ export class PhoneView {
       if (key === "location" && v && typeof v === "object" && "wider" in v && v.wider.length) b.append(el("span", "lpt-wider", v.wider.join(" · ")));
       if (key === "attire" && v && typeof v === "object" && "removed" in v) b.append(el("span", "lpt-wider", `Removed: ${v.removed.join(" / ") || "none listed"}`));
     }
-    if (marked(cell)) b.append(el("span", "lpt-marker", marked(cell)));const unit=el("div","lpt-field-unit");unit.append(b);parent.append(unit);this.fieldControls(unit,{target,field:key,...(contact?{name:contact.name}:{})},name);
+    if (marked(cell)) b.append(el("span", "lpt-marker", marked(cell)));const unit=el("div","lpt-field-unit");unit.append(b);
+    if (key === "location" && this.enabled("locations") && cell?.value && typeof cell.value === "object" && "name" in cell.value) {
+      const place = this.doc?.state.locations.find(p => normalize(p.name) === normalize((cell.value as { name: string }).name)) ??
+        (cell.value as { wider?: string[] }).wider?.map(w => this.doc?.state.locations.find(p => normalize(p.name) === normalize(w))).find(Boolean);
+      if (place) {
+        const go = el("button", "lpt-cross-link", "View place"); go.type = "button"; go.title = `Open ${place.name} in Locations`;
+        go.addEventListener("click", () => { this.selectedLocation = normalize(place.name); this.locationOrigin="Scene"; this.navigate("Locations"); });
+        unit.append(go);
+      }
+    }
+    parent.append(unit);this.fieldControls(unit,{target,field:key,...(contact?{name:contact.name}:{})},name);
   }
   private fieldControls(parent:HTMLElement,ref:FieldRef,label:string):void {
     const row=el("div","lpt-field-controls"),locked=this.doc?.fieldLocks?.[fieldKey(ref)]===true,epoch=this.chatEpoch;
@@ -522,7 +553,7 @@ export class PhoneView {
     }); parent.append(b);
   }
   private contactIcon(key:keyof typeof CONTACT_ICONS):HTMLImageElement {if(key==="addDetail")return actionImage("add");const img=el("img","lpt-contact-action-icon");img.src=CONTACT_ICONS[key];img.alt="";img.setAttribute("aria-hidden","true");img.draggable=false;return img;}
-  private openContact(name:string,origin:"Contacts"|"Messages"="Contacts"):void {if(origin==="Contacts")this.contactScroll=this.content.scrollTop;this.selectedContact=normalize(name);this.contactOrigin=origin;this.navigate("Contacts");}
+  private openContact(name:string,origin:App="Contacts"):void {if(origin==="Contacts")this.contactScroll=this.content.scrollTop;this.selectedContact=normalize(name);this.contactOrigin=origin;this.navigate("Contacts");}
   private contacts(): void {
     const section=el("section","lpt-contacts");this.content.append(section);
     const c=this.doc!.state.contacts.find(c=>normalize(c.name)===this.selectedContact);
@@ -535,14 +566,16 @@ export class PhoneView {
   }
   private contactPage(parent:HTMLElement,c:Contact):void {
     const info=c.info??emptyContactInfo(c.name),page=el("section",`lpt-card lpt-contact-page is-open ${info.kind==="Main"?"is-main":"is-npc"}`);parent.append(page);
-    const nav=el("header","lpt-contact-nav"),back=button("Back","lpt-button lpt-contact-back",()=>{this.selectedContact=null;this.editing=false;if(this.contactOrigin==="Messages")this.navigate("Messages");else this.render();});back.setAttribute("aria-label",this.contactOrigin==="Messages"?"Back to Messages":"Back to Contacts");nav.append(back,button("Edit","lpt-button lpt-contact-edit",()=>this.contactForm(page,c)));page.append(nav);
-    const hero=el("div","lpt-contact-hero");hero.append(this.portrait(c.name,c.player),el("h2","lpt-contact-name lpt-card-title",c.name));const chips=el("div","lpt-contact-chips");for(const role of [info.kind,...(Array.isArray(c.fields.roles?.value)&&this.enabled("contacts.roles")?c.fields.roles.value:[])])chips.append(el("span","lpt-contact-chip",role));hero.append(chips);if(c.player)hero.append(el("span","lpt-marker","You"));if(c.editedByUser)hero.append(el("span","lpt-marker","Edited by you"));else if(c.addedBySetup)hero.append(el("span","lpt-marker lpt-setup-origin","Added by setup wizard"));page.append(hero);
+    const nav=el("header","lpt-contact-nav"),back=button("Back","lpt-button lpt-contact-back",()=>{const backTo=this.contactOrigin;this.selectedContact=null;this.editing=false;if(backTo!=="Contacts")this.navigate(backTo);else this.render();});back.setAttribute("aria-label",`Back to ${this.contactOrigin}`);nav.append(back,button("Edit","lpt-button lpt-contact-edit",()=>this.contactForm(page,c)));page.append(nav);
+    const hero=el("div","lpt-contact-hero");hero.append(this.portrait(c.name,c.player),el("h2","lpt-contact-name lpt-card-title",c.name));const chips=el("div","lpt-contact-chips");for(const role of [info.kind,...(Array.isArray(c.fields.roles?.value)&&this.enabled("contacts.roles")?c.fields.roles.value:[])])chips.append(el("span","lpt-contact-chip",role));hero.append(chips);if(c.player)hero.append(el("span","lpt-marker","You"));if(c.editedByUser)hero.append(el("span","lpt-marker","Edited by you"));else if(c.addedBySetup)hero.append(el("span","lpt-marker lpt-setup-origin","Added by setup wizard"));
+    if(this.doc!.settings.apps.Notes&&this.doc!.state.notes.people.some(n=>!n.resolved&&normalize(n.name)===normalize(c.name))){const inNotes=el("button","lpt-cross-link","In Notes");inNotes.type="button";inNotes.title="View in Notes";inNotes.addEventListener("click",()=>this.navigate("Notes"));hero.append(inNotes);}
+    page.append(hero);
     if(c.matchHint)page.append(el("p","lpt-contact-match-hint",c.matchHint));if(contactDuplicates(this.doc!.contactInfo??{}))page.append(el("p","lpt-contact-duplicate-warning","Duplicate phone number or email address. Matching will not choose between them."));
     const line=(label:string,value:string,action?:()=>void,image?:keyof typeof CONTACT_ICONS)=>{if(!value)return;const field=label==="Phone"?"phone":label==="Email"?"email":label==="Relationship type"?"relationship":"detail";const row=el("div",`lpt-contact-info-row lpt-contact-${field}-row`);row.append(el("span","lpt-contact-info-label",label),el("span","lpt-contact-info-value",value));if(info.fakeFields?.includes(field))row.append(el("span","lpt-marker lpt-made-up","made up"));if(action){const actionName=label==="Phone"?"Message":"Email";const b=button("","lpt-button lpt-contact-link lpt-icon-action",action);b.setAttribute("aria-label",actionName);b.title=actionName;if(image)b.append(this.contactIcon(image));row.append(b);}page.append(row);};
     if(this.doc!.settings.apps.Messages)line("Phone",info.phone,()=>{this.selectedContact=null;this.selectedText=normalize(c.name);this.navigate("Messages");this.markVisibleConversation();},"message");
     if(this.doc!.settings.apps.Email)line("Email",info.email,()=>{this.selectedContact=null;this.navigate("Email");},"email");
     line("Relationship type",info.relationship);for(const d of info.details)line(d.label,d.value);
-    const extra=el("div","lpt-contact-extra");for(const key of CONTACT_KEYS)if(key!=="roles"&&this.enabled(`contacts.${key}`)&&c.fields[key]&&(!c.player||["physical","position","attire"].includes(key))){const row=el("div","lpt-contact-info-row");row.append(el("span","lpt-contact-info-label",FIELD_NAMES[key]),el("span","lpt-contact-info-value",valueText(c.fields[key])));this.fieldControls(row,{target:"contact",name:c.name,field:key},FIELD_NAMES[key]);extra.append(row);}if(c.fields.roles&&!c.player)this.fieldControls(extra,{target:"contact",name:c.name,field:"roles"},"Roles");page.append(extra);const contactActions=el("div","lpt-contact-actions");page.append(contactActions);this.mergeContactUI(contactActions,c);
+    const extra=el("div","lpt-contact-extra");for(const key of CONTACT_KEYS)if(key!=="roles"&&this.enabled(`contacts.${key}`)&&c.fields[key]&&(!c.player||["physical","position","attire"].includes(key))){const row=el("div","lpt-contact-info-row");row.append(el("span","lpt-contact-info-label",FIELD_NAMES[key]),el("span","lpt-contact-info-value",key==="attire"&&c.fields.attire&&typeof c.fields.attire.value==="object"&&"worn" in c.fields.attire.value?(c.fields.attire.value.worn.join(" · ")||"None listed"):valueText(c.fields[key])));this.fieldControls(row,{target:"contact",name:c.name,field:key},FIELD_NAMES[key]);extra.append(row);}if(c.fields.roles&&!c.player)this.fieldControls(extra,{target:"contact",name:c.name,field:"roles"},"Roles");page.append(extra);const contactActions=el("div","lpt-contact-actions");page.append(contactActions);this.mergeContactUI(contactActions,c);
     if(this.doc!.settings.apps.Messages&&!info.phone){const b=button("","lpt-button lpt-contact-link",()=>{this.selectedContact=null;this.selectedText=normalize(c.name);this.navigate("Messages");this.markVisibleConversation();});b.setAttribute("aria-label","Message");b.title="Message";b.prepend(this.contactIcon("message"));contactActions.append(b);}
   }
   private contactForm(parent:HTMLElement,contact?:Contact):void {
@@ -552,19 +585,21 @@ export class PhoneView {
     const info=contact?.info??emptyContactInfo(contact?.name??"");let kindTouched=false;const details=info.details.map(d=>({...d}));const initialDetails=JSON.stringify(info.details.map(d=>({label:d.label.trim(),value:d.value.trim()})));
     const fields:FormField[]=[{key:"name",label:"Name",value:contact?.name??"",required:true,max:100},{key:"kind",label:"Tag",value:info.kind,options:[["Main","Main"],["NPC","NPC"]]},
     ...(this.doc!.settings.apps.Messages?[{key:"phone",label:"Phone",value:info.phone,max:100}]:[]),...(this.doc!.settings.apps.Email?[{key:"email",label:"Email",value:info.email,max:150}]:[]),{key:"relationship",label:"Relationship type",value:info.relationship,max:100},
-    ...CONTACT_KEYS.filter(k=>k!=="attire"&&(!contact?.player||["physical","position"].includes(k))).map(k=>({key:k,label:k==="roles"?"Roles (free labels, for example occupation or affiliation)":FIELD_NAMES[k],value:valueText(contact?.fields[k]),multiline:k==="roles",max:500})),{key:"worn",label:"Worn items (one per line)",value:contact?.fields.attire&&typeof contact.fields.attire.value==="object"&&"worn" in contact.fields.attire.value?contact.fields.attire.value.worn.join("\n"):"",multiline:true},{key:"removed",label:"Removed items (one per line)",value:contact?.fields.attire&&typeof contact.fields.attire.value==="object"&&"removed" in contact.fields.attire.value?contact.fields.attire.value.removed.join("\n"):"",multiline:true}];
-    this.form(parent,fields,v=>{if(details.some(d=>!!d.label.trim()!==!!d.value.trim()))throw Error("Give each detail a label and a value, or remove it.");const name=String(v.name),value:Record<string,unknown>={};for(const key of CONTACT_KEYS)if(v[key]&&String(v[key])!==valueText(contact?.fields[key]))value[key]=key==="roles"?String(v[key]).split(/\n|; /).filter(Boolean):String(v[key]);const attire=contact?.fields.attire?.value,oldWorn=attire&&typeof attire==="object"&&"worn" in attire?attire.worn:[],oldRemoved=attire&&typeof attire==="object"&&"removed" in attire?attire.removed:[];const worn=lines(String(v.worn)),removed=lines(String(v.removed));if(JSON.stringify([worn,removed])!==JSON.stringify([oldWorn,oldRemoved]))value.attire={worn,removed};const cleanedDetails=details.filter(d=>d.label.trim()&&d.value.trim()).map(d=>({label:d.label.trim(),value:d.value.trim()}));const infoPatch:Record<string,unknown>={...(v.phone!==undefined&&(!contact||String(v.phone)!==info.phone)?{phone:String(v.phone)}:{}),...(v.email!==undefined&&(!contact||String(v.email)!==info.email)?{email:String(v.email)}:{}),...(!contact||String(v.relationship)!==info.relationship?{relationship:String(v.relationship)}:{}),...(!contact||JSON.stringify(cleanedDetails)!==initialDetails?{details:cleanedDetails}:{}),...(kindTouched?{kind:String(v.kind)}:{})};const hasEdit=!contact||name!==contact.name||Object.keys(value).length>0;this.selectedContact=normalize(name);return {
+    ...CONTACT_KEYS.filter(k=>k!=="attire"&&(this.enabled(`contacts.${k}`)||!!contact?.fields[k])&&(!contact?.player||["physical","position"].includes(k))).map(k=>({key:k,label:k==="roles"?"Roles (free labels, for example occupation or affiliation)":FIELD_NAMES[k],value:valueText(contact?.fields[k]),multiline:k==="roles",max:500})),...(this.enabled("contacts.attire")||!!contact?.fields.attire?[{key:"worn",label:"Worn items (one per line)",value:contact?.fields.attire&&typeof contact.fields.attire.value==="object"&&"worn" in contact.fields.attire.value?contact.fields.attire.value.worn.join("\n"):"",multiline:true},{key:"removed",label:"Removed items (one per line)",value:contact?.fields.attire&&typeof contact.fields.attire.value==="object"&&"removed" in contact.fields.attire.value?contact.fields.attire.value.removed.join("\n"):"",multiline:true}]:[])];
+    this.form(parent,fields,v=>{if(details.some(d=>!!d.label.trim()!==!!d.value.trim()))throw Error("Give each detail a label and a value, or remove it.");const name=String(v.name),value:Record<string,unknown>={};for(const key of CONTACT_KEYS)if(v[key]&&String(v[key])!==valueText(contact?.fields[key]))value[key]=key==="roles"?String(v[key]).split(/\n|; /).filter(Boolean):String(v[key]);if(v.worn!==undefined||v.removed!==undefined){const attire=contact?.fields.attire?.value,oldWorn=attire&&typeof attire==="object"&&"worn" in attire?attire.worn:[],oldRemoved=attire&&typeof attire==="object"&&"removed" in attire?attire.removed:[];const worn=lines(String(v.worn??"")),removed=lines(String(v.removed??""));if(JSON.stringify([worn,removed])!==JSON.stringify([oldWorn,oldRemoved]))value.attire={worn,removed};}const cleanedDetails=details.filter(d=>d.label.trim()&&d.value.trim()).map(d=>({label:d.label.trim(),value:d.value.trim()}));const infoPatch:Record<string,unknown>={...(v.phone!==undefined&&(!contact||String(v.phone)!==info.phone)?{phone:String(v.phone)}:{}),...(v.email!==undefined&&(!contact||String(v.email)!==info.email)?{email:String(v.email)}:{}),...(!contact||String(v.relationship)!==info.relationship?{relationship:String(v.relationship)}:{}),...(!contact||JSON.stringify(cleanedDetails)!==initialDetails?{details:cleanedDetails}:{}),...(kindTouched?{kind:String(v.kind)}:{})};const hasEdit=!contact||name!==contact.name||Object.keys(value).length>0;this.selectedContact=normalize(name);return {
       ...(hasEdit?{edit:{target:"contact" as const,name:contact?.name??name,...(contact&&name!==contact.name?{rename:name}:{}),value}}:{}),
       ...(!contact||Object.keys(infoPatch).length?{contactInfo:{name,...infoPatch}}:{}),
       ...(contact&&pendingPortrait!==undefined?{portrait:{name:contact.name,data:pendingPortrait}}:{}),
     };});
-    const editForm=parent.querySelector<HTMLFormElement>(".lpt-form");if(!editForm)return;
+    const editForm=parent.querySelector<HTMLFormElement>(".lpt-form");if(!editForm)return;this.content.scrollTop=0;
     for(const input of Array.from(editForm.querySelectorAll<HTMLInputElement>("[name]"))){input.classList.add("lpt-contact-input",`lpt-contact-input-${input.name}`);input.closest("label")?.classList.add("lpt-contact-edit-field",`lpt-contact-edit-${input.name}`);}
     editForm.querySelector('[name="kind"]')?.addEventListener("change",()=>kindTouched=true);
     const detailBox=el("div","lpt-contact-detail-editor");const detailRow=(d:{label:string;value:string})=>{const row=el("div","lpt-contact-detail-edit-row"),label=el("input","lpt-input lpt-contact-detail-label"),value=el("input","lpt-input lpt-contact-detail-value");label.value=d.label;value.value=d.value;label.maxLength=40;value.maxLength=200;label.setAttribute("aria-label","Detail label");value.setAttribute("aria-label","Detail value");label.placeholder="Label";value.placeholder="Value";label.addEventListener("input",()=>d.label=label.value);value.addEventListener("input",()=>d.value=value.value);row.append(label,value,button("Remove","lpt-button lpt-contact-detail-remove",()=>{details.splice(details.indexOf(d),1);row.remove();}));detailBox.append(row);};for(const d of details)detailRow(d);
-    const addDetail=button("Add detail","lpt-button lpt-contact-detail-add",()=>{if(details.length>=12){this.setError("Keep up to 12 details per contact.");return;}const d={label:"",value:""};details.push(d);detailRow(d);});addDetail.prepend(this.contactIcon("addDetail"));editForm.append(detailBox,addDetail);
+    const actionsRow=editForm.querySelector(".lpt-actions");
+    const addDetail=el("button","lpt-button lpt-contact-detail-add lpt-icon-action");addDetail.type="button";addDetail.setAttribute("aria-label","Add detail");addDetail.title="Add detail";addDetail.append(this.contactIcon("addDetail"));addDetail.addEventListener("click",()=>{if(details.length>=12){this.setError("Keep up to 12 details per contact.");return;}const d={label:"",value:""};details.push(d);detailRow(d);});
+    if(actionsRow){editForm.insertBefore(detailBox,actionsRow);editForm.insertBefore(addDetail,actionsRow);}else editForm.append(detailBox,addDetail);
     for(const label of Array.from(editForm.querySelectorAll(".lpt-label"))){const input=label.querySelector<HTMLInputElement|HTMLTextAreaElement>("input,textarea");if(input){label.classList.toggle("is-empty",!input.value);input.addEventListener("input",()=>label.classList.toggle("is-empty",!input.value));}}
-    if(contact)this.deleteAction(editForm,{target:"contact",name:contact.name});
+    if(contact){const delWrap=el("div","lpt-contact-delete-wrap");this.deleteAction(delWrap,{target:"contact",name:contact.name});if(actionsRow)editForm.insertBefore(delWrap,actionsRow);else editForm.append(delWrap);}
     if(!contact)return;
     const form=parent.querySelector<HTMLFormElement>(".lpt-form");if(!form)return;
     const epoch=this.chatEpoch,name=contact.name,key=portraitKey(name);
@@ -582,7 +617,7 @@ export class PhoneView {
         .catch(e=>{if(epoch===this.chatEpoch)this.setError(e instanceof Error?e.message:"Portrait could not be prepared.");})
         .finally(()=>{choose.disabled=false;file.value="";});
     });
-    controls.append(preview,choose,file,remove,notice);form.append(controls);
+    controls.append(preview,choose,file,remove,notice);const act=form.querySelector(".lpt-actions");if(act)form.insertBefore(controls,act);else form.append(controls);
   }
   private locations(): void {
     const section = el("section", "lpt-locations"); this.content.append(section);
@@ -591,12 +626,16 @@ export class PhoneView {
     const current = this.doc!.state.scene.location?.value; const currentName = current && typeof current === "object" && "name" in current ? current.name : "";
     const places = this.doc!.state.locations;
     for (const place of places) {
-      const card = el("details", "lpt-card lpt-place"); const summary = el("summary", "lpt-summary"); summary.append(el("span", "lpt-card-title", place.name));
-      if (this.enabled("scene.location") && normalize(place.name) === normalize(currentName)) summary.append(el("span", "lpt-marker", "Current"));
+      const card = el("details", "lpt-card lpt-place"); const isSelected = this.selectedLocation === normalize(place.name); if (isSelected) { card.open = true; this.selectedLocation = null; }
+      const isCurrent = this.enabled("scene.location") && normalize(place.name) === normalize(currentName);
+      const summary = el("summary", "lpt-summary"); summary.append(el("span", "lpt-card-title", place.name));
+      if (isCurrent) summary.append(el("span", "lpt-marker", "Current"));
       if (place.by === "user") summary.append(el("span", "lpt-marker", "edited by you"));
       const body = el("div", "lpt-card-body"); body.append(el("p", "lpt-place-description", place.description || "No description established yet."));
       if (place.relation) body.append(el("p", "lpt-help", place.relation));
-      const actions = el("div", "lpt-actions"); actions.append(button("Edit", "lpt-button", () => this.locationForm(body, place)));
+      const actions = el("div", "lpt-actions");
+      if (isCurrent && this.doc!.settings.apps.Scene) { const toScene = el("button", "lpt-cross-link", "View in Scene"); toScene.type = "button"; toScene.addEventListener("click", () => this.navigate("Scene")); actions.append(toScene); }
+      actions.append(button("Edit", "lpt-button", () => this.locationForm(body, place)));
       for(const field of ["description","relation"])this.fieldControls(body,{target:"location",name:place.name,field},`Place ${field}`);this.deleteAction(actions, { target: "location", name: place.name }); body.append(actions); card.append(summary, body); section.append(card);
     }
     if (!places.length) this.empty("No places yet. This fills in when the story establishes a meaningful place.", section);
@@ -653,7 +692,12 @@ export class PhoneView {
       full.append(part);
     }
     body.append(full);
-    const actions = el("div", "lpt-actions"); actions.append(button("Edit", "lpt-button", () => this.noteForm(body, key, note)));
+    const actions = el("div", "lpt-actions");
+    if (key === "people" && this.doc!.settings.apps.Contacts) {
+      const matchedContact = this.doc!.state.contacts.find(c => normalize(c.name) === normalize(note.name));
+      if (matchedContact) { const toCon = el("button", "lpt-cross-link", "View contact"); toCon.type = "button"; toCon.addEventListener("click", () => this.openContact(matchedContact.name, "Notes")); actions.append(toCon); }
+    }
+    actions.append(button("Edit", "lpt-button", () => this.noteForm(body, key, note)));
     for(const field of (key==="plots"?["resolved"]:[]))this.fieldControls(body,{target:"note",section:key,name:note.name,field},`Note ${field}`);this.deleteAction(actions, { target: "note", section: key, name: note.name }); body.append(actions); card.append(summary, body); parent.append(card);
   }
   private noteForm(parent: HTMLElement, key: Section, note?: Note): void {
@@ -754,7 +798,7 @@ export class PhoneView {
         info.append(el("h2","lpt-card-title",name),meta);
         if(c.by==="user"&&isRecord(c.at)&&c.at.variant==="manual")info.append(el("small","lpt-marker lpt-call-edited","edited by you"));
         const openMsg=()=>{this.selectedContact=null;this.selectedText=normalize(name);this.navigate("Messages");this.markVisibleConversation();};
-        const openCon=()=>{if(contact)this.openContact(contact.name,"Contacts");};
+        const openCon=()=>{if(contact)this.openContact(contact.name,"Calls");};
         const quick=el("div","lpt-call-quick");
         const makeQuick=(icon:keyof typeof CONTACT_ICONS,label:string,fn:()=>void)=>{const b=el("button","lpt-call-quick-btn");b.type="button";b.setAttribute("aria-label",label);b.title=label;b.append(this.contactIcon(icon));b.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();fn();});return b;};
         if(this.enabled("messages"))quick.append(makeQuick("message",`Message ${name}`,openMsg));
@@ -773,12 +817,60 @@ export class PhoneView {
       });
     }else if(app==="Email"){
       if(!this.enabled("email")){this.empty("Email is off. Change it in the sidebar's Phone tab.",section);return;}
-      section.append(button("+ Add email record","lpt-add",()=>add("email")));
+      const topBar=el("div","lpt-activity-top");const hint=this.content.querySelector<HTMLElement>(".lpt-description");if(hint)topBar.append(hint);topBar.append(button("+ Add email record","lpt-add",()=>add("email")));section.append(topBar);
       if(!this.doc!.state.emails.length)this.empty("No emails recorded. Actual story emails will appear here.",section);
-      for(const e of [...this.doc!.state.emails].reverse()){const card=el("details","lpt-card lpt-email");card.dataset.email=e.id;const summary=el("summary","lpt-email-summary");summary.append(el("strong","lpt-email-from",contactMatch(this.doc!,e.from,"email")??e.from),el("span","lpt-email-subject",e.subject));if(e.time)summary.append(el("small","lpt-muted",e.time));if(e.direction==="incoming"&&activityUnread(e,this.reads.seen))summary.append(el("span","lpt-email-unread","Unread"));else if(e.direction==="outgoing")summary.append(el("small","lpt-muted","Outgoing"));const body=el("div","lpt-card-body");if(e.to)body.append(el("p","lpt-muted",`To: ${e.to}`));body.append(el("p","lpt-email-body",e.body));this.activityControls(body,"email",e as unknown as Record<string,unknown>,add);card.append(summary,body);card.addEventListener("toggle",()=>{if(card.open){card.querySelector(".lpt-email-unread")?.remove();this.markVisibleActivity();}});section.append(card);}
+      for(const e of [...this.doc!.state.emails].reverse()){
+        const card=el("details","lpt-card lpt-email");card.dataset.email=e.id;
+        const sender=contactMatch(this.doc!,e.from,"email")??e.from;
+        const summary=el("summary","lpt-email-summary");
+        const avatar=el("span",`lpt-email-avatar lpt-portrait-tone-${initialTone(sender)}`,Array.from(sender.trim())[0]?.toLocaleUpperCase()??"?");avatar.setAttribute("aria-hidden","true");
+        const meta=el("div","lpt-email-meta");
+        if(e.direction==="incoming"&&activityUnread(e,this.reads.seen))meta.append(el("span","lpt-email-unread","Unread"));
+        else if(e.direction==="outgoing")meta.append(el("span","lpt-email-pill is-out","Outgoing"));
+        if(e.time)meta.append(el("small","lpt-muted lpt-email-time",e.time));
+        summary.append(avatar,el("strong","lpt-email-from",sender),el("span","lpt-email-subject",e.subject));
+        if(meta.children.length)summary.append(meta);
+        const body=el("div","lpt-card-body lpt-email-card-body");
+        if(e.to)body.append(el("p","lpt-muted lpt-email-to",`To: ${e.to}`));
+        body.append(el("p","lpt-email-body",e.body));
+        const emailContact=this.doc!.settings.apps.Contacts?this.doc!.state.contacts.find(c=>normalize(c.name)===normalize(sender)):undefined;
+        if(emailContact){const toCon=el("button","lpt-cross-link","View contact");toCon.type="button";toCon.addEventListener("click",()=>this.openContact(emailContact.name,"Email"));body.append(toCon);}
+        this.activityControls(body,"email",e as unknown as Record<string,unknown>,add);
+        card.append(summary,body);
+        card.addEventListener("toggle",()=>{if(card.open){card.querySelector(".lpt-email-unread")?.remove();this.markVisibleActivity();}});
+        section.append(card);
+      }
     }else{
-      if(this.enabled("bank.balance")){section.append(button("+ Add account","lpt-add",()=>add("bank")));if(!this.doc!.state.bank.length)this.empty("No balances stated. The tracker never calculates a balance.",section);for(const b of this.doc!.state.bank){const card=el("article","lpt-card lpt-bank-account");const stale=this.doc!.state.transactions.some(t=>t.at.index>b.at.index);card.append(el("h2","lpt-card-title",b.name),el("p","lpt-bank-balance",`${stale?"Last stated":"Balance"}: ${b.balance}`));if(b.time)card.append(el("p","lpt-bank-time",`As of ${b.time}`));this.activityControls(card,"bank",b as unknown as Record<string,unknown>,add);section.append(card);}}
-      if(this.enabled("bank.transactions")){section.append(el("h2","lpt-section-title","Recent transactions"),button("+ Add transaction","lpt-add",()=>add("transaction")));if(!this.doc!.state.transactions.length)this.empty("No transactions stated. Adding one never changes a balance.",section);for(const t of [...this.doc!.state.transactions].reverse()){const card=el("article","lpt-card lpt-bank-transaction");card.append(el("strong","lpt-card-title",t.description),el("p","lpt-transaction-amount",t.amount));if(t.time)card.append(el("p","lpt-muted",t.time));this.activityControls(card,"transaction",t as unknown as Record<string,unknown>,add);section.append(card);}}
+      const hint=this.content.querySelector<HTMLElement>(".lpt-description");
+      if(this.enabled("bank.balance")){
+        const topBar=el("div","lpt-activity-top");if(hint)topBar.append(hint);topBar.append(button("+ Add account","lpt-add",()=>add("bank")));section.append(topBar);
+        if(!this.doc!.state.bank.length)this.empty("No balances stated. The tracker never calculates a balance.",section);
+        for(const b of this.doc!.state.bank){
+          const card=el("article","lpt-card lpt-bank-account");
+          const stale=this.doc!.state.transactions.some(t=>t.at.index>b.at.index);
+          const hero=el("div","lpt-bank-hero");
+          const icon=el("span","lpt-bank-avatar");icon.setAttribute("aria-hidden","true");icon.append(appImage("Bank"));
+          hero.append(icon,el("h2","lpt-card-title",b.name),el("p","lpt-bank-balance",`${stale?"Last stated":"Balance"}: ${b.balance}`));
+          if(b.time)hero.append(el("p","lpt-bank-time lpt-muted",`As of ${b.time}`));
+          card.append(hero);
+          this.activityControls(card,"bank",b as unknown as Record<string,unknown>,add);
+          section.append(card);
+        }
+      }
+      if(this.enabled("bank.transactions")){
+        const txHead=el("div","lpt-bank-tx-head");txHead.append(el("h2","lpt-section-title","Recent transactions"),button("+ Add transaction","lpt-add",()=>add("transaction")));section.append(txHead);
+        if(!this.doc!.state.transactions.length)this.empty("No transactions stated. Adding one never changes a balance.",section);
+        for(const t of [...this.doc!.state.transactions].reverse()){
+          const card=el("article","lpt-card lpt-bank-transaction");
+          const top=el("div","lpt-tx-hero");
+          const badge=el("span","lpt-tx-avatar","$");badge.setAttribute("aria-hidden","true");
+          top.append(badge,el("strong","lpt-card-title",t.description),el("p","lpt-transaction-amount",t.amount));
+          if(t.time)top.append(el("p","lpt-muted lpt-tx-time",t.time));
+          card.append(top);
+          this.activityControls(card,"transaction",t as unknown as Record<string,unknown>,add);
+          section.append(card);
+        }
+      }
       if(!this.enabled("bank.balance")&&!this.enabled("bank.transactions"))this.empty("Bank fields are off. Change them in the sidebar's Phone tab.",section);
     }
   }

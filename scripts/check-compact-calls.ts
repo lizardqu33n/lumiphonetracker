@@ -38,5 +38,11 @@ try {
  check(geometry.buttons.every(b=>b.height>=44&&b.width>=44),"Expanded call actions keep full click targets");
  check(geometry.buttons.every(b=>Math.abs(b.top-geometry.buttons[0].top)<2),"Message, Contact, Edit and Delete share one aligned action row");
  check(await page.getByRole("button",{name:"Go to Home",exact:true}).isVisible(),"The Home soft key is retained");
+ const homeButton=page.getByRole("button",{name:"Go to Home",exact:true});
+ check((await homeButton.textContent())==="","Home has no visible text label");
+ const house=homeButton.locator(".lpt-home-image");await house.evaluate((n:HTMLImageElement)=>n.decode());
+ check(await house.evaluate((n:HTMLImageElement)=>n.src.startsWith("data:image/png;base64,")&&n.naturalWidth>0&&n.naturalHeight>0&&getComputedStyle(n).objectFit==="contain"),"Home artwork is embedded and keeps its proportions");
+ check(await house.evaluate((n:HTMLImageElement)=>{const c=document.createElement("canvas");c.width=n.naturalWidth;c.height=n.naturalHeight;const ctx=c.getContext("2d")!;ctx.drawImage(n,0,0);const d=ctx.getImageData(0,0,c.width,c.height).data;const a=(x:number,y:number)=>d[(y*c.width+x)*4+3]>0;return Array.from({length:c.width},(_,x)=>a(x,0)).some(Boolean)&&Array.from({length:c.width},(_,x)=>a(x,c.height-1)).some(Boolean)&&Array.from({length:c.height},(_,y)=>a(0,y)).some(Boolean)&&Array.from({length:c.height},(_,y)=>a(c.width-1,y)).some(Boolean);}),"Home artwork has no empty transparent border");
+ await homeButton.focus();await page.keyboard.press("Enter");check(await page.locator('[data-app="Scene"]').isVisible(),"Home keyboard action still opens Home");
  console.log(JSON.stringify(geometry));console.log(`Compact Calls verification passed: ${checks} checks. Trimmed icons retained.`);
 } finally {await browser.close();server.stop(true);}

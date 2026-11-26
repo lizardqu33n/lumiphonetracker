@@ -991,3 +991,30 @@ Current heading variables use LPT Fredoka and body variables use LPT Nunito. The
 Current font roles supersede the earlier defaults. --lpt-heading-font uses LPT Cherry Bomb One for titles and major headings. --lpt-ui-font uses LPT DynaPuff for buttons, badges, chips, counters and small UI labels. --lpt-font uses LPT Sour Gummy for body text, field values and descriptions. --lpt-decorative-font exposes LPT Shrikhand for optional custom accents and is not applied to normal UI. Sidebar equivalents are --lpt-side-heading-font, --lpt-side-ui-font, --lpt-side-font and --lpt-side-decorative-font. Font binaries total 470,212 bytes before base64 encoding.
 
 The existing .lpt-store-row is an app tile with artwork, visible app name and action in three stacked grid rows. .lpt-store-button and .lpt-store-action-image remain the same classes. The tile grid uses three columns, or two below 230px. Action icons keep tooltips and accessible names. No app data or setting scopes change.
+
+Home artwork: `.lpt-home-image` is the embedded house image inside `.lpt-softkey-home`. `--lpt-home-icon-size` defaults to `32px`; the button retains at least a 44px target. The house image has a transparent background, cropped tightly to its nonzero-alpha bounds without stretching.
+
+### 0.21 cross-app and card styling
+
+| Class | Purpose |
+| --- | --- |
+| `.lpt-cross-link` | Link to a related app. |
+| `.lpt-present-field` | Here now field container. |
+| `.lpt-present-edit` | Edit the Here now list. |
+| `.lpt-present-empty` | Empty Here now edit prompt. |
+| `.lpt-present-item` | One person in Here now. |
+| `.lpt-present-link` | Person button opening Contacts. |
+| `.lpt-contact-delete-wrap` | Contact delete control container. |
+| `.lpt-activity-top` | App description and Add control row. |
+| `.lpt-email-avatar` | Email sender initial circle. |
+| `.lpt-email-card-body` | Expanded email content. |
+| `.lpt-email-meta` | Email time and unread status row. |
+| `.lpt-email-pill` | Outgoing email label. |
+| `.lpt-email-time` | Stated email time. |
+| `.lpt-email-to` | Email recipient text. |
+| `.lpt-bank-avatar` | Account icon container. |
+| `.lpt-bank-hero` | Account name and stated balance. |
+| `.lpt-bank-tx-head` | Recent transactions heading and Add control. |
+| `.lpt-tx-avatar` | Transaction decorative badge. |
+| `.lpt-tx-hero` | Transaction description and amount. |
+| `.lpt-tx-time` | Stated transaction time. |

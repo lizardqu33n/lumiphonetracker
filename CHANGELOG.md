@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.21.0 - 2026-11-26
+
+- Replaced the Home label with the supplied house artwork, embedded with a transparent, tightly cropped background; preserved tooltip, accessible label and click target.
+- Scene-to-Locations Back navigation now returns to Scene; documented the new styling classes.
+
+- Cross-app navigation across Scene, Locations, Contacts, Notes, Calls, Email, and Messages with smart Back-origin routing.
+- Linked `Scene -> HERE NOW` pills to matching Contacts (accessible non-nested buttons with high-contrast pill styling) and `Scene -> LOCATION` to Locations.
+- Dedicated Contact Edit view (hides detail rows while editing), filtered edit fields to enabled/populated fields, restored single pixel-art `+` on `Add detail`, and formatted multi-item attire with ` · `.
+- Updated Email and Bank cards to the centered icon-on-top Calls card style and aligned Calls action rows and notice margins.
+- Fixed Locations heart overlap, Scene form `Save`/`Cancel` overlap, and tightened prompt rules to keep unnamed background NPCs out of Contacts and avoid duplicating Contacts in `People to remember`.
+- Consolidated stacked override blocks in `src/styles.css` into one clean Flipphone UI layer.
+
 ## 0.20.2 - Compact Calls and Back/Home navigation
 
 - Integrate the supplied Calls card layout with the latest reviewed flipphone layout. Keep the Back/Home soft keys, tracking-status control and all trimmed icon files.
