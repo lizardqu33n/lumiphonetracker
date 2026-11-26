@@ -1,6 +1,6 @@
 # Current app artwork (0.10.0)
 
-The nine app images supplied by the user are embedded unchanged in src/app-icons.ts as PNG data URIs. No external files or downloads are used. Bitmap colors remain as drawn; they do not inherit currentColor. The separate flip-phone launcher PNG is unchanged.
+The nine app images supplied by the user retain their exact visible pixels and are embedded with transparent margins cropped in src/app-icons.ts as PNG data URIs. No external files or downloads are used. Bitmap colors remain as drawn; they do not inherit currentColor. The separate flip-phone launcher PNG is unchanged.
 
 The original Lucide geometry below remains attributed as legacy bundled code. It is no longer the displayed Home/App Store artwork. The Back/Close controls retain their original small DOM SVG drawings.
 
@@ -25,3 +25,5 @@ The upstream license is preserved in [licenses/LUCIDE-LICENSE.txt](licenses/LUCI
 Cherry Bomb One, DynaPuff, Sour Gummy and Shrikhand are distributed under SIL Open Font License 1.1. Complete original copyright notices and license text are included in licenses/CHERRYBOMBONE-OFL.txt, licenses/DYNAPUFF-OFL.txt, licenses/SOURGUMMY-OFL.txt and licenses/SHRIKHAND-OFL.txt. Official unchanged WOFF2 font binaries were downloaded through https://fonts.googleapis.com/css2 and https://fonts.gstatic.com/. License sources are the corresponding ofl/cherrybombone, ofl/dynapuff, ofl/sourgummy and ofl/shrikhand directories in https://github.com/google/fonts. Extension-specific CSS aliases prevent family-name conflicts with host fonts.
 
 The supplied emoji, weather and contact-control artwork has full-cell nearest-neighbor PNG derivatives (64px emoji/contact controls, 192px weather). Fonts, nine app images and the launcher artwork are unchanged. Source hashes, derivative hashes, dimensions and alpha audits are in docs/ASSET-OPTIMIZATION.json.
+
+All static PNG icon families now have tight alpha-zero-margin crops. No nontransparent pixels were removed. The launcher was already tight and remains unchanged; user portraits are separate and untouched. See docs/ICON-CROPS.json.

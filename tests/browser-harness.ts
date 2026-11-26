@@ -1,3 +1,9 @@
+import {APP_IMAGES} from "../src/app-icons";
+import {ACTION_IMAGES} from "../src/action-images";
+import {FIELD_ICONS} from "../src/field-icons";
+import {UI_ICONS} from "../src/ui-icons";
+import {LAUNCHER_ICON} from "../src/launcher-icon";
+import cropReport from "../docs/ICON-CROPS.json";
 import {EMOJI_IMAGES} from "../src/emoji-assets";
 import {WEATHER_ICONS} from "../src/weather-icons";
 import {CONTACT_ICONS} from "../src/contact-icons";
@@ -144,6 +150,8 @@ const fixturePast = (chat:string):StoryRow=>({id:`${chat}-past`,chat_id:chat,ind
   content:"Bea and Player meet at the Station. Lantern Cafe is their next meeting place.<phone-state>\nloc: Station\npresent: Bea; Player\nc: Bea | roles=Station keeper | phys=Unhurt\np: Lantern Cafe | Meeting place | East of Station\n</phone-state>"});
 function start() { cleanup = setup(ctx as never); }
 const api = {
+  croppedArt(){return {report:cropReport,groups:{"app-icons.ts":APP_IMAGES,"action-images.ts":ACTION_IMAGES,"field-icons.ts":FIELD_ICONS,"ui-icons.ts":UI_ICONS,"contact-icons.ts":CONTACT_ICONS,"weather-icons.ts":WEATHER_ICONS,"emoji-assets.ts":EMOJI_IMAGES,"launcher-icon.ts":{launcher:LAUNCHER_ICON}}};},
+
   optimizedArt(){return {report:optimizedAssetReport,groups:{"emoji-assets.ts":EMOJI_IMAGES,"weather-icons.ts":WEATHER_ICONS,"contact-icons.ts":CONTACT_ICONS}};},
 
   async peerContactPhone(name:string,phone:string){const chat=activeChat!;const d=await store.savedView(chat,`owner-${chat}`);await store.update(`owner-${chat}`,chat,d.revision,{contactInfo:{name,phone}});onBackend({type:"phone_tracker_changed",chatId:chat});},

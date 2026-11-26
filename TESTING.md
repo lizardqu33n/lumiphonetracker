@@ -1,3 +1,11 @@
+# 0.20.1 icon-crop verification
+
+336 code tests pass, including all 70 embedded PNGs. Crop checks verify PNG/RGBA hashes, exact nonzero-alpha histogram preservation and a visible pixel on each cropped edge. Python verification confirms the same metadata. The only removed pixels have alpha zero; no resizing is performed during cropping.
+
+Three focused browser checks pass: all 70 images decode with audited tight bounds at 2x density; header/field controls retain at least 44px targets; emoji retain contain sizing. Home, Scene, Contacts, Weather and the emoji picker were visually reviewed. These are targeted crop checks, not a claim that every historical layout check passes the new flipphone design. The earlier short-height empty-thread placeholder limitation is outside this icon-only change. No real Lumiverse placement or device keyboard was verified.
+
+Portrait validation still requires 128px stored portraits and remains unchanged. Unit fixtures now use independent fixed-size images, rather than runtime app icons whose canvases were cropped. Original source-cell provenance remains in EMOJI-ASSETS.json and ASSET-OPTIMIZATION.json; the crop stage is audited in ICON-CROPS.json.
+
 # 0.20.0 verification
 
 335 code tests pass, including eight macro-split tests. Type checking, reproducible built-file checks, extension validation and packaging pass. The original ZIP failed type checking because fixtures lacked required inferred/locked properties, and its new Contacts macro failed the existing all-switches-off regression; both were corrected before release.

@@ -1,3 +1,9 @@
+# Current icon fitting
+
+In 0.20.1, all embedded bitmap icon families use tight transparent crops. 69 images were trimmed; the launcher was already tight. Canvas sizes are intentionally no longer uniform squares. Every visible and faint alpha pixel is preserved; no image is stretched or recolored. Existing CSS sizes, object-fit containment, button dimensions, class names and variables are unchanged by the crop. Transparent corners inside an artwork's bounding rectangle remain transparent.
+
+The latest supplied flipphone UI revision is the working layout. The image audit and regeneration details are in docs/ICON-CROPS.json and scripts/trim-icons.py. Crop only the alpha-zero outer margins; do not use a brightness threshold or trim faint effects. User-uploaded portraits are not icon assets and are not cropped by this build step.
+
 # Style your phone
 
 ## 0.19.0 sidebar change

@@ -1,6 +1,6 @@
 import {test,expect} from "bun:test";
 import {createHash} from "node:crypto";
-import {inflateSync} from "node:zlib";
+import {rgba} from "./png";
 import {readFileSync} from "node:fs";
 import {EMOJI_IMAGES,EMOJI_NAMES} from "../src/emoji-assets";
 import {emojiParts,insertEmoji} from "../src/emoji";
@@ -8,13 +8,7 @@ import {parseExpanded,parseExpandedReply} from "../src/schema";
 import {replyTag,addReplyDraft} from "../src/messages";
 const report=JSON.parse(readFileSync(new URL("../docs/EMOJI-ASSETS.json",import.meta.url),"utf8"));
 const names="smile laugh sad heart_eyes wink blush angry surprised sleepy heart thumbs_up sparkles crying pensive content pleading happy_blush sad_pleading unamused angel angry_devil devil happy_tear kiss_blush kiss_heart tongue sweat cool".split(" ");
-function rgba(png:Buffer){
- expect(png.subarray(0,8).toString("hex")).toBe("89504e470d0a1a0a");const w=png.readUInt32BE(16),h=png.readUInt32BE(20);expect(png[24]).toBe(8);expect(png[25]).toBe(6);expect(png[28]).toBe(0);
- const idat:Buffer[]=[];for(let p=8;p+12<=png.length;){const size=png.readUInt32BE(p),type=png.toString("ascii",p+4,p+8);if(type==="IDAT")idat.push(png.subarray(p+8,p+8+size));p+=size+12;}
- const data=inflateSync(Buffer.concat(idat)),stride=w*4,out=Buffer.alloc(h*stride);let p=0;
- for(let y=0;y<h;y++){const filter=data[p++];if(filter>4)throw Error("Unsupported PNG filter");for(let x=0;x<stride;x++){const a=x>=4?out[y*stride+x-4]:0,b=y?out[(y-1)*stride+x]:0,c=y&&x>=4?out[(y-1)*stride+x-4]:0;let predictor=0;if(filter===1)predictor=a;else if(filter===2)predictor=b;else if(filter===3)predictor=Math.floor((a+b)/2);else if(filter===4){const q=a+b-c,pa=Math.abs(q-a),pb=Math.abs(q-b),pc=Math.abs(q-c);predictor=pa<=pb&&pa<=pc?a:pb<=pc?b:c;}out[y*stride+x]=(data[p++]+predictor)&255;}}
- return {w,h,out};
-}
+
 test("all 28 optimized full-cell PNGs preserve audited provenance, alpha and row-major names",()=>{
  const optimization=JSON.parse(readFileSync(new URL("../docs/ASSET-OPTIMIZATION.json",import.meta.url),"utf8"));
  expect(EMOJI_NAMES).toEqual(names as any);let bytes=0;
@@ -23,7 +17,7 @@ test("all 28 optimized full-cell PNGs preserve audited provenance, alpha and row
   const png=Buffer.from(uri.split(",")[1],"base64"),decoded=rgba(png),source=report.cells[i],cell=optimization.assets.find((c:any)=>c.module==="emoji-assets.ts"&&c.name===name);
   expect(cell.source_png_sha256).toBe(source.sha256);expect(cell.source_rgba_sha256).toBe(source.rgba_sha256);
   expect(createHash("sha256").update(png).digest("hex")).toBe(cell.png_sha256);expect([decoded.w,decoded.h]).toEqual(cell.size);
-  expect(Math.max(decoded.w,decoded.h)).toBe(64);expect(Math.abs(decoded.w/decoded.h-source.size[0]/source.size[1])).toBeLessThan(0.02);
+  expect(Math.max(decoded.w,decoded.h)).toBeLessThanOrEqual(64);expect(cell.crop_bounds[2]-cell.crop_bounds[0]).toBe(decoded.w);expect(cell.crop_bounds[3]-cell.crop_bounds[1]).toBe(decoded.h);
   expect(createHash("sha256").update(decoded.out).digest("hex")).toBe(cell.rgba_sha256);
   const histogram=Array(256).fill(0);for(let k=3;k<decoded.out.length;k+=4)histogram[decoded.out[k]]++;
   expect(histogram).toEqual(cell.alpha_histogram);expect(histogram[0]).toBeGreaterThan(0);bytes+=png.length;

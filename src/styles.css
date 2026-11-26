@@ -2160,3 +2160,263 @@
   padding: 7px 11px;
   box-shadow: 0 1px 4px rgba(10, 3, 20, 0.25);
 }
+
+/* ==========================================================================
+   Flipphone UI Refresh (0.20.1):
+   - Top-lid flip-phone silhouette with soft-key bar & hinge lip so the native
+     mobile keyboard sits right underneath like the phone's keypad half.
+   - Compact 3x3 Home grid sized for all 9 apps without scrolling.
+   - Flat, un-nested detail screens with hairline dividers & quiet lock icons.
+   - Full-width Date/Time forms & sticky Save/Cancel bar above the hinge.
+   ========================================================================== */
+
+.lpt-root {
+  --lpt-frame-radius: 30px;
+  --lpt-space: 8px;
+  --lpt-app-tile-size: 54px;
+  --lpt-app-image-size: 32px;
+  --lpt-input-bg: #e9dbf8;
+  --lpt-input-text: #260e38;
+  --lpt-input-border: rgba(198, 150, 246, 0.65);
+  --lpt-image-art-size: 26px;
+  --lpt-field-art-size: 22px;
+}
+
+/* Flip-phone top lid + bottom hinge silhouette */
+.lpt-frame {
+  border-radius: 30px 30px 18px 18px;
+  padding-bottom: 10px;
+}
+.lpt-frame::after {
+  width: min(140px, 48%);
+  height: 5px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(198, 150, 246, 0.35), rgba(246, 222, 138, 0.6), rgba(198, 150, 246, 0.35));
+  box-shadow: 0 1px 0 rgba(66, 6, 66, 0.6);
+  bottom: 4px;
+}
+
+/* Flip-phone soft-key footer bar (Left | D-pad | Right) right above the hinge */
+.lpt-softkeys {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 6px 10px 8px;
+  border-top: 1px solid var(--lpt-border);
+  background-color: var(--lpt-phone-bg);
+}
+.lpt-frame[data-editing="true"] .lpt-softkeys,
+.lpt-frame:has(.lpt-content[data-thread="true"]) .lpt-softkeys {
+  display: none;
+}
+.lpt-content[data-thread="true"] {
+  min-height: 0;
+  overflow-y: auto;
+}
+.lpt-softkey-slot {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.lpt-softkey-slot.is-left { justify-content: flex-start; }
+.lpt-softkey-slot.is-right { justify-content: flex-end; }
+.lpt-root .lpt-softkey-btn {
+  margin: 0;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid rgba(210, 174, 246, 0.35);
+  border-radius: 999px;
+  background: rgba(210, 174, 246, 0.14);
+  color: var(--lpt-text);
+  font-family: var(--lpt-ui-font);
+  font-size: 11.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  box-shadow: none;
+  cursor: pointer;
+}
+.lpt-root .lpt-softkey-btn:hover:not(:disabled) {
+  background: rgba(210, 174, 246, 0.24);
+  border-color: var(--lpt-lilac-2);
+}
+.lpt-dpad {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(210, 174, 246, 0.55);
+  background: radial-gradient(circle at 50% 45%, rgba(246, 162, 210, 0.35), rgba(46, 23, 67, 0.95) 68%);
+  position: relative;
+  flex: none;
+}
+.lpt-dpad::before {
+  content: "✦";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  color: var(--lpt-lilac-1);
+  line-height: 1;
+}
+
+/* Home screen: clean centered 3x3 grid with comfortable room for all 9 apps */
+.lpt-home {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 8px;
+  padding: 8px 4px;
+  align-content: center;
+}
+.lpt-home .lpt-app-button {
+  gap: 4px;
+  padding: 2px;
+}
+.lpt-home .lpt-app-icon {
+  width: var(--lpt-app-tile-size);
+  height: var(--lpt-app-tile-size);
+  border-radius: 16px;
+}
+.lpt-home .lpt-app-label {
+  font-size: 11.5px;
+  line-height: 1.2;
+}
+
+/* Flatten nested box-in-box borders across Contacts, Weather, and Notes */
+.lpt-contact-page,
+.lpt-weather-card {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 4px 2px 8px;
+}
+.lpt-contacts-header .lpt-contact-list-title {
+  display: none;
+}
+.lpt-note-section {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+.lpt-note-section > .lpt-section-header {
+  border: 1px solid rgba(210, 174, 246, 0.3);
+  border-radius: 12px;
+  background: var(--lpt-card-bg);
+  padding: 6px 10px 6px 34px;
+  gap: 8px;
+}
+.lpt-note-section > .lpt-section-body {
+  padding: 6px 2px 2px;
+}
+.lpt-note {
+  border: 1px solid rgba(210, 174, 246, 0.24);
+  border-radius: 12px;
+  background: var(--lpt-card-bg);
+  box-shadow: none;
+}
+.lpt-note > .lpt-summary {
+  padding: 8px 10px 8px calc(var(--lpt-icon-size) + 12px);
+}
+.lpt-note .lpt-card-body {
+  padding: 4px 10px 8px;
+}
+.lpt-note-part {
+  border-bottom: 1px solid rgba(198, 150, 246, 0.16);
+  padding-block: 6px;
+}
+.lpt-note .lpt-actions {
+  border-top: 0;
+  padding-top: 4px;
+  gap: 2px;
+}
+
+/* Quiet, compact lock/restore buttons: keep 44px tap box without eating layout width */
+.lpt-field-controls {
+  gap: 0;
+}
+.lpt-field-unit > .lpt-field {
+  padding-right: 30px;
+}
+.lpt-field-unit > .lpt-field-controls,
+.lpt-note-part > .lpt-field-controls,
+.lpt-contact-info-row > .lpt-field-controls {
+  margin-right: -8px;
+}
+.lpt-field-lock:not([aria-pressed="true"]) > img {
+  opacity: 0.55;
+  transition: opacity var(--lpt-transition);
+}
+.lpt-field-lock:hover > img,
+.lpt-field-lock[aria-pressed="true"] > img {
+  opacity: 1;
+}
+
+/* Fix half-width Date/Time edit form in Scene */
+.lpt-scene-when > .lpt-form {
+  grid-column: 1 / -1;
+}
+
+/* Dedicated clean forms with sticky Save/Cancel bar pinned right above the flip-phone hinge & mobile keyboard */
+.lpt-form {
+  border: 1px solid rgba(210, 174, 246, 0.28);
+  border-radius: 12px;
+  background: var(--lpt-card-bg);
+  padding: 10px 10px 4px;
+  box-shadow: none;
+}
+.lpt-form > .lpt-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 8px -10px -4px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--lpt-border);
+  border-radius: 0 0 12px 12px;
+  background: var(--lpt-phone-bg);
+}
+
+/* Compact, subtle dismiss button on hint banners instead of giant bright circle */
+.lpt-description .lpt-dismiss,
+.lpt-home-hint .lpt-dismiss,
+.lpt-draft-hint .lpt-dismiss {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  min-height: 26px;
+  padding: 0;
+  border: 1px solid rgba(210, 174, 246, 0.3);
+  border-radius: 50%;
+  background: rgba(210, 174, 246, 0.14);
+  color: var(--lpt-lilac-1);
+  font-size: 14px;
+  line-height: 1;
+  box-shadow: none;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+}
+.lpt-description .lpt-dismiss:hover,
+.lpt-home-hint .lpt-dismiss:hover,
+.lpt-draft-hint .lpt-dismiss:hover {
+  background: rgba(210, 174, 246, 0.26);
+  border-color: var(--lpt-lilac-2);
+}
+.lpt-description .lpt-dismiss::after,
+.lpt-home-hint .lpt-dismiss::after,
+.lpt-draft-hint .lpt-dismiss::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}

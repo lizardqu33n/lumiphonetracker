@@ -1,5 +1,5 @@
 import {test,expect} from "bun:test";
-import {APP_IMAGES} from "../src/app-icons";
+import {PORTRAIT_FIXTURES as APP_IMAGES} from "./portrait-fixtures";
 import {portraitBytes,rasterType,portraitSource,initialTone,PORTRAIT_CHAT_LIMIT,PORTRAIT_INPUT_LIMIT} from "../src/portraits";
 import {loadPortraitSources} from "../src/portrait-sources";
 import {emptyDocument} from "../src/model";

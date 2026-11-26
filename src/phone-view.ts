@@ -103,6 +103,7 @@ export class PhoneView {
   readonly launcher = button("", "lpt-launcher", () => this.open());
   private frame = el("section", "lpt-frame");
   private content = el("main", "lpt-content");
+  private softkeys = el("footer", "lpt-softkeys");
   private storyStrip=el("div","lpt-story-strip");
   private heading = el("h1", "lpt-heading");
   private back = button("", "lpt-back", () => this.navigate("Home"));
@@ -145,7 +146,7 @@ export class PhoneView {
     const header = el("header", "lpt-header"); header.append(this.back, this.heading, close);
     const speaker = el("div", "lpt-speaker"); speaker.setAttribute("aria-hidden", "true");
     this.textNotice.setAttribute("role", "status"); this.textNotice.setAttribute("aria-live", "polite"); this.textNotice.hidden = true;
-    this.frame.setAttribute("aria-label", "Lumi Phone Tracker"); this.frame.append(speaker,this.storyStrip, header, this.textNotice, this.content);
+    this.frame.setAttribute("aria-label", "Lumi Phone Tracker"); this.frame.append(speaker,this.storyStrip, header, this.textNotice, this.content, this.softkeys);
     this.probe.setAttribute("aria-hidden", "true"); this.root.append(this.launcher, this.frame, this.probe); mount.append(this.root);
     this.root.addEventListener("keydown", e => { if (e.key === "Escape") { e.stopPropagation(); this.close(); } });
     this.observer = new ResizeObserver(() => this.measure()); this.observer.observe(this.root); this.observer.observe(this.probe); this.observer.observe(this.launcher);
@@ -249,8 +250,18 @@ export class PhoneView {
     const header=this.frame.querySelector<HTMLElement>(".lpt-header")!;
     if(this.app==="Home")header.prepend(this.storyStrip);else this.frame.insertBefore(this.storyStrip,header);
     this.back.hidden = this.app === "Home" ||(this.app==="Contacts"&&this.selectedContact!==null)|| (this.app==="Messages"&&this.selectedText!==null);
+    this.frame.dataset.editing = String(this.editing);
+    const setSoftkeys = (left?: HTMLElement | null, right?: HTMLElement | null) => {
+      this.softkeys.replaceChildren();
+      const l = el("div", "lpt-softkey-slot is-left"); if (left) l.append(left);
+      const dpad = el("div", "lpt-dpad"); dpad.setAttribute("aria-hidden", "true");
+      const r = el("div", "lpt-softkey-slot is-right"); if (right) r.append(right);
+      this.softkeys.append(l, dpad, r);
+    };
+    const softBtn = (label: string, cls: string, fn: () => void) => { const b = el("button", cls, label); b.type = "button"; b.addEventListener("click", fn); return b; };
+    const closeSoft = softBtn("Close", "lpt-softkey-btn", () => this.close());
     if (this.app === "Home") {
-      if(this.doc){const on=this.doc.trackingEnabled!==false;const toggle=button(on?"Turn off for this chat":"Turn on for this chat","lpt-button lpt-chat-toggle",()=>{void this.change({trackingEnabled:!on});});toggle.setAttribute("aria-pressed",String(on));this.content.append(toggle);if(!on){this.content.append(el("p","lpt-chat-off lpt-help","Tracking is off for this chat. Saved data is kept."));this.refreshBadges();this.measure();return;}}
+      if(this.doc){const on=this.doc.trackingEnabled!==false;const fullLabel=on?"Turn off for this chat":"Turn on for this chat";const toggle=softBtn(on?"Turn off":"Turn on","lpt-chat-toggle lpt-softkey-btn",()=>{void this.change({trackingEnabled:!on});});toggle.setAttribute("aria-pressed",String(on));toggle.setAttribute("aria-label",fullLabel);toggle.title=fullLabel;setSoftkeys(toggle, closeSoft);if(!on){this.content.append(el("p","lpt-chat-off lpt-help","Tracking is off for this chat. Saved data is kept."));this.refreshBadges();this.measure();return;}} else setSoftkeys(null, closeSoft);
       const home = el("div", "lpt-home");
       for (const app of APPS.filter(a=>this.doc?.settings.apps[a])) {
         const b = button("", "lpt-app-button", () => this.navigate(app)); b.dataset.app = app;
@@ -275,7 +286,12 @@ export class PhoneView {
       else if (this.app === "Notes") this.notes();
       else if (this.app === "Messages") this.messages();
       else if(["Calls","Email","Bank"].includes(this.app))this.activities(this.app as "Calls"|"Email"|"Bank");
-
+      const backSoft = softBtn("Back", "lpt-softkey-btn", () => {
+        if (this.app === "Contacts" && this.selectedContact !== null) { this.selectedContact = null; this.editing = false; if (this.contactOrigin === "Messages") this.navigate("Messages"); else this.render(); }
+        else if (this.app === "Messages" && this.selectedText !== null) { this.selectedText = null; this.editing = false; this.render(); }
+        else this.navigate("Home");
+      });
+      setSoftkeys(backSoft, closeSoft);
     }
     if(this.modelError){const notice=el("div","lpt-notice lpt-model-error");notice.setAttribute("role","status");showCopyableError(notice,this.modelError);this.content.append(notice);}
     if (this.doc) for (const text of this.doc.state.notices) {
@@ -323,7 +339,7 @@ export class PhoneView {
   private form(parent: HTMLElement, fields: FormField[], save: (values: Record<string, string | boolean>) => Parameters<ViewActions["update"]>[0]): void {
     if (this.editing||!parent.isConnected) return;
     const originEpoch=this.chatEpoch,originChat=this.doc?.chatId;
-    this.editing = true; const baseRevision = this.doc?.revision ?? -1; let conflicted = false;
+    this.editing = true; this.frame.dataset.editing = "true"; const baseRevision = this.doc?.revision ?? -1; let conflicted = false;
     const form = el("form", "lpt-form"); const controls = new Map<string, HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>();
     for (const f of fields) {
       const label = el("label", "lpt-label", f.label);

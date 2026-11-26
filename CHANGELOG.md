@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.20.1 - Flipphone UI and tighter icon fitting
+
+- Use the latest supplied flipphone UI (revision 3) and trim fully transparent outer padding across all eight embedded PNG families. 69 images were cropped; the launcher was already tight.
+- Preserve every nonzero-alpha pixel, including faint glow, horns, halos, sparkles and the approved sleepy-Z correction. No resizing, recoloring, CSS/control-size changes, remote loading or user-portrait changes are part of the crop.
+- Record original/cropped dimensions, bounds, hashes and alpha counts; add a reproducible crop/check script and a 70-image regression. Keep full button targets and object-fit proportions. Decouple test portrait fixtures from runtime app icons, which are now intentionally nonsquare.
+
+
 ## 0.20.0 - Split prompt macros and clearer macro descriptions
 
 - Add phone_state for continuity only and phone_rules for update instructions, including the generating user's selected wording. Existing phone_format remains the all-in-one option; its preset line still works.
