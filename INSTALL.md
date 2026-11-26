@@ -1,6 +1,6 @@
-Version 0.20.1 uses the flipphone layout and tighter icon artwork. Turn tracking on or off from the bottom of Home. The sidebar toolbar still provides Open phone, Refresh tracker and the protected Reset appearance.
-
 # Install and use Lumi Phone Tracker
+
+Version 0.20.2 includes compact Calls cards, trimmed icons and Back/Home soft keys. The Tracking: On/Off control on Home toggles this chat. The sidebar retains its protected Open phone, Refresh tracker and Reset appearance toolbar.
 
 Built files are included—you do not need to compile the extension. Normal tracking uses saved messages written by your main story model, with optional AI extraction only when you explicitly run the setup wizard.
 

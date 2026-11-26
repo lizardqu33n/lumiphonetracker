@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.20.2 - Compact Calls and Back/Home navigation
+
+- Integrate the supplied Calls card layout with the latest reviewed flipphone layout. Keep the Back/Home soft keys, tracking-status control and all trimmed icon files.
+- Put Message, Contact, Edit and Delete on one compact expanded-card row, removing inherited action margins. Default expanded height is about 101px rather than 165px; all expanded actions retain at least 44px interaction targets.
+- Shorten only the visible View contact label to Contact while keeping its complete tooltip and accessible name. Preserve call direction/count/time, existing action behavior and story-data rules.
+- Add Calls-specific CSS variables and stable class documentation, plus focused desktop/mobile screenshot and action-row checks. No backend, model-request, data or permission changes.
+
+
 ## 0.20.1 - Flipphone UI and tighter icon fitting
 
 - Use the latest supplied flipphone UI (revision 3) and trim fully transparent outer padding across all eight embedded PNG families. 69 images were cropped; the launcher was already tight.

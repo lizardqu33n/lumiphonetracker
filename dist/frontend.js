@@ -1885,10 +1885,7 @@ class PhoneView {
     renderEmojiText(this.storyStrip, clock.join(" · "));
     this.storyStrip.hidden = !clock.length;
     const header = this.frame.querySelector(".lpt-header");
-    if (this.app === "Home")
-      header.prepend(this.storyStrip);
-    else
-      this.frame.insertBefore(this.storyStrip, header);
+    this.frame.insertBefore(this.storyStrip, header);
     this.back.hidden = this.app === "Home" || this.app === "Contacts" && this.selectedContact !== null || this.app === "Messages" && this.selectedText !== null;
     this.frame.dataset.editing = String(this.editing);
     const setSoftkeys = (left, right) => {
@@ -1909,18 +1906,21 @@ class PhoneView {
       b.addEventListener("click", fn);
       return b;
     };
-    const closeSoft = softBtn("Close", "lpt-softkey-btn", () => this.close());
     if (this.app === "Home") {
       if (this.doc) {
         const on = this.doc.trackingEnabled !== false;
         const fullLabel = on ? "Turn off for this chat" : "Turn on for this chat";
-        const toggle = softBtn(on ? "Turn off" : "Turn on", "lpt-chat-toggle lpt-softkey-btn", () => {
+        const toggle = softBtn("", "lpt-chat-toggle lpt-softkey-btn lpt-softkey-track", () => {
           this.change({ trackingEnabled: !on });
         });
+        toggle.dataset.on = String(on);
+        const dot = el("span", "lpt-track-dot");
+        dot.setAttribute("aria-hidden", "true");
+        toggle.append(dot, el("span", "lpt-track-label", on ? "Tracking: On" : "Tracking: Off"));
         toggle.setAttribute("aria-pressed", String(on));
         toggle.setAttribute("aria-label", fullLabel);
         toggle.title = fullLabel;
-        setSoftkeys(toggle, closeSoft);
+        setSoftkeys(toggle, null);
         if (!on) {
           this.content.append(el("p", "lpt-chat-off lpt-help", "Tracking is off for this chat. Saved data is kept."));
           this.refreshBadges();
@@ -1928,7 +1928,7 @@ class PhoneView {
           return;
         }
       } else
-        setSoftkeys(null, closeSoft);
+        setSoftkeys(null, null);
       const home = el("div", "lpt-home");
       for (const app of APPS.filter((a) => this.doc?.settings.apps[a])) {
         const b = button("", "lpt-app-button", () => this.navigate(app));
@@ -1981,7 +1981,7 @@ class PhoneView {
         this.messages();
       else if (["Calls", "Email", "Bank"].includes(this.app))
         this.activities(this.app);
-      const backSoft = softBtn("Back", "lpt-softkey-btn", () => {
+      const backSoft = softBtn("", "lpt-softkey-btn lpt-softkey-back", () => {
         if (this.app === "Contacts" && this.selectedContact !== null) {
           this.selectedContact = null;
           this.editing = false;
@@ -1996,7 +1996,12 @@ class PhoneView {
         } else
           this.navigate("Home");
       });
-      setSoftkeys(backSoft, closeSoft);
+      backSoft.append(actionImage("back"));
+      backSoft.setAttribute("aria-label", "Back");
+      backSoft.title = "Back";
+      const homeSoft = softBtn("Home", "lpt-softkey-btn lpt-softkey-home", () => this.navigate("Home"));
+      homeSoft.setAttribute("aria-label", "Go to Home");
+      setSoftkeys(backSoft, homeSoft);
     }
     if (this.modelError) {
       const notice = el("div", "lpt-notice lpt-model-error");
@@ -3069,18 +3074,87 @@ class PhoneView {
         this.empty("Calls is off. Change it in the sidebar's Phone tab.", section);
         return;
       }
-      section.append(button("+ Add call", "lpt-add", () => add("call")));
+      const topBar = el("div", "lpt-calls-top");
+      const hint = this.content.querySelector(".lpt-description");
+      if (hint)
+        topBar.append(hint);
+      topBar.append(button("+ Add call", "lpt-add", () => add("call")));
+      section.append(topBar);
       if (!this.doc.state.calls.length)
         this.empty("No calls recorded. This fills only when the story establishes a call.", section);
-      for (const c of [...this.doc.state.calls].reverse()) {
-        const card = el("article", "lpt-card lpt-call");
-        const name = contactMatch(this.doc, c.name) ?? this.doc.state.contacts.find((x) => normalize(x.name) === normalize(c.name))?.name ?? c.name;
-        card.append(el("h2", "lpt-card-title", name), el("p", "lpt-call-direction", (c.direction === "in" ? "Incoming" : c.direction === "out" ? "Outgoing" : "Missed") + ((c.count ?? 1) > 1 ? ` x${c.count}` : "")));
+      const list = [...this.doc.state.calls].reverse();
+      list.forEach((c, idx) => {
+        const card = el("details", "lpt-card lpt-call");
+        card.dataset.direction = c.direction;
+        if (idx === 0)
+          card.open = true;
+        const matchedName = contactMatch(this.doc, c.name) ?? this.doc.state.contacts.find((x) => normalize(x.name) === normalize(c.name))?.name;
+        const name = matchedName ?? c.name;
+        const contact = matchedName ? this.doc.state.contacts.find((x) => normalize(x.name) === normalize(matchedName)) : undefined;
+        const summary = el("summary", "lpt-call-summary");
+        const avatar = this.portrait(name, contact?.player ?? false, false);
+        const info = el("div", "lpt-call-info");
+        const meta = el("div", "lpt-call-meta");
+        const dirText = (c.direction === "in" ? "Incoming" : c.direction === "out" ? "Outgoing" : "Missed") + ((c.count ?? 1) > 1 ? ` x${c.count}` : "");
+        const dirBadge = el("span", `lpt-call-direction is-${c.direction}`, dirText);
+        meta.append(dirBadge);
         if (c.time)
-          card.append(el("p", "lpt-muted", c.time));
-        this.activityControls(card, "call", c, add);
+          meta.append(el("span", "lpt-call-time lpt-muted", c.time));
+        info.append(el("h2", "lpt-card-title", name), meta);
+        if (c.by === "user" && isRecord(c.at) && c.at.variant === "manual")
+          info.append(el("small", "lpt-marker lpt-call-edited", "edited by you"));
+        const openMsg = () => {
+          this.selectedContact = null;
+          this.selectedText = normalize(name);
+          this.navigate("Messages");
+          this.markVisibleConversation();
+        };
+        const openCon = () => {
+          if (contact)
+            this.openContact(contact.name, "Contacts");
+        };
+        const quick = el("div", "lpt-call-quick");
+        const makeQuick = (icon, label, fn) => {
+          const b = el("button", "lpt-call-quick-btn");
+          b.type = "button";
+          b.setAttribute("aria-label", label);
+          b.title = label;
+          b.append(this.contactIcon(icon));
+          b.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            fn();
+          });
+          return b;
+        };
+        if (this.enabled("messages"))
+          quick.append(makeQuick("message", `Message ${name}`, openMsg));
+        if (contact)
+          quick.append(makeQuick("profile", `View ${name}`, openCon));
+        summary.append(avatar, info, quick);
+        const footer = el("div", "lpt-call-footer");
+        const makeFooter = (icon, label, fn) => {
+          const b = el("button", "lpt-call-action");
+          b.type = "button";
+          if (icon)
+            b.append(this.contactIcon(icon));
+          b.title = label;
+          b.setAttribute("aria-label", label);
+          b.append(el("span", "lpt-call-action-label", icon === "profile" ? "Contact" : label));
+          b.addEventListener("click", fn);
+          return b;
+        };
+        if (this.enabled("messages"))
+          footer.append(makeFooter("message", "Message", openMsg));
+        if (contact)
+          footer.append(makeFooter("profile", "View contact", openCon));
+        const editWrap = el("div", "lpt-actions lpt-call-edit-actions");
+        editWrap.append(button("Edit", "lpt-button", () => add("call", c)));
+        this.deleteAction(editWrap, { target: "call", name: String(c.id) });
+        footer.append(editWrap);
+        card.append(summary, footer);
         section.append(card);
-      }
+      });
     } else if (app === "Email") {
       if (!this.enabled("email")) {
         this.empty("Email is off. Change it in the sidebar's Phone tab.", section);
@@ -5624,6 +5698,335 @@ var styles_default = `/* =======================================================
   content: "";
   position: absolute;
   inset: -8px;
+}
+
+/* Larger Back & Exit icons in the top header, and sleek arrow-icon Back pill in the soft-key footer */
+.lpt-root {
+  --lpt-header-art-size: 32px;
+}
+.lpt-root .lpt-header :is(.lpt-back, .lpt-close) > img:only-child {
+  width: var(--lpt-header-art-size);
+  height: var(--lpt-header-art-size);
+}
+.lpt-root .lpt-softkeys .lpt-softkey-back {
+  display: inline-grid;
+  place-items: center;
+  min-width: 44px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+}
+.lpt-root .lpt-softkeys .lpt-softkey-back > img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  image-rendering: auto;
+}
+
+/* Y2K glowing tracking status pill + Home softkey pill (no duplicate Close) */
+.lpt-root .lpt-softkey-track {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  background: linear-gradient(180deg, rgba(222, 198, 246, 0.24), rgba(198, 150, 246, 0.1));
+  border-color: rgba(222, 198, 246, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+.lpt-root .lpt-softkey-track[data-on="false"] {
+  background: rgba(46, 23, 67, 0.7);
+  border-color: rgba(198, 150, 246, 0.24);
+  color: var(--lpt-muted);
+}
+.lpt-track-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--lpt-pink-2);
+  box-shadow: 0 0 6px var(--lpt-pink-2);
+}
+.lpt-softkey-track[data-on="false"] .lpt-track-dot {
+  background: transparent;
+  border: 1.5px solid var(--lpt-muted);
+  box-shadow: none;
+}
+.lpt-root .lpt-softkey-home {
+  padding: 4px 12px;
+  background: linear-gradient(180deg, rgba(222, 198, 246, 0.2), rgba(198, 150, 246, 0.08));
+  border-color: rgba(222, 198, 246, 0.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* Cohesive Messages thread header: Contact pill tucked under her name, plus sleeker reply composer */
+.lpt-thread-header {
+  display: grid;
+  grid-template-columns: 44px auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 3px;
+  padding: 2px 2px 8px;
+  justify-content: start;
+}
+.lpt-thread-header > .lpt-thread-back {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  justify-self: start;
+}
+.lpt-thread-header > .lpt-portrait {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  width: 36px;
+  height: 36px;
+}
+.lpt-thread-header > .lpt-thread-name {
+  grid-column: 3;
+  grid-row: 1;
+  margin: 0;
+  text-align: left;
+  font-size: 16px;
+  line-height: 1.15;
+  align-self: end;
+}
+.lpt-root .lpt-thread-header > .lpt-thread-contact {
+  grid-column: 3;
+  grid-row: 2;
+  justify-self: start;
+  align-self: start;
+  margin: 0;
+  min-height: 22px;
+  padding: 2px 10px;
+  font-size: 11px;
+  line-height: 1.2;
+  border-radius: 999px;
+  border: 1px solid rgba(210, 174, 246, 0.38);
+  background: rgba(210, 174, 246, 0.14);
+  color: var(--lpt-lilac-1);
+  box-shadow: none;
+}
+.lpt-root .lpt-thread-header > .lpt-thread-contact:hover:not(:disabled) {
+  background: rgba(210, 174, 246, 0.25);
+  border-color: var(--lpt-lilac-2);
+}
+
+/* Compact, cohesive reply composer box */
+.lpt-thread .lpt-reply {
+  gap: 6px;
+  padding-top: 6px;
+}
+.lpt-thread .lpt-reply-label {
+  font-size: 11.5px;
+  gap: 4px;
+}
+.lpt-thread .lpt-reply-input {
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.lpt-thread .lpt-emoji-toggle {
+  min-width: 36px;
+  min-height: 36px;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+}
+.lpt-root .lpt-thread .lpt-add-draft {
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  border-radius: 999px;
+}
+
+/* Calls screen redesign (0.20.1+): avatar + color-coded direction pills + inline quick icons + featured open card */
+.lpt-calls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lpt-calls-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lpt-calls-top > .lpt-description {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 999px;
+}
+.lpt-calls-top > .lpt-add {
+  flex: none;
+  margin: 0;
+}
+.lpt-call {
+  border: 1px solid rgba(210, 174, 246, 0.28);
+  border-radius: 16px;
+  background: var(--lpt-card-bg);
+  padding: 0;
+  overflow: hidden;
+  transition: border-color var(--lpt-transition), box-shadow var(--lpt-transition);
+}
+.lpt-call[open] {
+  border-color: var(--lpt-pink-1);
+  box-shadow: 0 0 0 1px rgba(246, 162, 210, 0.25), 0 6px 16px rgba(10, 3, 20, 0.35);
+}
+.lpt-call-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  list-style: none;
+  cursor: pointer;
+}
+.lpt-call-summary::-webkit-details-marker { display: none; }
+.lpt-call-summary > .lpt-portrait {
+  width: 38px;
+  height: 38px;
+}
+.lpt-call-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.lpt-call-info > .lpt-card-title {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.2;
+}
+.lpt-call-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.lpt-call-direction {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-family: var(--lpt-ui-font);
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--lpt-on-pastel);
+  background: var(--lpt-blue);
+  margin: 0;
+}
+.lpt-call-direction.is-in { background: var(--lpt-blue); }
+.lpt-call-direction.is-missed { background: var(--lpt-pink-1); }
+.lpt-call-direction.is-out { background: var(--lpt-lilac-2); }
+.lpt-call-time {
+  font-size: 11.5px;
+  margin: 0;
+}
+.lpt-call-edited {
+  width: fit-content;
+  margin-top: 2px;
+}
+.lpt-call-quick {
+  display: flex;
+  align-items: center;
+}
+.lpt-call[open] .lpt-call-quick {
+  display: none;
+}
+.lpt-call-quick-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid rgba(198, 150, 246, 0.22);
+  background: transparent;
+  cursor: pointer;
+}
+.lpt-call-quick-btn:hover {
+  background: rgba(222, 198, 246, 0.12);
+}
+.lpt-call-quick-btn > img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  image-rendering: auto;
+}
+.lpt-call-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 12px;
+  border-top: 1px solid rgba(198, 150, 246, 0.22);
+  background: rgba(31, 15, 46, 0.45);
+}
+.lpt-call-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--lpt-text);
+  font-family: var(--lpt-font);
+  font-size: 12px;
+  cursor: pointer;
+}
+.lpt-call-action:hover {
+  background: rgba(222, 198, 246, 0.14);
+}
+.lpt-call-action > img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  image-rendering: auto;
+}
+.lpt-call-edit-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+/* Compact call controls: one action row, with full-size interaction targets. */
+.lpt-root {
+  --lpt-call-gap: calc(var(--lpt-space) / 2);
+  --lpt-call-padding: var(--lpt-space);
+  --lpt-call-target: var(--lpt-control-size);
+  --lpt-call-label-size: var(--lpt-small-font-size);
+  --lpt-call-portrait-size: 32px;
+  --lpt-call-icon-size: 16px;
+}
+.lpt-calls {gap:var(--lpt-call-gap);}
+.lpt-call-summary {gap:var(--lpt-call-padding);padding:var(--lpt-call-gap) var(--lpt-call-padding);}
+.lpt-call-summary > .lpt-portrait {width:var(--lpt-call-portrait-size);height:var(--lpt-call-portrait-size);}
+.lpt-call-info {gap:calc(var(--lpt-call-gap) / 2);}
+.lpt-call-footer {
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;
+  gap:calc(var(--lpt-call-gap) / 2);padding:var(--lpt-call-gap) var(--lpt-call-padding);
+  align-items:center;
+}
+.lpt-call-footer:not(:has(> .lpt-call-action + .lpt-call-action)) {grid-template-columns:minmax(0,1fr) auto;}
+.lpt-call-action {
+  min-width:0;min-height:var(--lpt-call-target);justify-content:center;
+  gap:var(--lpt-call-gap);padding:0 calc(var(--lpt-call-gap) / 2);font-size:var(--lpt-call-label-size);line-height:1.2;
+}
+.lpt-call-action-label {white-space:nowrap;}
+.lpt-call-action > img {width:var(--lpt-call-icon-size);height:var(--lpt-call-icon-size);flex:none;object-fit:contain;}
+.lpt-call-edit-actions {
+  grid-column:-2 / -1;display:flex;flex-wrap:nowrap;align-items:center;gap:0;
+  margin:0;padding:0;border:0;
+}
+.lpt-call-edit-actions > button {
+  width:var(--lpt-call-target);height:var(--lpt-call-target);
+  min-width:var(--lpt-call-target);min-height:var(--lpt-call-target);margin:0;
 }
 `;
 

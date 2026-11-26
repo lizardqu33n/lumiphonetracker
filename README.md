@@ -2,7 +2,7 @@
 
 A floating story phone for [Lumiverse](https://docs.lumiverse.chat/) that tracks **Scene**, **Weather**, **Locations**, **Notes**, **Contacts**, and **Messages**—plus optional **Calls**, **Email**, and **Bank** apps.
 
-Version **0.20.1**. Built files (`dist/`) are included, so you don't need to compile anything to install it.
+Version **0.20.2**. Built files (`dist/`) are included, so you don't need to compile anything to install it.
 
 ## Quick start
 

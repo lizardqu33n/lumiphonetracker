@@ -248,7 +248,7 @@ export class PhoneView {
     const scene=this.doc?.state.scene;const clock=[this.enabled("scene.time")?valueText(scene?.time):"",this.enabled("scene.date")?valueText(scene?.date):""].filter(Boolean);
     renderEmojiText(this.storyStrip,clock.join(" \u00b7 "));this.storyStrip.hidden=!clock.length;
     const header=this.frame.querySelector<HTMLElement>(".lpt-header")!;
-    if(this.app==="Home")header.prepend(this.storyStrip);else this.frame.insertBefore(this.storyStrip,header);
+    this.frame.insertBefore(this.storyStrip,header);
     this.back.hidden = this.app === "Home" ||(this.app==="Contacts"&&this.selectedContact!==null)|| (this.app==="Messages"&&this.selectedText!==null);
     this.frame.dataset.editing = String(this.editing);
     const setSoftkeys = (left?: HTMLElement | null, right?: HTMLElement | null) => {
@@ -259,9 +259,8 @@ export class PhoneView {
       this.softkeys.append(l, dpad, r);
     };
     const softBtn = (label: string, cls: string, fn: () => void) => { const b = el("button", cls, label); b.type = "button"; b.addEventListener("click", fn); return b; };
-    const closeSoft = softBtn("Close", "lpt-softkey-btn", () => this.close());
     if (this.app === "Home") {
-      if(this.doc){const on=this.doc.trackingEnabled!==false;const fullLabel=on?"Turn off for this chat":"Turn on for this chat";const toggle=softBtn(on?"Turn off":"Turn on","lpt-chat-toggle lpt-softkey-btn",()=>{void this.change({trackingEnabled:!on});});toggle.setAttribute("aria-pressed",String(on));toggle.setAttribute("aria-label",fullLabel);toggle.title=fullLabel;setSoftkeys(toggle, closeSoft);if(!on){this.content.append(el("p","lpt-chat-off lpt-help","Tracking is off for this chat. Saved data is kept."));this.refreshBadges();this.measure();return;}} else setSoftkeys(null, closeSoft);
+      if(this.doc){const on=this.doc.trackingEnabled!==false;const fullLabel=on?"Turn off for this chat":"Turn on for this chat";const toggle=softBtn("","lpt-chat-toggle lpt-softkey-btn lpt-softkey-track",()=>{void this.change({trackingEnabled:!on});});toggle.dataset.on=String(on);const dot=el("span","lpt-track-dot");dot.setAttribute("aria-hidden","true");toggle.append(dot,el("span","lpt-track-label",on?"Tracking: On":"Tracking: Off"));toggle.setAttribute("aria-pressed",String(on));toggle.setAttribute("aria-label",fullLabel);toggle.title=fullLabel;setSoftkeys(toggle, null);if(!on){this.content.append(el("p","lpt-chat-off lpt-help","Tracking is off for this chat. Saved data is kept."));this.refreshBadges();this.measure();return;}} else setSoftkeys(null, null);
       const home = el("div", "lpt-home");
       for (const app of APPS.filter(a=>this.doc?.settings.apps[a])) {
         const b = button("", "lpt-app-button", () => this.navigate(app)); b.dataset.app = app;
@@ -286,12 +285,15 @@ export class PhoneView {
       else if (this.app === "Notes") this.notes();
       else if (this.app === "Messages") this.messages();
       else if(["Calls","Email","Bank"].includes(this.app))this.activities(this.app as "Calls"|"Email"|"Bank");
-      const backSoft = softBtn("Back", "lpt-softkey-btn", () => {
+      const backSoft = softBtn("", "lpt-softkey-btn lpt-softkey-back", () => {
         if (this.app === "Contacts" && this.selectedContact !== null) { this.selectedContact = null; this.editing = false; if (this.contactOrigin === "Messages") this.navigate("Messages"); else this.render(); }
         else if (this.app === "Messages" && this.selectedText !== null) { this.selectedText = null; this.editing = false; this.render(); }
         else this.navigate("Home");
       });
-      setSoftkeys(backSoft, closeSoft);
+      backSoft.append(actionImage("back")); backSoft.setAttribute("aria-label", "Back"); backSoft.title = "Back";
+      const homeSoft = softBtn("Home", "lpt-softkey-btn lpt-softkey-home", () => this.navigate("Home"));
+      homeSoft.setAttribute("aria-label", "Go to Home");
+      setSoftkeys(backSoft, homeSoft);
     }
     if(this.modelError){const notice=el("div","lpt-notice lpt-model-error");notice.setAttribute("role","status");showCopyableError(notice,this.modelError);this.content.append(notice);}
     if (this.doc) for (const text of this.doc.state.notices) {
@@ -729,9 +731,46 @@ export class PhoneView {
     const add=(type:"call"|"email"|"bank"|"transaction",entry?:Record<string,unknown>)=>this.activityForm(section,type,entry);
     if(app==="Calls"){
       if(!this.enabled("calls")){this.empty("Calls is off. Change it in the sidebar's Phone tab.",section);return;}
-      section.append(button("+ Add call","lpt-add",()=>add("call")));
+      const topBar=el("div","lpt-calls-top");
+      const hint=this.content.querySelector<HTMLElement>(".lpt-description");
+      if(hint)topBar.append(hint);
+      topBar.append(button("+ Add call","lpt-add",()=>add("call")));
+      section.append(topBar);
       if(!this.doc!.state.calls.length)this.empty("No calls recorded. This fills only when the story establishes a call.",section);
-      for(const c of [...this.doc!.state.calls].reverse()){const card=el("article","lpt-card lpt-call");const name=contactMatch(this.doc!,c.name)??this.doc!.state.contacts.find(x=>normalize(x.name)===normalize(c.name))?.name??c.name;card.append(el("h2","lpt-card-title",name),el("p","lpt-call-direction",(c.direction==="in"?"Incoming":c.direction==="out"?"Outgoing":"Missed")+((c.count??1)>1?` x${c.count}`:"")));if(c.time)card.append(el("p","lpt-muted",c.time));this.activityControls(card,"call",c as unknown as Record<string,unknown>,add);section.append(card);}
+      const list=[...this.doc!.state.calls].reverse();
+      list.forEach((c,idx)=>{
+        const card=el("details","lpt-card lpt-call");card.dataset.direction=c.direction;if(idx===0)card.open=true;
+        const matchedName=contactMatch(this.doc!,c.name)??this.doc!.state.contacts.find(x=>normalize(x.name)===normalize(c.name))?.name;
+        const name=matchedName??c.name;
+        const contact=matchedName?this.doc!.state.contacts.find(x=>normalize(x.name)===normalize(matchedName)):undefined;
+        const summary=el("summary","lpt-call-summary");
+        const avatar=this.portrait(name,contact?.player??false,false);
+        const info=el("div","lpt-call-info");
+        const meta=el("div","lpt-call-meta");
+        const dirText=(c.direction==="in"?"Incoming":c.direction==="out"?"Outgoing":"Missed")+((c.count??1)>1?` x${c.count}`:"");
+        const dirBadge=el("span",`lpt-call-direction is-${c.direction}`,dirText);
+        meta.append(dirBadge);
+        if(c.time)meta.append(el("span","lpt-call-time lpt-muted",c.time));
+        info.append(el("h2","lpt-card-title",name),meta);
+        if(c.by==="user"&&isRecord(c.at)&&c.at.variant==="manual")info.append(el("small","lpt-marker lpt-call-edited","edited by you"));
+        const openMsg=()=>{this.selectedContact=null;this.selectedText=normalize(name);this.navigate("Messages");this.markVisibleConversation();};
+        const openCon=()=>{if(contact)this.openContact(contact.name,"Contacts");};
+        const quick=el("div","lpt-call-quick");
+        const makeQuick=(icon:keyof typeof CONTACT_ICONS,label:string,fn:()=>void)=>{const b=el("button","lpt-call-quick-btn");b.type="button";b.setAttribute("aria-label",label);b.title=label;b.append(this.contactIcon(icon));b.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();fn();});return b;};
+        if(this.enabled("messages"))quick.append(makeQuick("message",`Message ${name}`,openMsg));
+        if(contact)quick.append(makeQuick("profile",`View ${name}`,openCon));
+        summary.append(avatar,info,quick);
+        const footer=el("div","lpt-call-footer");
+        const makeFooter=(icon:keyof typeof CONTACT_ICONS|null,label:string,fn:()=>void)=>{const b=el("button","lpt-call-action");b.type="button";if(icon)b.append(this.contactIcon(icon));b.title=label;b.setAttribute("aria-label",label);b.append(el("span","lpt-call-action-label",icon==="profile"?"Contact":label));b.addEventListener("click",fn);return b;};
+        if(this.enabled("messages"))footer.append(makeFooter("message","Message",openMsg));
+        if(contact)footer.append(makeFooter("profile","View contact",openCon));
+        const editWrap=el("div","lpt-actions lpt-call-edit-actions");
+        editWrap.append(button("Edit","lpt-button",()=>add("call",c as unknown as Record<string,unknown>)));
+        this.deleteAction(editWrap,{target:"call",name:String(c.id)});
+        footer.append(editWrap);
+        card.append(summary,footer);
+        section.append(card);
+      });
     }else if(app==="Email"){
       if(!this.enabled("email")){this.empty("Email is off. Change it in the sidebar's Phone tab.",section);return;}
       section.append(button("+ Add email record","lpt-add",()=>add("email")));

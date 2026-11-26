@@ -1,3 +1,33 @@
+# Compact Calls styling
+
+0.20.2 keeps the latest Back/Home footer and cropped artwork. Calls uses one compact expanded action row; the visible Contact action retains the full View contact accessible label and tooltip. All values below are defined on .lpt-root.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| --lpt-call-gap | half of --lpt-space | Compact gaps and vertical padding. |
+| --lpt-call-padding | --lpt-space | Call-row side padding. |
+| --lpt-call-target | --lpt-control-size | Expanded action click target, normally 44px. |
+| --lpt-call-label-size | --lpt-small-font-size | Compact action label text. |
+| --lpt-call-portrait-size | 32px | Portrait size in a call row. |
+| --lpt-call-icon-size | 16px | Artwork beside expanded action labels. |
+
+| Class | Purpose |
+| --- | --- |
+| .lpt-calls-top | Description and Add call control. |
+| .lpt-call-summary | Clickable row with portrait, name, direction and time. |
+| .lpt-call-info | Caller-name and metadata column. |
+| .lpt-call-meta | Direction/count and time line. |
+| .lpt-call-time | Stated call time. |
+| .lpt-call-edited | Existing user-edit label. |
+| .lpt-call-quick | Collapsed-row shortcuts. |
+| .lpt-call-quick-btn | One collapsed-row shortcut button. |
+| .lpt-call-footer | Expanded action grid. |
+| .lpt-call-action | Message or Contact action. |
+| .lpt-call-action-label | Compact visible action label. |
+| .lpt-call-edit-actions | Inline Edit/Delete group without extra margins. |
+| .lpt-call-direction.is-in / .is-out / .is-missed | Direction and repeat-count badge states. |
+| .lpt-call[open] | Expanded call card. |
+
 # Current icon fitting
 
 In 0.20.1, all embedded bitmap icon families use tight transparent crops. 69 images were trimmed; the launcher was already tight. Canvas sizes are intentionally no longer uniform squares. Every visible and faint alpha pixel is preserved; no image is stretched or recolored. Existing CSS sizes, object-fit containment, button dimensions, class names and variables are unchanged by the crop. Transparent corners inside an artwork's bounding rectangle remain transparent.

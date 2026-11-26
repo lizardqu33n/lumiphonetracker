@@ -1,3 +1,9 @@
+# 0.20.2 Calls verification
+
+336 code tests and type checking pass. Four focused browser checks verify an expanded card under 120px at default desktop sizing (measured 101.2px), expanded actions at least 44px by 44px, all four actions on one aligned row and the retained Home soft key. Desktop, 390x844 mobile and 390x480 short-viewport screenshots were reviewed using isolated story fixtures.
+
+All eight trimmed icon modules are retained. This is targeted Calls layout verification, not a claim that every historical UI assertion or real device behavior was tested. No real Lumiverse host/mobile keyboard was available. Existing mixed call/email arrival notice wording and the short-height Messages empty-state limitation are outside this Calls spacing change.
+
 # 0.20.1 icon-crop verification
 
 336 code tests pass, including all 70 embedded PNGs. Crop checks verify PNG/RGBA hashes, exact nonzero-alpha histogram preservation and a visible pixel on each cropped edge. Python verification confirms the same metadata. The only removed pixels have alpha zero; no resizing is performed during cropping.
