@@ -3,6 +3,8 @@ import { execFileSync } from "node:child_process";
 
 // Include an explicit allowlist; never package dependencies or personal inputs.
 const files = [
+  "scripts/benchmark-lightweight.ts", "src/performance.ts", "tests/lightweight-store.test.ts", "tests/no-prompt-macros.test.ts", "docs/PERFORMANCE.md",
+  "dist/backend-no-macros.js",
   "scripts/check-candidate.ts",
   "src/home-icon.ts",
   "scripts/check-compact-calls.ts",
@@ -146,3 +148,13 @@ const version = JSON.parse(await readFile("package.json", "utf8")).version as st
 const path = `release/Lumi-Phone-Tracker-v${version}.tar.gz`;
 await Bun.Archive.write(path, entries, { compress: "gzip" });
 console.log(`Created ${path} (source, built files, tests and guides).`);
+
+const alternate={...entries};
+const manifest=JSON.parse(new TextDecoder().decode(entries["Lumi-Phone-Tracker/spindle.json"]));
+manifest.entry_backend="dist/backend-no-macros.js";
+manifest.permissions=manifest.permissions.filter((p:string)=>p!=="macro_interceptor");
+manifest.description+=" No prompt macros build: phone macro expansion is unavailable.";
+alternate["Lumi-Phone-Tracker/spindle.json"]=new TextEncoder().encode(JSON.stringify(manifest,null,2)+"\n");
+const alternatePath=`release/Lumi-Phone-Tracker-v${version}-no-prompt-macros.tar.gz`;
+await Bun.Archive.write(alternatePath,alternate,{compress:"gzip"});
+console.log(`Created ${alternatePath} (operator-selected mode; no phone macro hooks).`);

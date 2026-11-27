@@ -104,3 +104,5 @@ Focused browser UI checks run against Microsoft Edge on Windows with a mock host
 ```sh
 bun scripts/test-ui.ts --screenshots-only
 ```
+
+Performance and the operator-selected no-macros package: [docs/PERFORMANCE.md](docs/PERFORMANCE.md).

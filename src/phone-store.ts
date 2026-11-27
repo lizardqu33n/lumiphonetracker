@@ -1,3 +1,6 @@
+import {Buffer} from "node:buffer";
+import {fingerprint,jsonBytes,type PerformanceSample} from "./performance";
+import {phoneSnapshot,type PhoneSnapshot} from "./ui-snapshot";
 import {resolveSetup} from "./setup-review";
 import {fieldKey,readFieldRef,restoreEdit,legacyEditAdmissions} from "./field-protection";
 import {mergeContacts,canonicalContact} from "./contact-merge";
@@ -25,6 +28,9 @@ export interface PhoneIO {
   legacy?(userId: string, path: string): Promise<unknown>;
   names?(chatId:string,userId:string):Promise<string[]>;
   warn?(text: string): void;
+  performance?(sample:PerformanceSample):void;
+  /** Test-host adapter only; production uses native chunked SHA-256. Must preserve exact input equality. */
+  fingerprint?(value:unknown,json?:boolean):string;
 }
 export function readDocument(raw: string, chatId: string): Document {
   if (!raw) return emptyDocument(chatId);
@@ -108,43 +114,54 @@ export function validateEdit(value: unknown): ManualEdit {
   return structuredClone(edit);
 }
 export class PhoneStore {
+  private fingerprint(value:unknown,json=false):string{return this.io.fingerprint?this.io.fingerprint(value,json):fingerprint(value,json);}
   private ready=new Set<string>();
   private markReady(chat:string):void{this.ready.delete(chat);this.ready.add(chat);while(this.ready.size>128)this.ready.delete(this.ready.values().next().value!);}
   async openView(chat:string,user:string):Promise<Document>{if(this.ready.has(chat)){const doc=await this.savedView(chat,user);if(this.ready.has(chat))return doc;}return this.sync(user,chat);}
   private queues = new Map<string, Promise<unknown>>();
-  private pendingReads=new Map<string,{task:Promise<Document>;started:boolean;persist:boolean}>();
-  private readOperation(kind:"sync"|"preview",userId:string,chatId:string):Promise<Document> {
-    const key=JSON.stringify([userId,chatId]);
+  private pendingReads=new Map<string,{task:Promise<Document>;started:boolean;persist:boolean;followup:boolean}>();
+  private readOperation<T=Document>(kind:"sync"|"preview"|"open",userId:string,chatId:string,project:(doc:Document)=>T=doc=>structuredClone(doc) as T):Promise<T> {
+    this.pendingRefreshCount++;
+    const deliver=async(task:Promise<Document>):Promise<T>=>{try{const doc=await task;if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");return project(doc);}finally{this.pendingRefreshCount--;}};
+    const key=JSON.stringify([userId,chatId,kind==="open"?"open":"history"]);
     const prior=this.pendingReads.get(key);
-    if(prior&&!prior.started&&this.queues.get(chatId)===prior.task){prior.persist ||= kind==="sync";return prior.task.then(doc=>structuredClone(doc));}
-    const entry={started:false,persist:kind==="sync",task:undefined as unknown as Promise<Document>};
+    if(prior&&(!prior.started||prior.followup)&&this.queues.get(chatId)===prior.task){prior.persist ||= kind==="sync";return deliver(prior.task);}
+    const entry={started:false,persist:kind==="sync",followup:!!prior&&this.queues.get(chatId)===prior.task,task:undefined as unknown as Promise<Document>};
     entry.task=this.serial(chatId,async()=>{
       entry.started=true;
       if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");
-      const {doc}=await this.build(chatId,userId);
+      let doc=kind==="open"?await this.readSaved(chatId,userId,true):(await this.build(chatId,userId,()=>{},true)).doc;
       if(entry.persist&&doc.trackingEnabled!==false){
         const raw=await this.io.read(chatId);
         const comparable={...doc,revision:raw?JSON.parse(raw).revision:0};
-        if(!raw||JSON.stringify(comparable,canonicalKeys)!==JSON.stringify(JSON.parse(raw),canonicalKeys)){doc.revision=comparable.revision+1;await this.io.write(chatId,JSON.stringify(doc));}
+        if(!raw||this.fingerprint(comparable,true)!==this.fingerprint(JSON.parse(raw),true)){doc={...doc,revision:comparable.revision+1};await this.io.write(chatId,JSON.stringify(doc));}
       }
       if(entry.persist&&doc.trackingEnabled!==false)this.markReady(chatId);
+      this.perf("snapshot",performance.now(),{snapshotBytes:jsonBytes(phoneSnapshot(doc))});
       return doc;
-    });
+    },"refresh");
     this.pendingReads.set(key,entry);
     const cleanup=()=>{if(this.pendingReads.get(key)===entry)this.pendingReads.delete(key);};
     void entry.task.then(cleanup,cleanup);
-    return entry.task.then(doc=>structuredClone(doc));
+    return deliver(entry.task);
   }
   private replayCache?:{key:string;doc:Document;bytes:number};
   private skips: SkipLogger;
+  private rebuildCount=0;
+  private pendingRefreshCount=0;
+  private perf(operation:PerformanceSample["operation"],start:number,values:Partial<PerformanceSample>={}):void{try{this.io.performance?.({operation,durationMs:performance.now()-start,historyMessages:0,historyBytes:0,rebuildCount:this.rebuildCount,pendingRefreshes:this.pendingRefreshCount,snapshotBytes:0,...values});}catch{}}
+  /** Trusted host history notifications invalidate reuse, never merely a timer. */
+  invalidate(chatId:string):void{this.ready.delete(chatId);this.replayCache=undefined;for(const [key]of this.pendingReads)if(JSON.parse(key)[1]===chatId&&this.pendingReads.get(key)?.started)this.pendingReads.delete(key);}
   constructor(private io: PhoneIO) { this.skips = new SkipLogger(text => this.io.warn?.(text)); }
-  private serial<T>(chatId: string, action: () => Promise<T>): Promise<T> {
-    const task = (this.queues.get(chatId) ?? Promise.resolve()).catch(() => {}).then(action);
+  private serial<T>(chatId: string, action: () => Promise<T>,operation:PerformanceSample["operation"]="mutation"): Promise<T> {
+    const started=performance.now();let failed=false;
+    const task = (this.queues.get(chatId) ?? Promise.resolve()).catch(() => {}).then(action).catch(error=>{failed=true;throw error;}).finally(()=>this.perf(operation,started,{failed}));
     this.queues.set(chatId, task);
     const cleanup = () => { if (this.queues.get(chatId) === task) this.queues.delete(chatId); };
     void task.then(cleanup, cleanup); return task;
   }
-  private async build(chatId: string, userId: string,check:()=>void=()=>{}): Promise<{ doc: Document; rows: StoryRow[] }> {
+  private async build(chatId: string, userId: string,check:()=>void=()=>{},readOnly=false): Promise<{ doc: Document; rows: StoryRow[] }> {
+    const started=performance.now();
     if (!chatId || chatId.length > 256) throw new Error("Missing chat");
     check();const raw = await this.io.read(chatId);check();
     const legacy=!raw&&this.io.legacy?await this.io.legacy(userId,chatPath(chatId)):null;
@@ -154,10 +171,12 @@ export class PhoneStore {
     const names=await this.io.names?.(chatId,userId)??[];
     check();
     // Validate every input afresh. There is no time-based or timestamp-only cache hit.
-    const proof=JSON.stringify([chatId,userId,raw,rows.map(rowSignature),player,names,legacy]);
-    const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(proof));
-    check();const key=Array.from(new Uint8Array(digest),value=>value.toString(16).padStart(2,"0")).join("");
-    if(this.replayCache?.key===key)return {doc:structuredClone(this.replayCache.doc),rows};
+    // Fingerprint each row independently, including identity, ordering and selected swipe metadata.
+    const rowKeys:string[]=[];let historyBytes=0;
+    for(const row of rows){check();rowKeys.push(this.fingerprint([row.id,row.chat_id,row.index_in_chat,row.role,row.name,row.swipe_id,row.swipe_dates?.[row.swipe_id],row.content]));historyBytes+=Buffer.byteLength(row.content,"utf8");}
+    const key=this.fingerprint([chatId,userId,this.fingerprint(raw),rowKeys,player,names,legacy]);check();
+    if(this.replayCache?.key===key){const cached=this.replayCache.doc;this.perf("build",started,{historyMessages:rows.length,historyBytes,cacheHit:true,snapshotBytes:jsonBytes(phoneSnapshot(cached))});return {doc:readOnly?cached:structuredClone(cached),rows};}
+    this.rebuildCount++;
     let doc = readDocument(raw, chatId);
     if (!raw && legacy !== null) {
       const old = readSnapshot(legacy, chatId); doc.legacy = legacy;
@@ -171,11 +190,13 @@ export class PhoneStore {
     doc = replay(doc, rows, player ? [player] : [], (row, issues) => this.skips.record(chatId, row, issues));
     doc.currentPlayer = player ?? undefined;
     projectContacts(doc,names);
-    const last=[...rows].sort((a,b)=>a.index_in_chat-b.index_in_chat).at(-1);
-    if(last)doc.checkpoint={version:1,id:last.id,index:last.index_in_chat,signature:await sourceHash(last),lastUser:[...rows].reverse().find(r=>r.role==="user")};
-    // One entry, at most 2 MiB of serialized data. Large portrait-heavy chats skip reuse.
-    const bytes=new TextEncoder().encode(JSON.stringify(doc)).byteLength;
-    this.replayCache=bytes<=2*1024*1024?{key,doc:structuredClone(doc),bytes}:undefined;
+    let last:StoryRow|undefined,lastUser:StoryRow|undefined;
+    for(const row of rows){if(!last||row.index_in_chat>last.index_in_chat)last=row;if(row.role==="user"&&(!lastUser||row.index_in_chat>lastUser.index_in_chat))lastUser=row;}
+    if(last)doc.checkpoint={version:1,id:last.id,index:last.index_in_chat,signature:await sourceHash(last),lastUser};
+    const bytes=jsonBytes(doc,2*1024*1024);
+    this.replayCache=bytes<=2*1024*1024?{key,doc,bytes}:undefined;
+    this.perf("build",started,{historyMessages:rows.length,historyBytes,snapshotBytes:jsonBytes(phoneSnapshot(doc))});
+    if(this.replayCache&&!readOnly)doc=structuredClone(doc);
     return { doc, rows };
   }
   /** Read only stored settings for routing, without fetching or replaying story history. */
@@ -193,18 +214,22 @@ export class PhoneStore {
   /** Read-only preview with a trusted user and an authorized chat. Never writes. */
   preview(chatId:string,userId:string):Promise<Document>{return this.readOperation("preview",userId,chatId);}
   sync(userId:string,chatId:string):Promise<Document>{return this.readOperation("sync",userId,chatId);}
-  savedView(chatId:string,userId:string):Promise<Document>{
-    if(!this.ready.has(chatId))return this.preview(chatId,userId);
-    return this.serial(chatId,async()=>{
-      if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");
+  previewSnapshot(chatId:string,userId:string):Promise<PhoneSnapshot>{return this.readOperation("preview",userId,chatId,doc=>structuredClone(phoneSnapshot(doc)));}
+  syncSnapshot(userId:string,chatId:string):Promise<PhoneSnapshot>{return this.readOperation("sync",userId,chatId,doc=>structuredClone(phoneSnapshot(doc)));}
+  syncEffect(userId:string,chatId:string):Promise<void>{return this.readOperation("sync",userId,chatId,()=>undefined);}
+  openSnapshot(chatId:string,userId:string):Promise<PhoneSnapshot>{return this.readOperation(this.ready.has(chatId)?"open":"sync",userId,chatId,doc=>structuredClone(phoneSnapshot(doc)));}
+  private async readSaved(chatId:string,userId:string,readOnly=false):Promise<Document>{
       const raw=await this.io.read(chatId),doc=materialized(raw,chatId);
-      if(!doc){this.ready.delete(chatId);return (await this.build(chatId,userId)).doc;}
+      if(!doc){this.ready.delete(chatId);return (await this.build(chatId,userId,()=>{},readOnly)).doc;}
       doc.settings.source="main";
       const player=await this.io.player(chatId,userId);doc.currentPlayer=player??undefined;
       if(player&&!doc.playerNames.some(n=>normalize(n)===normalize(player)))doc.playerNames.push(player);
       for(const contact of doc.state.contacts)if(doc.playerNames.some(n=>normalize(n)===normalize(contact.name))){contact.player=true;delete contact.fields.roles;delete contact.fields.mood;delete contact.fields.thoughts;}
       return doc;
-    });
+  }
+  savedView(chatId:string,userId:string):Promise<Document>{
+    if(!this.ready.has(chatId))return this.preview(chatId,userId);
+    return this.serial(chatId,async()=>{if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");return this.readSaved(chatId,userId);},"snapshot");
   }
   /** Called only for a trusted saved-message event, never frontend-supplied content. */
   receiveSaved(userId:string,chatId:string,row:StoryRow):Promise<Document>{
@@ -229,11 +254,11 @@ export class PhoneStore {
   }
   /** A cancelled queued prompt must never begin history work. */
   promptPreview(chatId:string,userId:string,signal:AbortSignal):Promise<Document>{
-    return this.serial(chatId,async()=>{const check=()=>signal.throwIfAborted();check();if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");check();if(this.ready.has(chatId)){const raw=await this.io.read(chatId);check();const saved=materialized(raw,chatId);if(saved)return saved;}return (await this.build(chatId,userId,check)).doc;});
+    return this.serial(chatId,async()=>{const check=()=>signal.throwIfAborted();check();if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");check();if(this.ready.has(chatId)){const raw=await this.io.read(chatId);check();const saved=materialized(raw,chatId);if(saved)return saved;}return (await this.build(chatId,userId,check,true)).doc;});
   }
   /** Authorized routing/settings only: no history, persona expansion or replay. */
   settingsPreview(userId:string,chatId:string,signal?:AbortSignal):Promise<Document>{
-    return this.serial(chatId,async()=>{
+    const started=performance.now();return (async()=>{
       signal?.throwIfAborted();if(!userId||!await this.io.authorize(chatId,userId))throw Error("Chat unavailable");
       signal?.throwIfAborted();const raw=await this.io.read(chatId),doc=emptyDocument(chatId);signal?.throwIfAborted();
       if(!raw){doc.trackingEnabled=false;return doc;}
@@ -242,7 +267,7 @@ export class PhoneStore {
       doc.settings=readSettings(value.settings);doc.revision=Number(value.revision);doc.trackingEnabled=value.trackingEnabled as boolean|undefined;
       if(typeof value.helperOwner==="string")doc.helperOwner=value.helperOwner;
       return doc;
-    });
+    })().finally(()=>this.perf("settings",started));
   }
   /** Step 4's controls will use this same validated, chat-authorized operation. */
   update(userId: string, chatId: string, expectedRevision: number, update: { trackingEnabled?:unknown; settings?: unknown; edit?: unknown; dismissNotice?: unknown;portrait?:unknown;contactInfo?:unknown;fieldControl?:unknown;mergeContacts?:unknown }): Promise<Document> {

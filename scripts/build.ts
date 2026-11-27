@@ -5,10 +5,12 @@ if (!checkOnly) await mkdir("dist", { recursive: true });
 
 for (const [entry, target] of [
   ["backend", "bun"],
+  ["backend-no-macros", "bun"],
   ["frontend", "browser"],
 ] as const) {
   const result = await Bun.build({
-    entrypoints: [`src/${entry}.ts`],
+    entrypoints: [`src/${entry=== "backend-no-macros"?"backend":entry}.ts`],
+    define: { LPT_NO_PROMPT_MACROS: entry==="backend-no-macros"?"true":"false" },
     target,
     minify: false,
     sourcemap: "none",

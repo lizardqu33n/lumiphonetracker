@@ -35,7 +35,9 @@ let failAppearanceSave = false; let failWidget = false;
 const readFiles = new Map<string, unknown>();
 let composerState = { mounted: true, chatId: "a" as string | null, text: "" }; let focusCount = 0; let sendCalls = 0;
 const readStore = new MessageReads({ read: async (u,c) => structuredClone(readFiles.get(`${u}/${c}`) ?? emptyReads()), write: async (u,c,v) => { readFiles.set(`${u}/${c}`, structuredClone(v)); } });
-const store = new PhoneStore({ authorize: async (chat, user) => user === `owner-${chat}`,
+// The browser simulator has no native Bun hashing API. Exact canonical strings preserve
+// equality for these small fixtures; Bun backend tests exercise the real SHA-256 path.
+const store = new PhoneStore({ fingerprint:value=>JSON.stringify(value,(_k,v)=>isRecord(v)?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b))):v), authorize: async (chat, user) => user === `owner-${chat}`,
   read: async chat => docs.get(chat) ?? JSON.stringify(emptyDocument(chat)), write: async (chat, data) => { docs.set(chat, data); },
   history: async chat => structuredClone(histories.get(chat) ?? []), player: async () => "Player" });
 const preferenceStore = new PreferenceStore({ read: async () => prefs, write: async (_u, value) => { prefs = structuredClone(value); } });

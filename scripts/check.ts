@@ -17,8 +17,8 @@ for (const key of ["version", "name", "identifier", "author", "github", "homepag
 }
 assert.equal(new URL(manifest.github).hostname, "github.com");
 assert.equal(new URL(manifest.homepage).protocol, "https:");
-assert.deepEqual(manifest.permissions, ["chats", "chat_mutation", "interceptor", "ui_panels", "generation", "macro_interceptor", "characters", "personas", "world_books", "images"]);
-assert.equal(manifest.entry_backend, "dist/backend.js");
+assert.deepEqual(manifest.permissions, ["chats", "chat_mutation", "interceptor", "ui_panels", "generation", "macro_interceptor", "characters", "personas", "world_books", "images"].filter(p=>manifest.entry_backend!=="dist/backend-no-macros.js"||p!=="macro_interceptor"));
+assert.ok(["dist/backend.js","dist/backend-no-macros.js"].includes(manifest.entry_backend));
 assert.equal(manifest.entry_frontend, "dist/frontend.js");
 for (const key of ["entry_backend", "entry_frontend"]) {
   assert.ok(await Bun.file(manifest[key]).exists(), `${manifest[key]} must exist`);

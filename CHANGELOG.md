@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.21.1 - Lightweight tracking
+
+- Added an operator-selected no-prompt-macros package that skips both native macro and template-interceptor registration at startup.
+- Replaced whole-history JSON proof/encoding and document-size serialization with chunked SHA-256 fingerprints and bounded JSON byte counting. Read-only cache reuse avoids journal copies.
+- Combined duplicate refreshes through one active follow-up, retained trusted mutation barriers and per-user authorization, and projected UI snapshots before cloning.
+- Allowed authorized read-only settings checks to bypass the rebuild queue; saves still enforce revisions.
+- Added content-free operation durations, history counts/bytes, replay totals, pending refreshes and snapshot sizes alongside safe error diagnostics.
+
+
 ## 0.21.0 - 2026-11-26
 
 - Replaced the Home label with the supplied house artwork, embedded with a transparent, tightly cropped background; preserved tooltip, accessible label and click target.

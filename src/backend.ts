@@ -1,3 +1,4 @@
+import {performanceLine} from "./performance";
 import {atOperation,failureDetails,logFailure} from "./diagnostics";
 import {createPhoneInterceptor} from "./prompt-interceptor";
 import {phoneSnapshot,snapshotReads} from "./ui-snapshot";
@@ -22,6 +23,9 @@ import { chatPath } from "./store";
 import { failureCategory } from "./helper-status";
 
 declare const spindle: SpindleAPI;
+// Build-time operator choice: neither macro hook is ever registered in the alternate build.
+declare const LPT_NO_PROMPT_MACROS:boolean;
+const promptMacrosEnabled=typeof LPT_NO_PROMPT_MACROS === "undefined" || !LPT_NO_PROMPT_MACROS;
 const warn = (text: string): void => { try { spindle.log.warn(text); } catch { /* Logging cannot block generation. */ } };
 
 // Keep secondary request diagnostics visible without allowing disconnected clients
@@ -49,6 +53,7 @@ const messageReads = new MessageReads({
 const store = new PhoneStore({
   names:(chat,user)=>atOperation("card.names",()=>cardNames(spindle,chat,user)),
   warn: text => warn(text),
+  performance:sample=>{try{spindle.log.info(performanceLine(sample));}catch{}},
   authorize: async (chatId, userId) => (await atOperation("chat.authorize",()=>spindle.chats.get(chatId, userId)))?.id === chatId,
   history: async chatId => atOperation("history.read",()=>readStoryHistory(spindle,chatId)),
   read: async chatId => atOperation("tracker.read",()=>spindle.variables.chat.get(chatId, DOCUMENT_KEY)),
@@ -70,7 +75,7 @@ async function loadPhoneDocument(chatId: string, userId: string) {
   try{if(doc.settings.apps.Email&&doc.settings.enabled.email)doc.personalReads=await messageReads.read(userId,chatId);}catch{doc.personalReads={seen:{},available:false};warn("Lumi Phone Tracker: unread status unavailable; email continuity omitted.");}
   return doc;
 }
-registerPhoneMacros(spindle,loadPhoneDocument,mainWording);
+if(promptMacrosEnabled)registerPhoneMacros(spindle,loadPhoneDocument,mainWording);
 const setupWizard=new SetupWizard(spindle,store);
 const setupChoices=new SetupChoiceStore({
   authorize:async(user,chat)=>(await spindle.chats.get(chat,user))?.id===chat,
@@ -84,7 +89,7 @@ let processorRegistered = false;
 let interceptorRegistered = false;
 let macroTemplatesRegistered = false;
 function registerHooks(): void {
-  if (!macroTemplatesRegistered && spindle.permissions.has("macro_interceptor")) {
+  if (promptMacrosEnabled && !macroTemplatesRegistered && spindle.permissions.has("macro_interceptor")) {
     registerPhoneMacroTemplates(spindle,loadPhoneDocument,mainWording);
     macroTemplatesRegistered = true;
   }
@@ -162,7 +167,7 @@ spindle.onFrontendMessage((payload, userId) => {
         const info={available,choices:profiles.map(c=>({id:c.id,label:[c.name,c.model].filter(Boolean).join(" - ")})),note:available?"":"Allow generation permission to use the setup wizard."};
         spindle.sendToFrontend({type:"phone_connections_result",requestId:payload.requestId,chatId:payload.chatId,info},userId);
       } else {
-        const doc=await store.sync(userId,payload.chatId as string);const result={ok:doc.trackingEnabled!==false};
+        const doc=await store.syncSnapshot(userId,payload.chatId as string);const result={ok:doc.trackingEnabled!==false};
         spindle.sendToFrontend({type:payload.type==="phone_refresh"?"phone_refresh_result":"phone_helper_now_result",requestId:payload.requestId,chatId:payload.chatId,result},userId);
       }
     })().catch(error=>{
@@ -176,10 +181,10 @@ spindle.onFrontendMessage((payload, userId) => {
     Array.isArray(payload.observed) && payload.observed.length <= 100000 && payload.observed.every(m => isRecord(m) && typeof m.id === "string" && m.id.length <= 2000 && typeof m.receipt === "string" && m.receipt.length <= 20000)) {
     void (async () => {
       requireReadPermissions();
-      const snapshot = await store.preview(payload.chatId as string,userId);
+      const snapshot = await store.previewSnapshot(payload.chatId as string,userId);
       if(snapshot.trackingEnabled===false)throw Error("Tracking is off.");
       const reads = await messageReads.mark(userId, snapshot.chatId, payload.key as string, payload.observed as { id: string; receipt: string }[], snapshot.state.messages,snapshot.state);
-      secondaryReply("phone_mark_read",{ type: "phone_reads_result", requestId: payload.requestId, chatId: snapshot.chatId, reads:snapshotReads(reads,phoneSnapshot(snapshot)) }, userId);
+      secondaryReply("phone_mark_read",{ type: "phone_reads_result", requestId: payload.requestId, chatId: snapshot.chatId, reads:snapshotReads(reads,snapshot) }, userId);
     })().catch(error => secondaryFailure("phone_mark_read","receipts.mark",error,{ type: "phone_reads_error", requestId: payload.requestId, chatId: payload.chatId }, userId));
     return;
   }
@@ -200,10 +205,16 @@ spindle.onFrontendMessage((payload, userId) => {
     stage="chat.resolve";
     const chatId = typeof payload.chatId === "string" ? payload.chatId : payload.chatId===null?null:(await spindle.chats.getActive(userId))?.id;
     if (!chatId) { spindle.sendToFrontend({ type: "phone_snapshot", requestId, chatId: null }, userId); return; }
+    if(payload.type==="phone_sync"){
+      stage="tracker.open";const snapshot=await store.openSnapshot(chatId,userId);
+      stage="receipts.read";const reads=snapshot.trackingEnabled===false?emptyReads():await messageReads.read(userId,chatId);
+      stage="chat.metadata";const chatName=(await spindle.chats.get(chatId,userId))?.name??"";
+      stage="frontend.notify";spindle.sendToFrontend({type:"phone_snapshot",requestId,chatId,chatName,snapshot,reads:snapshotReads(reads,snapshot),helperBusy:false},userId);return;
+    }
     if(isRecord(payload.settings)&&payload.settings.source==="helper")throw Error("Automatic connection tracking was removed.");
     stage=payload.type === "phone_update"?"tracker.update":"tracker.open";
-    let snapshot = payload.type === "phone_update" ? await store.update(userId, chatId,
-      typeof payload.revision === "number" ? payload.revision : -1, { trackingEnabled:payload.trackingEnabled, settings: payload.settings, edit: payload.edit, dismissNotice: payload.dismissNotice,portrait:payload.portrait,contactInfo:payload.contactInfo,fieldControl:payload.fieldControl,mergeContacts:payload.mergeContacts }) : await store.openView(chatId,userId);
+    let snapshot = await store.update(userId, chatId,
+      typeof payload.revision === "number" ? payload.revision : -1, { trackingEnabled:payload.trackingEnabled, settings: payload.settings, edit: payload.edit, dismissNotice: payload.dismissNotice,portrait:payload.portrait,contactInfo:payload.contactInfo,fieldControl:payload.fieldControl,mergeContacts:payload.mergeContacts });
     committed=payload.type==="phone_update";
     if(payload.type==="phone_update") {
       if(payload.trackingEnabled===true)snapshot=await store.sync(userId,chatId);
@@ -230,11 +241,12 @@ for(const event of ["MESSAGE_SENT","MESSAGE_EDITED","MESSAGE_DELETED","MESSAGE_S
   if(!userId||!isRecord(payload)||typeof payload.chatId!=="string"||!spindle.permissions.has("chats")||!spindle.permissions.has("chat_mutation"))return;
   const chatId=payload.chatId,m=payload.message;
   const row=event==="MESSAGE_SENT"&&isRecord(m)&&typeof m.id==="string"&&m.chat_id===chatId&&Number.isInteger(m.index_in_chat)&&typeof m.content==="string"&&Number.isInteger(m.swipe_id)&&typeof m.is_user==="boolean"&&!(isRecord(m.extra)&&m.extra.spindle_role!==undefined)?{id:m.id,chat_id:chatId,index_in_chat:m.index_in_chat as number,content:m.content,swipe_id:m.swipe_id as number,swipe_dates:Array.isArray(m.swipe_dates)?m.swipe_dates as number[]:undefined,role:m.is_user?"user" as const:"assistant" as const,...(typeof m.name==="string"?{name:m.name}:{})}:null;
-  const work=row?store.receiveSaved(userId,chatId,row):store.sync(userId,chatId);
+  if(!row)store.invalidate(chatId);
+  const work=row?store.receiveSaved(userId,chatId,row):store.syncEffect(userId,chatId);
   void work.then(()=>{
     try { spindle.sendToFrontend({type:"phone_tracker_changed",chatId},userId); }
     catch(error) { logFailure(warn,{operation:"frontend.notify",event,outcome:"tracker-operation-completed"},error); }
   },error=>logFailure(warn,{operation:row?"tracker.append":"tracker.sync",event,outcome:"operation-not-completed"},error));
  });
 }
-spindle.log.info(`${EXTENSION_NAME}: saved-message tracking loaded. Model requests are setup-wizard only.`);
+spindle.log.info(`${EXTENSION_NAME}: saved-message tracking loaded. Model requests are setup-wizard only. Prompt macros: ${promptMacrosEnabled?"on":"off"}.`);

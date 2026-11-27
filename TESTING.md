@@ -850,3 +850,9 @@ Earlier reports: [Step 5](docs/STEP-5-TESTING.md), [Step 4](docs/STEP-4-TESTING.
 ### 0.21 candidate and Home icon
 
 Focused local browser checks cover Here now keyboard navigation and editing, contact Edit/Cancel and Add detail artwork, cross-app Back routing, Email body display, stated Bank balance, the embedded Home image and tight alpha bounds, and preserved Home keyboard behavior. The supplied house background was removed and the image cropped before embedding. Real Lumiverse placement, mobile keyboards, and model compliance with the revised prompt wording remain unverified.
+
+## 0.21.1 lightweight tracking
+
+New backend tests cover bounded fingerprints and JSON byte counting, edits/deletions/order/swipes, a settings read completing during a blocked rebuild, duplicate snapshots during an active follow-up, a mutation forcing fresh validation, queued edit barriers, revoked users, failed-batch cleanup, isolated small UI projections, safe counters and logger failure. An actual compiled no-macros backend is loaded against a host mock: native macros and template interceptors never register, including after permission changes; saved-tag processing, prompt cleanup and frontend handling still register.
+
+Unverified without a real multi-user Lumiverse install: prompt-worker selection with other installed extensions, host main-process RAM, long-running failed-generation behavior, live disconnections and operator replacement/reload of the alternate package. The docs do not guarantee prompt-process routing; the inspected local host source supplies that implementation detail. No claim is made that these changes fix all server lag.

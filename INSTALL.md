@@ -1,6 +1,6 @@
 # Install and use Lumi Phone Tracker
 
-Version 0.20.2 includes compact Calls cards, trimmed icons and Back/Home soft keys. The Tracking: On/Off control on Home toggles this chat. The sidebar retains its protected Open phone, Refresh tracker and Reset appearance toolbar.
+Version 0.21.1 adds lighter rebuilds, combined refreshes, performance counters and an optional no-macros build. It keeps compact Calls cards, trimmed icons and Back/Home soft keys. The Tracking: On/Off control on Home toggles this chat. The sidebar retains its protected Open phone, Refresh tracker and Reset appearance toolbar.
 
 Built files are included—you do not need to compile the extension. Normal tracking uses saved messages written by your main story model, with optional AI extraction only when you explicitly run the setup wizard.
 
@@ -57,3 +57,9 @@ If an update appears stale, use Refresh tracker. Keep the preset line above. If 
 ## Optional split placement
 
 Keep {{phone_format}} alone for the simplest setup. To separate context from writing instructions, use {{phone_state}} near story context and {{phone_rules}} near the bottom of the preset instead. Do not also add {{phone_format}}, which repeats both parts. The rules macro uses your selected personal prompt wording. The optional {{phone_contacts}} provides contact status; the older {{phone_scene}} already includes contact continuity, so combining them overlaps. See README.md for all macro names.
+
+## Optional: no prompt macros (testing branch)
+
+The normal `main` branch keeps phone macros. For the no-macros version, use the same GitHub repository and select the **testing** branch in Lumiverse's branch selector. The server operator makes this choice for the extension installation, so it applies to all its users. Reload or disable/re-enable the extension after changing builds; do not uninstall, because uninstall removes storage. Keep the selected branch on `testing` when updating if you want this mode.
+
+The phone and saved-tag tracking remain available, but remove phone macros from presets and use literal writing instructions instead. The built package named `-no-prompt-macros.tar.gz` is also available for operator-managed local installation. See [performance and mode details](docs/PERFORMANCE.md). Other extensions can still affect which Lumiverse prompt path runs.

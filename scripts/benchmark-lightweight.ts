@@ -1,0 +1,16 @@
+import {pathToFileURL} from "node:url";
+import {resolve} from "node:path";
+import {emptyDocument} from "../src/model";
+import {phoneSnapshot} from "../src/ui-snapshot";
+const module=process.argv[2]??"src/phone-store.ts";
+const count=Number(process.argv[3]??1000);
+const {PhoneStore}=await import(pathToFileURL(resolve(module)).href);
+const rows=Array.from({length:count},(_,i)=>({id:`m${i}`,chat_id:"synthetic",index_in_chat:i,role:"assistant",swipe_id:0,content:"A fictional scene. ".repeat(128)+"<phone-state>time: Evening</phone-state>"}));
+let raw=JSON.stringify(emptyDocument("synthetic")),reads=0;
+Bun.gc(true);const before=process.memoryUsage();let peak=before.rss;
+const sample=()=>{peak=Math.max(peak,process.memoryUsage().rss);};
+const io={authorize:async(c:string,u:string)=>c==="synthetic"&&u==="test",read:async()=>{sample();return raw;},write:async(_c:string,s:string)=>{raw=s;sample();},history:async()=>{reads++;sample();return structuredClone(rows);},player:async()=>{sample();return "Player";}};
+const store=new PhoneStore(io);const timer=setInterval(sample,1);const start=performance.now();
+const views=await Promise.all(Array.from({length:20},()=>store.syncSnapshot?store.syncSnapshot("test","synthetic"):store.sync("test","synthetic").then(phoneSnapshot)));
+sample();clearInterval(timer);const elapsed=performance.now()-start;Bun.gc(true);const retained=process.memoryUsage();
+console.log(JSON.stringify({messages:count,requests:20,historyReads:reads,durationMs:Math.round(elapsed),observedRssIncreaseBytes:Math.max(0,peak-before.rss),retainedHeapIncreaseBytes:Math.max(0,retained.heapUsed-before.heapUsed),uiSnapshotBytes:Buffer.byteLength(JSON.stringify(views[0])),journalBytes:Buffer.byteLength(raw)}));

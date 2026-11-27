@@ -1,4 +1,103 @@
 // @bun
+// src/performance.ts
+import { createHash } from "crypto";
+function fingerprint(value, json = false) {
+  const h = createHash("sha256");
+  const text = (s) => {
+    h.update(String(s.length) + ":");
+    for (let i = 0;i < s.length; i += 8192)
+      h.update(s.slice(i, i + 8192), "utf16le");
+  };
+  const visit = (v) => {
+    if (v === null) {
+      h.update("null;");
+      return;
+    }
+    if (typeof v === "string") {
+      h.update("s");
+      text(v);
+      return;
+    }
+    if (Array.isArray(v)) {
+      h.update("a" + v.length + ":");
+      for (const x of v)
+        visit(json && x === undefined ? null : x);
+      return;
+    }
+    if (typeof v === "object") {
+      const o = v, keys = Object.keys(o).filter((k) => !json || o[k] !== undefined).sort();
+      h.update("o" + keys.length + ":");
+      for (const k of keys) {
+        text(k);
+        visit(o[k]);
+      }
+      return;
+    }
+    h.update(typeof v + ":" + String(v) + ";");
+  };
+  visit(value);
+  return h.digest("hex");
+}
+function jsonBytes(value, cap = Infinity) {
+  let n = 0;
+  const str = (s) => {
+    n += 2;
+    for (let i = 0;i < s.length && n <= cap; i++) {
+      const c = s.charCodeAt(i);
+      if (c === 34 || c === 92)
+        n += 2;
+      else if (c < 32)
+        n += [8, 9, 10, 12, 13].includes(c) ? 2 : 6;
+      else if (c < 128)
+        n++;
+      else if (c < 2048)
+        n += 2;
+      else if (c >= 55296 && c <= 56319 && s.charCodeAt(i + 1) >= 56320 && s.charCodeAt(i + 1) <= 57343) {
+        n += 4;
+        i++;
+      } else
+        n += c >= 55296 && c <= 57343 ? 6 : 3;
+    }
+  };
+  const visit = (v) => {
+    if (n > cap)
+      return;
+    if (typeof v === "string")
+      str(v);
+    else if (Array.isArray(v)) {
+      n += 2;
+      for (let i = 0;i < v.length && n <= cap; i++) {
+        if (i)
+          n++;
+        visit(v[i] === undefined ? null : v[i]);
+      }
+    } else if (v && typeof v === "object") {
+      n += 2;
+      let first = true;
+      for (const k of Object.keys(v)) {
+        const x = v[k];
+        if (x === undefined)
+          continue;
+        if (!first)
+          n++;
+        first = false;
+        str(k);
+        n++;
+        visit(x);
+        if (n > cap)
+          break;
+      }
+    } else
+      n += JSON.stringify(v)?.length ?? 4;
+  };
+  visit(value);
+  return n;
+}
+function performanceLine(s) {
+  const count = (n) => Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
+  return `Lumi Phone Tracker: performance ${JSON.stringify({ operation: ["refresh", "build", "settings", "snapshot", "mutation"].includes(s.operation) ? s.operation : "refresh", durationMs: count(s.durationMs), historyMessages: count(s.historyMessages), historyBytes: count(s.historyBytes), rebuildCount: count(s.rebuildCount), pendingRefreshes: count(s.pendingRefreshes), snapshotBytes: count(s.snapshotBytes), cacheHit: s.cacheHit === true, failed: s.failed === true })}`;
+}
+
 // src/diagnostics.ts
 class SkipLogger {
   warn;
@@ -2171,7 +2270,7 @@ var activityUnread = (entry, seen) => {
     }
   return true;
 };
-var fingerprint = (v) => JSON.stringify(v, (_k, x) => x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).filter(([k]) => !["id", "at", "by", "evidence", "source", "legacyIds"].includes(k)).sort(([a], [b]) => a.localeCompare(b))) : x);
+var fingerprint2 = (v) => JSON.stringify(v, (_k, x) => x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).filter(([k]) => !["id", "at", "by", "evidence", "source", "legacyIds"].includes(k)).sort(([a], [b]) => a.localeCompare(b))) : x);
 function full(doc, kind, key) {
   const text = `${kind === "bank" ? "Bank accounts" : kind === "transactions" ? "Transactions" : kind === "emails" ? "Email" : "Calls"} is full (${CAPS[kind]}/${CAPS[kind]}). Delete an entry to make room.`;
   if (!doc.state.notices.includes(text))
@@ -2210,9 +2309,9 @@ function applyActivities(doc, patch, emails, at, rows, players, user = false, to
     const legacyId = JSON.stringify([at.id, at.variant, kind, ordinal]);
     const id = kind === "calls" ? callId(at.id, value) : legacyId;
     const key = JSON.stringify(["activity", kind, id, value]);
-    if (tombstones.has(`${kind}/${id}`) || kind !== "calls" && tombstones.has(`${kind}/value/${fingerprint(value)}`) || doc.rejected.includes(key))
+    if (tombstones.has(`${kind}/${id}`) || kind !== "calls" && tombstones.has(`${kind}/value/${fingerprint2(value)}`) || doc.rejected.includes(key))
       return;
-    if (list.some((e) => e.id === id || kind !== "calls" && fingerprint(e) === fingerprint(value)))
+    if (list.some((e) => e.id === id || kind !== "calls" && fingerprint2(e) === fingerprint2(value)))
       return;
     if (list.length + (kind === "calls" && !reservedCalls.has(id) ? [...reservedCalls].filter((key) => !list.some((e) => e.id === key)).length : 0) >= CAPS[kind]) {
       full(doc, kind, key);
@@ -2291,7 +2390,7 @@ function applyActivityEdit(state, edit, tombstones, players = new Set, allowPlay
     if (old) {
       list.splice(index, 1);
       if (kind !== "calls")
-        tombstones.add(`${kind}/value/${fingerprint(old)}`);
+        tombstones.add(`${kind}/value/${fingerprint2(old)}`);
       tombstones.add(`${kind}/${kind === "bank" ? normalize(String(old.name)) : id}`);
     }
     return true;
@@ -2305,7 +2404,7 @@ function applyActivityEdit(state, edit, tombstones, players = new Set, allowPlay
     throw Error("An account with that name already exists");
   if (old) {
     if (kind !== "calls")
-      tombstones.add(`${kind}/value/${fingerprint(old)}`);
+      tombstones.add(`${kind}/value/${fingerprint2(old)}`);
     if (kind === "bank" && normalize(String(old.name)) !== normalize(value.name))
       tombstones.add(`bank/${normalize(String(old.name))}`);
   }
@@ -2887,6 +2986,9 @@ async function loadPortraitSources(api, chatId, userId, player, onFailure) {
     }
   return result;
 }
+
+// src/phone-store.ts
+import { Buffer } from "buffer";
 
 // src/store.ts
 function chatPath(chatId) {
@@ -4168,6 +4270,9 @@ function validateEdit(value) {
 
 class PhoneStore {
   io;
+  fingerprint(value, json = false) {
+    return this.io.fingerprint ? this.io.fingerprint(value, json) : fingerprint(value, json);
+  }
   ready = new Set;
   markReady(chat) {
     this.ready.delete(chat);
@@ -4185,47 +4290,78 @@ class PhoneStore {
   }
   queues = new Map;
   pendingReads = new Map;
-  readOperation(kind, userId, chatId) {
-    const key = JSON.stringify([userId, chatId]);
+  readOperation(kind, userId, chatId, project = (doc) => structuredClone(doc)) {
+    this.pendingRefreshCount++;
+    const deliver = async (task) => {
+      try {
+        const doc = await task;
+        if (!userId || !await this.io.authorize(chatId, userId))
+          throw Error("Chat unavailable");
+        return project(doc);
+      } finally {
+        this.pendingRefreshCount--;
+      }
+    };
+    const key = JSON.stringify([userId, chatId, kind === "open" ? "open" : "history"]);
     const prior = this.pendingReads.get(key);
-    if (prior && !prior.started && this.queues.get(chatId) === prior.task) {
+    if (prior && (!prior.started || prior.followup) && this.queues.get(chatId) === prior.task) {
       prior.persist ||= kind === "sync";
-      return prior.task.then((doc) => structuredClone(doc));
+      return deliver(prior.task);
     }
-    const entry = { started: false, persist: kind === "sync", task: undefined };
+    const entry = { started: false, persist: kind === "sync", followup: !!prior && this.queues.get(chatId) === prior.task, task: undefined };
     entry.task = this.serial(chatId, async () => {
       entry.started = true;
       if (!userId || !await this.io.authorize(chatId, userId))
         throw Error("Chat unavailable");
-      const { doc } = await this.build(chatId, userId);
+      let doc = kind === "open" ? await this.readSaved(chatId, userId, true) : (await this.build(chatId, userId, () => {}, true)).doc;
       if (entry.persist && doc.trackingEnabled !== false) {
         const raw = await this.io.read(chatId);
         const comparable = { ...doc, revision: raw ? JSON.parse(raw).revision : 0 };
-        if (!raw || JSON.stringify(comparable, canonicalKeys) !== JSON.stringify(JSON.parse(raw), canonicalKeys)) {
-          doc.revision = comparable.revision + 1;
+        if (!raw || this.fingerprint(comparable, true) !== this.fingerprint(JSON.parse(raw), true)) {
+          doc = { ...doc, revision: comparable.revision + 1 };
           await this.io.write(chatId, JSON.stringify(doc));
         }
       }
       if (entry.persist && doc.trackingEnabled !== false)
         this.markReady(chatId);
+      this.perf("snapshot", performance.now(), { snapshotBytes: jsonBytes(phoneSnapshot(doc)) });
       return doc;
-    });
+    }, "refresh");
     this.pendingReads.set(key, entry);
     const cleanup = () => {
       if (this.pendingReads.get(key) === entry)
         this.pendingReads.delete(key);
     };
     entry.task.then(cleanup, cleanup);
-    return entry.task.then((doc) => structuredClone(doc));
+    return deliver(entry.task);
   }
   replayCache;
   skips;
+  rebuildCount = 0;
+  pendingRefreshCount = 0;
+  perf(operation, start, values = {}) {
+    try {
+      this.io.performance?.({ operation, durationMs: performance.now() - start, historyMessages: 0, historyBytes: 0, rebuildCount: this.rebuildCount, pendingRefreshes: this.pendingRefreshCount, snapshotBytes: 0, ...values });
+    } catch {}
+  }
+  invalidate(chatId) {
+    this.ready.delete(chatId);
+    this.replayCache = undefined;
+    for (const [key] of this.pendingReads)
+      if (JSON.parse(key)[1] === chatId && this.pendingReads.get(key)?.started)
+        this.pendingReads.delete(key);
+  }
   constructor(io) {
     this.io = io;
     this.skips = new SkipLogger((text) => this.io.warn?.(text));
   }
-  serial(chatId, action) {
-    const task = (this.queues.get(chatId) ?? Promise.resolve()).catch(() => {}).then(action);
+  serial(chatId, action, operation = "mutation") {
+    const started = performance.now();
+    let failed = false;
+    const task = (this.queues.get(chatId) ?? Promise.resolve()).catch(() => {}).then(action).catch((error) => {
+      failed = true;
+      throw error;
+    }).finally(() => this.perf(operation, started, { failed }));
     this.queues.set(chatId, task);
     const cleanup = () => {
       if (this.queues.get(chatId) === task)
@@ -4234,7 +4370,8 @@ class PhoneStore {
     task.then(cleanup, cleanup);
     return task;
   }
-  async build(chatId, userId, check = () => {}) {
+  async build(chatId, userId, check = () => {}, readOnly = false) {
+    const started = performance.now();
     if (!chatId || chatId.length > 256)
       throw new Error("Missing chat");
     check();
@@ -4260,12 +4397,21 @@ class PhoneStore {
     check();
     const names = await this.io.names?.(chatId, userId) ?? [];
     check();
-    const proof = JSON.stringify([chatId, userId, raw, rows.map(rowSignature), player, names, legacy]);
-    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(proof));
+    const rowKeys = [];
+    let historyBytes = 0;
+    for (const row of rows) {
+      check();
+      rowKeys.push(this.fingerprint([row.id, row.chat_id, row.index_in_chat, row.role, row.name, row.swipe_id, row.swipe_dates?.[row.swipe_id], row.content]));
+      historyBytes += Buffer.byteLength(row.content, "utf8");
+    }
+    const key = this.fingerprint([chatId, userId, this.fingerprint(raw), rowKeys, player, names, legacy]);
     check();
-    const key = Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
-    if (this.replayCache?.key === key)
-      return { doc: structuredClone(this.replayCache.doc), rows };
+    if (this.replayCache?.key === key) {
+      const cached = this.replayCache.doc;
+      this.perf("build", started, { historyMessages: rows.length, historyBytes, cacheHit: true, snapshotBytes: jsonBytes(phoneSnapshot(cached)) });
+      return { doc: readOnly ? cached : structuredClone(cached), rows };
+    }
+    this.rebuildCount++;
     let doc = readDocument(raw, chatId);
     if (!raw && legacy !== null) {
       const old = readSnapshot(legacy, chatId);
@@ -4285,11 +4431,20 @@ class PhoneStore {
     doc = replay(doc, rows, player ? [player] : [], (row, issues) => this.skips.record(chatId, row, issues));
     doc.currentPlayer = player ?? undefined;
     projectContacts(doc, names);
-    const last = [...rows].sort((a, b) => a.index_in_chat - b.index_in_chat).at(-1);
+    let last, lastUser;
+    for (const row of rows) {
+      if (!last || row.index_in_chat > last.index_in_chat)
+        last = row;
+      if (row.role === "user" && (!lastUser || row.index_in_chat > lastUser.index_in_chat))
+        lastUser = row;
+    }
     if (last)
-      doc.checkpoint = { version: 1, id: last.id, index: last.index_in_chat, signature: await sourceHash(last), lastUser: [...rows].reverse().find((r) => r.role === "user") };
-    const bytes = new TextEncoder().encode(JSON.stringify(doc)).byteLength;
-    this.replayCache = bytes <= 2 * 1024 * 1024 ? { key, doc: structuredClone(doc), bytes } : undefined;
+      doc.checkpoint = { version: 1, id: last.id, index: last.index_in_chat, signature: await sourceHash(last), lastUser };
+    const bytes = jsonBytes(doc, 2 * 1024 * 1024);
+    this.replayCache = bytes <= 2 * 1024 * 1024 ? { key, doc, bytes } : undefined;
+    this.perf("build", started, { historyMessages: rows.length, historyBytes, snapshotBytes: jsonBytes(phoneSnapshot(doc)) });
+    if (this.replayCache && !readOnly)
+      doc = structuredClone(doc);
     return { doc, rows };
   }
   trackingSource(userId, chatId) {
@@ -4312,31 +4467,48 @@ class PhoneStore {
   sync(userId, chatId) {
     return this.readOperation("sync", userId, chatId);
   }
+  previewSnapshot(chatId, userId) {
+    return this.readOperation("preview", userId, chatId, (doc) => structuredClone(phoneSnapshot(doc)));
+  }
+  syncSnapshot(userId, chatId) {
+    return this.readOperation("sync", userId, chatId, (doc) => structuredClone(phoneSnapshot(doc)));
+  }
+  syncEffect(userId, chatId) {
+    return this.readOperation("sync", userId, chatId, () => {
+      return;
+    });
+  }
+  openSnapshot(chatId, userId) {
+    return this.readOperation(this.ready.has(chatId) ? "open" : "sync", userId, chatId, (doc) => structuredClone(phoneSnapshot(doc)));
+  }
+  async readSaved(chatId, userId, readOnly = false) {
+    const raw = await this.io.read(chatId), doc = materialized(raw, chatId);
+    if (!doc) {
+      this.ready.delete(chatId);
+      return (await this.build(chatId, userId, () => {}, readOnly)).doc;
+    }
+    doc.settings.source = "main";
+    const player = await this.io.player(chatId, userId);
+    doc.currentPlayer = player ?? undefined;
+    if (player && !doc.playerNames.some((n) => normalize(n) === normalize(player)))
+      doc.playerNames.push(player);
+    for (const contact of doc.state.contacts)
+      if (doc.playerNames.some((n) => normalize(n) === normalize(contact.name))) {
+        contact.player = true;
+        delete contact.fields.roles;
+        delete contact.fields.mood;
+        delete contact.fields.thoughts;
+      }
+    return doc;
+  }
   savedView(chatId, userId) {
     if (!this.ready.has(chatId))
       return this.preview(chatId, userId);
     return this.serial(chatId, async () => {
       if (!userId || !await this.io.authorize(chatId, userId))
         throw Error("Chat unavailable");
-      const raw = await this.io.read(chatId), doc = materialized(raw, chatId);
-      if (!doc) {
-        this.ready.delete(chatId);
-        return (await this.build(chatId, userId)).doc;
-      }
-      doc.settings.source = "main";
-      const player = await this.io.player(chatId, userId);
-      doc.currentPlayer = player ?? undefined;
-      if (player && !doc.playerNames.some((n) => normalize(n) === normalize(player)))
-        doc.playerNames.push(player);
-      for (const contact of doc.state.contacts)
-        if (doc.playerNames.some((n) => normalize(n) === normalize(contact.name))) {
-          contact.player = true;
-          delete contact.fields.roles;
-          delete contact.fields.mood;
-          delete contact.fields.thoughts;
-        }
-      return doc;
-    });
+      return this.readSaved(chatId, userId);
+    }, "snapshot");
   }
   receiveSaved(userId, chatId, row) {
     return this.serial(chatId, async () => {
@@ -4387,11 +4559,12 @@ class PhoneStore {
         if (saved)
           return saved;
       }
-      return (await this.build(chatId, userId, check)).doc;
+      return (await this.build(chatId, userId, check, true)).doc;
     });
   }
   settingsPreview(userId, chatId, signal) {
-    return this.serial(chatId, async () => {
+    const started = performance.now();
+    return (async () => {
       signal?.throwIfAborted();
       if (!userId || !await this.io.authorize(chatId, userId))
         throw Error("Chat unavailable");
@@ -4411,7 +4584,7 @@ class PhoneStore {
       if (typeof value.helperOwner === "string")
         doc.helperOwner = value.helperOwner;
       return doc;
-    });
+    })().finally(() => this.perf("settings", started));
   }
   update(userId, chatId, expectedRevision, update) {
     return this.serial(chatId, async () => {
@@ -4850,6 +5023,7 @@ class MessageReads {
 }
 
 // src/backend.ts
+var promptMacrosEnabled = true;
 var warn = (text) => {
   try {
     spindle.log.warn(text);
@@ -4879,6 +5053,11 @@ var messageReads = new MessageReads({
 var store = new PhoneStore({
   names: (chat, user) => atOperation("card.names", () => cardNames(spindle, chat, user)),
   warn: (text) => warn(text),
+  performance: (sample) => {
+    try {
+      spindle.log.info(performanceLine(sample));
+    } catch {}
+  },
   authorize: async (chatId, userId) => (await atOperation("chat.authorize", () => spindle.chats.get(chatId, userId)))?.id === chatId,
   history: async (chatId) => atOperation("history.read", () => readStoryHistory(spindle, chatId)),
   read: async (chatId) => atOperation("tracker.read", () => spindle.variables.chat.get(chatId, DOCUMENT_KEY)),
@@ -4908,7 +5087,8 @@ async function loadPhoneDocument(chatId, userId) {
   }
   return doc;
 }
-registerPhoneMacros(spindle, loadPhoneDocument, mainWording);
+if (promptMacrosEnabled)
+  registerPhoneMacros(spindle, loadPhoneDocument, mainWording);
 var setupWizard = new SetupWizard(spindle, store);
 var setupChoices = new SetupChoiceStore({
   authorize: async (user, chat) => (await spindle.chats.get(chat, user))?.id === chat,
@@ -4923,7 +5103,7 @@ var processorRegistered = false;
 var interceptorRegistered = false;
 var macroTemplatesRegistered = false;
 function registerHooks() {
-  if (!macroTemplatesRegistered && spindle.permissions.has("macro_interceptor")) {
+  if (promptMacrosEnabled && !macroTemplatesRegistered && spindle.permissions.has("macro_interceptor")) {
     registerPhoneMacroTemplates(spindle, loadPhoneDocument, mainWording);
     macroTemplatesRegistered = true;
   }
@@ -5051,7 +5231,7 @@ spindle.onFrontendMessage((payload, userId) => {
         const info = { available, choices: profiles.map((c) => ({ id: c.id, label: [c.name, c.model].filter(Boolean).join(" - ") })), note: available ? "" : "Allow generation permission to use the setup wizard." };
         spindle.sendToFrontend({ type: "phone_connections_result", requestId: payload.requestId, chatId: payload.chatId, info }, userId);
       } else {
-        const doc = await store.sync(userId, payload.chatId);
+        const doc = await store.syncSnapshot(userId, payload.chatId);
         const result = { ok: doc.trackingEnabled !== false };
         spindle.sendToFrontend({ type: payload.type === "phone_refresh" ? "phone_refresh_result" : "phone_helper_now_result", requestId: payload.requestId, chatId: payload.chatId, result }, userId);
       }
@@ -5065,11 +5245,11 @@ spindle.onFrontendMessage((payload, userId) => {
   if (isRecord(payload) && payload.type === "phone_mark_read" && typeof payload.requestId === "string" && payload.requestId.length <= 100 && typeof payload.chatId === "string" && payload.chatId.length <= 256 && typeof payload.key === "string" && payload.key.length <= 400 && Array.isArray(payload.observed) && payload.observed.length <= 1e5 && payload.observed.every((m) => isRecord(m) && typeof m.id === "string" && m.id.length <= 2000 && typeof m.receipt === "string" && m.receipt.length <= 20000)) {
     (async () => {
       requireReadPermissions();
-      const snapshot = await store.preview(payload.chatId, userId);
+      const snapshot = await store.previewSnapshot(payload.chatId, userId);
       if (snapshot.trackingEnabled === false)
         throw Error("Tracking is off.");
       const reads = await messageReads.mark(userId, snapshot.chatId, payload.key, payload.observed, snapshot.state.messages, snapshot.state);
-      secondaryReply("phone_mark_read", { type: "phone_reads_result", requestId: payload.requestId, chatId: snapshot.chatId, reads: snapshotReads(reads, phoneSnapshot(snapshot)) }, userId);
+      secondaryReply("phone_mark_read", { type: "phone_reads_result", requestId: payload.requestId, chatId: snapshot.chatId, reads: snapshotReads(reads, snapshot) }, userId);
     })().catch((error) => secondaryFailure("phone_mark_read", "receipts.mark", error, { type: "phone_reads_error", requestId: payload.requestId, chatId: payload.chatId }, userId));
     return;
   }
@@ -5092,10 +5272,21 @@ spindle.onFrontendMessage((payload, userId) => {
       spindle.sendToFrontend({ type: "phone_snapshot", requestId, chatId: null }, userId);
       return;
     }
+    if (payload.type === "phone_sync") {
+      stage = "tracker.open";
+      const snapshot = await store.openSnapshot(chatId, userId);
+      stage = "receipts.read";
+      const reads = snapshot.trackingEnabled === false ? emptyReads() : await messageReads.read(userId, chatId);
+      stage = "chat.metadata";
+      const chatName = (await spindle.chats.get(chatId, userId))?.name ?? "";
+      stage = "frontend.notify";
+      spindle.sendToFrontend({ type: "phone_snapshot", requestId, chatId, chatName, snapshot, reads: snapshotReads(reads, snapshot), helperBusy: false }, userId);
+      return;
+    }
     if (isRecord(payload.settings) && payload.settings.source === "helper")
       throw Error("Automatic connection tracking was removed.");
     stage = payload.type === "phone_update" ? "tracker.update" : "tracker.open";
-    let snapshot = payload.type === "phone_update" ? await store.update(userId, chatId, typeof payload.revision === "number" ? payload.revision : -1, { trackingEnabled: payload.trackingEnabled, settings: payload.settings, edit: payload.edit, dismissNotice: payload.dismissNotice, portrait: payload.portrait, contactInfo: payload.contactInfo, fieldControl: payload.fieldControl, mergeContacts: payload.mergeContacts }) : await store.openView(chatId, userId);
+    let snapshot = await store.update(userId, chatId, typeof payload.revision === "number" ? payload.revision : -1, { trackingEnabled: payload.trackingEnabled, settings: payload.settings, edit: payload.edit, dismissNotice: payload.dismissNotice, portrait: payload.portrait, contactInfo: payload.contactInfo, fieldControl: payload.fieldControl, mergeContacts: payload.mergeContacts });
     committed = payload.type === "phone_update";
     if (payload.type === "phone_update") {
       if (payload.trackingEnabled === true)
@@ -5126,7 +5317,9 @@ for (const event of ["MESSAGE_SENT", "MESSAGE_EDITED", "MESSAGE_DELETED", "MESSA
       return;
     const { chatId, message: m } = payload;
     const row = event === "MESSAGE_SENT" && isRecord(m) && typeof m.id === "string" && m.chat_id === chatId && Number.isInteger(m.index_in_chat) && typeof m.content === "string" && Number.isInteger(m.swipe_id) && typeof m.is_user === "boolean" && !(isRecord(m.extra) && m.extra.spindle_role !== undefined) ? { id: m.id, chat_id: chatId, index_in_chat: m.index_in_chat, content: m.content, swipe_id: m.swipe_id, swipe_dates: Array.isArray(m.swipe_dates) ? m.swipe_dates : undefined, role: m.is_user ? "user" : "assistant", ...typeof m.name === "string" ? { name: m.name } : {} } : null;
-    const work = row ? store.receiveSaved(userId, chatId, row) : store.sync(userId, chatId);
+    if (!row)
+      store.invalidate(chatId);
+    const work = row ? store.receiveSaved(userId, chatId, row) : store.syncEffect(userId, chatId);
     work.then(() => {
       try {
         spindle.sendToFrontend({ type: "phone_tracker_changed", chatId }, userId);
@@ -5136,4 +5329,4 @@ for (const event of ["MESSAGE_SENT", "MESSAGE_EDITED", "MESSAGE_DELETED", "MESSA
     }, (error) => logFailure(warn, { operation: row ? "tracker.append" : "tracker.sync", event, outcome: "operation-not-completed" }, error));
   });
 }
-spindle.log.info(`${EXTENSION_NAME}: saved-message tracking loaded. Model requests are setup-wizard only.`);
+spindle.log.info(`${EXTENSION_NAME}: saved-message tracking loaded. Model requests are setup-wizard only. Prompt macros: ${promptMacrosEnabled ? "on" : "off"}.`);
