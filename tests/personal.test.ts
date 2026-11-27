@@ -6,10 +6,10 @@ import {composeWording,HELPER_SAFETY,syntaxLine} from "../src/wording";
 import {helperInput,helperValues} from "../src/helper";
 import {PhoneStore} from "../src/phone-store";
 const fixture=()=>{const files=new Map<string,unknown>(),warnings:string[]=[];const calls:string[]=[];const store=new PersonalStore({read:async u=>{if(!u)throw Error("userId is required for operator-scoped extensions");calls.push(u);return structuredClone(files.get(u)??emptyPersonal());},write:async(u,v)=>{if(!u)throw Error("userId is required for operator-scoped extensions");calls.push(u);files.set(u,structuredClone(v));},warn:s=>warnings.push(s)});return {store,files,warnings,calls};};
-test("presets use an exact allowlist and cannot store safety/source/appearance",()=>{
+test("profiles store the two explicit AI permissions but never source, inference or appearance",()=>{
  const s=defaults();s.source="helper";s.connection_id="private";s.helperMessages=9;s.aiPlayerTexts=true;s.inferMissing=true;
- const snap=presetSnapshot(s);expect(Object.keys(snap).sort()).toEqual(["apps","enabled","notesPerSection","logLines","keepTrackers","keepTexts"].sort());expect(validatePreset(snap)).toEqual(snap);
- for(const forbidden of ["source","connection_id","helperMessages","aiPlayerTexts","inferMissing","css","dismissed","state","wordings"])expect(()=>validatePreset({...snap,[forbidden]:true})).toThrow();
+ const snap=presetSnapshot(s);expect(Object.keys(snap).sort()).toEqual(["apps","enabled","notesPerSection","logLines","keepTrackers","keepTexts","aiPlayerTexts","allowAIUserEdits"].sort());expect(validatePreset(snap)).toEqual(snap);
+ for(const forbidden of ["source","connection_id","helperMessages","inferMissing","css","dismissed","state","wordings"])expect(()=>validatePreset({...snap,[forbidden]:true})).toThrow();
  const builtins=builtInPresets();expect(builtins[0].settings).toEqual(presetSnapshot(defaults()));expect(ALL_APPS.filter(a=>builtins[1].settings.apps[a])).toEqual(["Scene","Weather","Messages"]);builtins[0].settings.apps.Scene=false;expect(builtInPresets()[0].settings.apps.Scene).toBe(true);
 });
 test("personal preset CRUD is per user, caps names/count, rejects built-in and stale writes",async()=>{
@@ -22,7 +22,7 @@ test("personal preset CRUD is per user, caps names/count, rejects built-in and s
 test("preset application pins chat, preserves story and every excluded setting",async()=>{
  const docs=new Map<string,string>();let paid=0;const store=new PhoneStore({authorize:async(c,u)=>["u","v"].includes(u)&&["a","b"].includes(c),read:async c=>docs.get(c)??JSON.stringify(emptyDocument(c)),write:async(c,s)=>{docs.set(c,s);},history:async c=>[{id:c+"1",chat_id:c,index_in_chat:0,role:"assistant",content:"<phone-state>weather: Rain</phone-state>",swipe_id:0}],player:async()=>"Player"});
  let a=await store.sync("u","a");const b=await store.sync("v","b");a=await store.update("u","a",a.revision,{settings:{source:"helper",connection_id:"conn",helperMessages:7,aiPlayerTexts:true,inferMissing:true}});const before=structuredClone(a);
- a=await store.update("u","a",a.revision,{settings:builtInPresets()[1].settings});expect(a.state).toEqual(before.state);expect(a.accepted).toEqual(before.accepted);for(const k of ["source","connection_id","helperMessages","aiPlayerTexts","inferMissing"] as const)expect(a.settings[k]).toBe(before.settings[k]);expect(await store.preview("b","v")).toEqual(b);expect((await store.preview("a","v")).settings).toEqual(a.settings);expect(paid).toBe(0);
+ a=await store.update("u","a",a.revision,{settings:builtInPresets()[1].settings});expect(a.settings.aiPlayerTexts).toBe(false);expect(a.settings.allowAIUserEdits).toBe(false);expect(a.state).toEqual(before.state);expect(a.accepted).toEqual(before.accepted);for(const k of ["source","connection_id","helperMessages","inferMissing"] as const)expect(a.settings[k]).toBe(before.settings[k]);expect(await store.preview("b","v")).toEqual(b);expect((await store.preview("a","v")).settings).toEqual(a.settings);expect(paid).toBe(0);
 });
 test("wordings are personal, capped at ten total and Default cannot be edited/deleted",async()=>{
  const {store}=fixture();let p=await store.update("u",0,{kind:"wording_save",target:"main",name:"Simple",text:`Use short lines. ${SYNTAX_TOKEN}`});expect(selectedWording(p,"main")).toContain("short");expect(selectedWording(await store.read("v"),"main")).toBeUndefined();expect(selectedWording(p,"helper")).toBeUndefined();
@@ -47,4 +47,20 @@ test("preview rendering equals pull/interceptor output for the generating user's
  const doc=emptyDocument("a"),{store}=fixture();await store.update("u",0,{kind:"wording_save",target:"main",name:"Mine",text:"ONLY U "+SYNTAX_TOKEN});await store.update("v",0,{kind:"wording_save",target:"main",name:"Mine",text:"ONLY V "+SYNTAX_TOKEN});const handlers=new Map<string,(ctx:any)=>Promise<string>>();let interceptor:any;const api={registerMacro:(def:any)=>handlers.set(def.name,def.handler),registerMacroInterceptor:(fn:any)=>interceptor=fn,permissions:{has:()=>true},log:{warn:()=>{}}} as any;const wording=async(u:string)=>selectedWording(await store.read(u),"main");registerPhoneMacros(api,async()=>structuredClone(doc),wording);registerPhoneMacroTemplates(api,async()=>structuredClone(doc),wording);
  for(const user of ["u","v"]){const preview=formatMacro(doc,await wording(user));expect(await handlers.get("phone_format")!({userId:user,chatId:"a",commit:false})).toBe(preview);expect((await interceptor({userId:user,template:"{{phone_format}}",env:{chat:{id:"a"}}})).text).toBe(preview);expect(preview).toContain(user==="u"?"ONLY U":"ONLY V");expect(preview).not.toContain(user==="u"?"ONLY V":"ONLY U");}
  expect(defaultWordingTemplate(doc).length).toBeLessThanOrEqual(4000);expect(defaultWordingTemplate(doc,true).length).toBeLessThanOrEqual(4000);expect(defaultWordingTemplate(doc)).toContain(SYNTAX_TOKEN);
+});
+
+
+test("profile AI permissions round-trip as both on and off, with legacy profiles preserving current choices",async()=>{
+ const f=fixture();const settings=defaults();settings.aiPlayerTexts=true;settings.allowAIUserEdits=true;
+ let personal=await f.store.update("u",0,{kind:"preset_save",name:"Permission profile"},settings);let saved=(await f.store.read("u")).presets[0].settings;expect(saved.aiPlayerTexts).toBe(true);expect(saved.allowAIUserEdits).toBe(true);expect((await f.store.read("v")).presets).toHaveLength(0);
+ settings.aiPlayerTexts=false;settings.allowAIUserEdits=false;personal=await f.store.update("u",personal.revision,{kind:"preset_save",name:"Permissions off"},settings);saved=(await f.store.read("u")).presets[1].settings;expect(saved.aiPlayerTexts).toBe(false);expect(saved.allowAIUserEdits).toBe(false);
+ const legacy=presetSnapshot(defaults());delete legacy.aiPlayerTexts;delete legacy.allowAIUserEdits;expect(validatePreset(legacy)).toEqual(legacy);const migrated=readPersonal({presets:[{id:"old",name:"Old profile",settings:legacy}]});expect(migrated.presets).toHaveLength(1);expect(migrated.presets[0].settings).not.toHaveProperty("aiPlayerTexts");expect(migrated.presets[0].settings).not.toHaveProperty("allowAIUserEdits");
+ for(const key of ["aiPlayerTexts","allowAIUserEdits"])for(const invalid of ["true",null,1])expect(()=>validatePreset({...legacy,[key]:invalid})).toThrow();
+});
+
+test("applying saved AI permissions affects only the pinned chat without changing story or making model calls",async()=>{
+ const docs=new Map<string,string>();const store=new PhoneStore({authorize:async(c,u)=>["a","b"].includes(c)&&u==="u",read:async c=>docs.get(c)??JSON.stringify(emptyDocument(c)),write:async(c,s)=>{docs.set(c,s);},history:async c=>[{id:c+"-1",chat_id:c,index_in_chat:0,role:"assistant",swipe_id:0,content:"<phone-state>time: Evening</phone-state>"}],player:async()=>"Player"});
+ let a=await store.sync("u","a");const b=await store.sync("u","b"),before=structuredClone(a.state);const profile=presetSnapshot(defaults());profile.aiPlayerTexts=true;profile.allowAIUserEdits=true;a=await store.update("u","a",a.revision,{settings:profile});expect(a.settings.aiPlayerTexts).toBe(true);expect(a.settings.allowAIUserEdits).toBe(true);expect(a.state).toEqual(before);expect((await store.preview("b","u")).settings).toEqual(b.settings);
+ const legacy={...profile};delete legacy.aiPlayerTexts;delete legacy.allowAIUserEdits;a=await store.update("u","a",a.revision,{settings:validatePreset(legacy)});expect(a.settings.aiPlayerTexts).toBe(true);expect(a.settings.allowAIUserEdits).toBe(true);
+ profile.aiPlayerTexts=false;profile.allowAIUserEdits=false;a=await store.update("u","a",a.revision,{settings:profile});expect(a.settings.aiPlayerTexts).toBe(false);expect(a.settings.allowAIUserEdits).toBe(false);expect(a.state).toEqual(before);
 });

@@ -64,6 +64,7 @@ export interface ManualEdit {
 }
 export interface Accepted { bankProof?:BankData[];at: Origin; patch: Patch; emails?:EmailData[]; texts: TextData[]; role: "user" | "assistant"; name?: string; prose: string }
 export interface Document {
+  manualUndo?:import("./manual-undo").UndoRecord;
   checkpoint?:{version:1;id:string;index:number;signature:string;lastUser?:import("./engine").StoryRow};
   trackingEnabled?:boolean; // Missing on existing chats means enabled; fresh stores opt in explicitly.
   fieldLocks?:Record<string,boolean>;userEditAdmissions?:string[];

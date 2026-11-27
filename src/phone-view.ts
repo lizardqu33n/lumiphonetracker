@@ -23,7 +23,7 @@ import { isRecord, normalSpaces } from "./shared";
 
 export interface ViewActions {
   uuid():string;
-  update(change: { trackingEnabled?:boolean; edit?: Partial<ManualEdit>; settings?: unknown; dismissNotice?: string;portrait?:{name:string;data:string|null};contactInfo?:unknown;fieldControl?:unknown;mergeContacts?:unknown }, revision: number): Promise<PhoneDocument>;
+  update(change: { undo?:boolean;trackingEnabled?:boolean; edit?: Partial<ManualEdit>; settings?: unknown; dismissNotice?: string;portrait?:{name:string;data:string|null};contactInfo?:unknown;fieldControl?:unknown;mergeContacts?:unknown }, revision: number): Promise<PhoneDocument>;
   preferences(change: { css?: string; dismiss?: App|"Home"|"Draft hint" }): Promise<Preferences>;
   markRead(chatId: string, key: string, observed: { id: string; receipt: string }[]): Promise<ReadState>;
   draft(chatId: string, to: string, text: string,group?:string): { manual: boolean; tag: string };
@@ -116,6 +116,9 @@ export class PhoneView {
   private app: App | "Home" = "Home";
   private openState = false;
   private renderDirty=true;
+  private positions=new Map<string,number>();
+  private lastApps=new Map<string,App|"Home">();
+  private rememberPosition():void{const key=this.content.dataset.viewKey;if(key&&this.openState&&!this.frame.hidden){this.positions.delete(key);this.positions.set(key,this.content.scrollTop);while(this.positions.size>256)this.positions.delete(this.positions.keys().next().value!);}if(this.doc){this.lastApps.delete(this.doc.chatId);this.lastApps.set(this.doc.chatId,this.app);while(this.lastApps.size>32)this.lastApps.delete(this.lastApps.keys().next().value!);}}
   private displayKey="";
   private editing = false;
   private busy = false;
@@ -162,7 +165,7 @@ export class PhoneView {
     if(doc&&this.doc&&doc.chatId===this.doc.chatId&&doc.revision===this.doc.revision&&doc.currentPlayer===this.doc.currentPlayer){
       this.doc=doc;if(reads&&reads.revision>this.reads.revision)this.receiveReads(reads);return;
     }
-    const key=JSON.stringify([doc?.chatId,doc?.trackingEnabled,doc?.settings,doc?.state,doc?.fieldLocks,doc?.contactInfo,doc?.portraits,doc?.currentPlayer,doc?.playerNames]);
+    const key=JSON.stringify([doc?.chatId,doc?.trackingEnabled,doc?.settings,doc?.state,doc?.fieldLocks,doc?.contactInfo,doc?.portraits,doc?.currentPlayer,doc?.playerNames,doc?.undo]);
     const displayChanged=key!==this.displayKey;this.displayKey=key;
     const changedChat = doc?.chatId !== this.doc?.chatId;
     if(!displayChanged){this.doc=doc;if(reads&&reads.revision>this.reads.revision)this.receiveReads(reads);return;}
@@ -170,13 +173,14 @@ export class PhoneView {
     const oldActivities=new Set([...(this.doc?.state.calls??[]),...(this.doc?.state.emails??[])].map(e=>activityReceipt(e)));
     const previous = new Set(this.doc?.state.messages.filter(m => m.direction === "incoming").map(m => JSON.stringify([m.id, receipt(m)])) ?? []);
     const arrived = doc?.trackingEnabled!==false && !changedChat && this.doc && doc?.settings.apps.Messages&&doc.settings.enabled.messages ? doc.state.messages.filter(m => m.direction === "incoming" && !previous.has(JSON.stringify([m.id, receipt(m)]))) : [];
+    if(changedChat)this.rememberPosition();
     this.doc = doc;
     if(doc?.trackingEnabled===false)this.app="Home";
     if(this.app!=="Home"&&!doc?.settings.apps[this.app])this.app="Home";
     if (changedChat) {
       this.modelError="";
       this.portraitValidation.clear();this.selectedContact=null;this.contactOrigin="Contacts";this.selectedLocation=null;this.locationOrigin=null;this.contactScroll=0;this.portraitEpoch++;this.portraitSources=emptyPortraitSources();this.chatEpoch++; this.pendingReads.clear(); this.reads = reads ?? emptyReads(); this.replyDrafts.clear();this.replySelections.clear(); this.manualDrafts.clear();
-      this.clearTextNotice(); this.editing = false; this.app = "Home"; this.selectedText = null;
+      this.clearTextNotice(); this.editing = false; this.app = doc?this.lastApps.get(doc.chatId)??"Home":"Home";if(this.app!=="Home"&&(!doc?.settings.apps[this.app]||doc.trackingEnabled===false))this.app="Home"; this.selectedText = null;
 
 
     } else if (reads && reads.revision >= this.reads.revision) this.reads = reads;
@@ -215,7 +219,7 @@ export class PhoneView {
     this.setOpen(true); requestAnimationFrame(() => this.measure());
   }
   open(app?: App): void { if (app) this.navigate(app); this.setOpen(true); this.back.hidden ? this.frame.querySelector<HTMLElement>(".lpt-app-button, .lpt-close")?.focus() : this.back.focus(); }
-  close(): void { this.setOpen(false); this.launcher.focus(); }
+  close(): void { this.rememberPosition();this.setOpen(false); this.launcher.focus(); }
   destroy(): void { window.visualViewport?.removeEventListener("resize",this.viewportFit);this.portraitEpoch++;clearTimeout(this.noticeTimer); this.chatEpoch++; this.observer.disconnect(); this.portraitValidation.clear();this.root.remove(); }
   private setOpen(open: boolean): void {
     this.openState = open;if(open&&this.renderDirty)this.render();if(open&&(this.app==="Contacts"||this.app==="Messages"))this.actions.portraits?.(); this.root.dataset.open = String(open); this.frame.hidden = !open; this.launcher.hidden = open;
@@ -232,8 +236,9 @@ export class PhoneView {
     const closedHeight = this.textNotice.hidden ? height : Math.max(48, Math.ceil(this.root.getBoundingClientRect().height));
     this.actions.size(Math.max(48, width), Math.max(48, this.openState ? height : closedHeight), this.openState);
   }
-  private navigate(app: App | "Home"): void { if(app==="Home"){this.selectedContact=null;this.locationOrigin=null;} this.app = app!=="Home"&&!this.doc?.settings.apps[app]?"Home":app; this.editing = false; this.render(); this.content.scrollTop = 0;if(app==="Contacts"||app==="Messages")this.actions.portraits?.(); this.markVisibleActivity(); }
+  private navigate(app: App | "Home"): void { this.rememberPosition(); if(app==="Home"){this.selectedContact=null;this.locationOrigin=null;} this.app = app!=="Home"&&!this.doc?.settings.apps[app]?"Home":app; this.editing = false; this.render();if(app==="Contacts"||app==="Messages")this.actions.portraits?.(); this.markVisibleActivity(); }
   private render(): void {
+    const viewKey=JSON.stringify([this.doc?.chatId,this.app,this.selectedContact,this.selectedText]);if(this.content.dataset.viewKey===viewKey)this.rememberPosition();const restoreTop=this.positions.get(viewKey)??0;this.content.dataset.viewKey=viewKey;
     this.renderDirty=false;
     if(this.app==="Contacts"&&this.selectedContact===null&&this.content.querySelector(".lpt-contact-row"))this.contactScroll=this.content.scrollTop;
     if(this.app==="Messages"&&this.selectedText!==null&&(!this.enabled("messages")||!this.doc||( !this.doc.state.messages.some(m=>threadKey(m)===this.selectedText)&&!this.doc.state.contacts.some(c=>normalize(c.name)===this.selectedText))))this.selectedText=null;
@@ -306,6 +311,8 @@ export class PhoneView {
       notice.append(el("span", "lpt-notice-text", text), button("Dismiss", "lpt-dismiss", () => { void this.change({ dismissNotice: text }); }));
       this.content.append(notice);
     }
+    this.frame.querySelector(".lpt-undo")?.remove();
+    if(this.doc?.undo&&this.doc.undo.revision===this.doc.revision){const undo=el("div","lpt-undo");undo.append(el("span","lpt-help",this.doc.undo.label),button("Undo","lpt-button lpt-undo-button",()=>{void this.change({undo:true});}));this.frame.insertBefore(undo,this.content);}
     this.error.setAttribute("role", "alert"); this.status.setAttribute("aria-live", "polite"); this.content.append(this.error, this.status);
     this.refreshBadges();
     if (replyFocus) {
@@ -314,7 +321,7 @@ export class PhoneView {
       if (input) { input.focus(); input.setSelectionRange(replyFocus.start, replyFocus.end); }
     }
     this.pendingThreadScroll=this.app==="Messages"&&this.selectedText!==null&&(!oldScroll||oldScroll.key!==this.selectedText||oldScroll.bottom);
-    requestAnimationFrame(() => {const list=this.content.querySelector<HTMLElement>(".lpt-text-list");if(list)list.scrollTop=oldScroll?.key===this.selectedText&&!oldScroll.bottom?oldScroll.top:list.scrollHeight;this.pendingThreadScroll=false;this.measure();});
+    requestAnimationFrame(() => {if(this.content.dataset.viewKey===viewKey)this.content.scrollTop=restoreTop;const list=this.content.querySelector<HTMLElement>(".lpt-text-list");if(list)list.scrollTop=oldScroll?.key===this.selectedText&&!oldScroll.bottom?oldScroll.top:list.scrollHeight;this.pendingThreadScroll=false;this.measure();});
   }
   private description(app: App): void {
     const row = el("div", "lpt-description");
@@ -332,7 +339,7 @@ export class PhoneView {
     controls.forEach(control => { control.disabled = true; });
     try {
       const doc = await this.actions.update(change, revision); this.editing = false; this.receive(doc);if(this.renderDirty&&this.openState)this.render();
-      this.setStatus("Saved.");
+      this.setStatus(change.undo?"Last change undone.":change.mergeContacts?"Contacts merged.":change.edit?`${({scene:"Scene",weather:"Weather",contact:"Contact",location:"Location",note:"Note",call:"Call",email:"Email",bank:"Account",transaction:"Transaction"} as Record<string,string>)[change.edit.target??""]??"Tracker"} ${change.edit.remove?"deleted":"updated"}.`:change.contactInfo||change.portrait?"Contact updated.":change.fieldControl?"Field protection updated.":change.settings?"Settings saved.":"Tracker updated.");
       return "saved";
     } catch (e) {
       this.setStatus("");
@@ -409,7 +416,7 @@ export class PhoneView {
       }
       if (cell.value.length) b.append(list); else { const emptyBtn = el("button", "lpt-field-value lpt-present-empty", "No one listed. Tap to add."); emptyBtn.type = "button"; emptyBtn.addEventListener("click", openEdit); b.append(emptyBtn); }
     } else {
-      let text = valueText(cell) || "Not established yet. Tap to add.";
+      let text = valueText(cell) || "Not established in the story. Tap to add.";
       if (key === "roles" && Array.isArray(cell?.value)) text = cell.value.join(" / ") || "No roles listed.";
       b.append(el("span", "lpt-field-value", text));
       const v = cell?.value;
@@ -500,7 +507,7 @@ export class PhoneView {
         const label=el("span","lpt-weather-condition-label",condition.label);
         renderEmojiText(label,condition.label);
         edit.append(icon,label);
-      }else edit.append(el("span","lpt-weather-condition-label","Add condition"));
+      }else edit.append(el("span","lpt-weather-condition-label","Condition not established"));
       const marker=marked(doc.state.weather);
       if(marker)edit.append(el("span","lpt-marker",marker));
       hero.append(edit);

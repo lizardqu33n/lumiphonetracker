@@ -3,6 +3,10 @@ import { execFileSync } from "node:child_process";
 
 // Include an explicit allowlist; never package dependencies or personal inputs.
 const files = [
+ "AGENTS.md",
+ "scripts/check-usability.ts",
+ "src/manual-undo.ts", "tests/usability.test.ts",
+  "scripts/check-profile-permissions.ts",
   "scripts/benchmark-lightweight.ts", "src/performance.ts", "tests/lightweight-store.test.ts", "tests/no-prompt-macros.test.ts", "docs/PERFORMANCE.md",
   "dist/backend-no-macros.js",
   "scripts/check-candidate.ts",

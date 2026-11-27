@@ -3,17 +3,21 @@ import { ALL_APPS, SWITCHES, defaults, readSettings, type Settings } from "./mod
 import { isRecord } from "./shared";
 export const SYNTAX_TOKEN = "[[phone_syntax]]";
 export type WordingTarget = "main" | "helper";
-export type PresetSettings = Pick<Settings,"apps"|"enabled"|"notesPerSection"|"logLines"|"keepTrackers"|"keepTexts">;
+export type PresetSettings = Pick<Settings,"apps"|"enabled"|"notesPerSection"|"logLines"|"keepTrackers"|"keepTexts"> & Partial<Pick<Settings,"aiPlayerTexts"|"allowAIUserEdits">>;
 export interface SettingsPreset { id:string; name:string; settings:PresetSettings }
 export interface PromptWording { id:string; name:string; text:string }
-export interface PersonalSettings { revision:number; presets:SettingsPreset[]; wordings:Record<WordingTarget,PromptWording[]>; selected:Record<WordingTarget,string> }
-export const emptyPersonal=():PersonalSettings=>({revision:0,presets:[],wordings:{main:[],helper:[]},selected:{main:"default",helper:"default"}});
-export const presetSnapshot=(s:Settings):PresetSettings=>({apps:{...s.apps},enabled:{...s.enabled},notesPerSection:s.notesPerSection,logLines:s.logLines,keepTrackers:s.keepTrackers,keepTexts:s.keepTexts});
+export interface PersonalSettings { autoStartNewChats:boolean;autoStartSince:number;revision:number; presets:SettingsPreset[]; wordings:Record<WordingTarget,PromptWording[]>; selected:Record<WordingTarget,string> }
+export const emptyPersonal=():PersonalSettings=>({autoStartNewChats:false,autoStartSince:0,revision:0,presets:[],wordings:{main:[],helper:[]},selected:{main:"default",helper:"default"}});
+export const presetSnapshot=(s:Settings):PresetSettings=>({apps:{...s.apps},enabled:{...s.enabled},notesPerSection:s.notesPerSection,logLines:s.logLines,keepTrackers:s.keepTrackers,keepTexts:s.keepTexts,aiPlayerTexts:s.aiPlayerTexts,allowAIUserEdits:s.allowAIUserEdits});
 export function validatePreset(value:unknown):PresetSettings {
- if(!isRecord(value)||Object.keys(value).sort().join()!==["apps","enabled","notesPerSection","logLines","keepTrackers","keepTexts"].sort().join())throw Error("Invalid preset");
+ const required=["apps","enabled","notesPerSection","logLines","keepTrackers","keepTexts"],optional=["aiPlayerTexts","allowAIUserEdits"];
+ if(!isRecord(value)||required.some(k=>!Object.hasOwn(value,k))||Object.keys(value).some(k=>![...required,...optional].includes(k))||optional.some(k=>Object.hasOwn(value,k)&&typeof value[k]!=="boolean"))throw Error("Invalid preset");
  const apps=value.apps,enabled=value.enabled;
  if(!isRecord(apps)||ALL_APPS.some(k=>typeof apps[k]!=="boolean")||!isRecord(enabled)||SWITCHES.some(k=>typeof enabled[k]!=="boolean"&&!(enabled[k]===undefined&&([...WEATHER_EXTRAS,"weather.temperature"] as readonly string[]).includes(k))))throw Error("Invalid preset");
- return presetSnapshot(readSettings(value));
+ const settings=presetSnapshot(readSettings(value));
+ // Legacy profiles never recorded these permissions. Keep their previous apply behavior.
+ for(const key of ["aiPlayerTexts","allowAIUserEdits"] as const)if(!Object.hasOwn(value,key))delete settings[key];
+ return settings;
 }
 export function builtInPresets():SettingsPreset[] {
  const minimal=defaults();for(const app of ALL_APPS)minimal.apps[app]=["Scene","Weather","Messages"].includes(app);
@@ -24,6 +28,7 @@ function target(value:unknown):WordingTarget {if(value!=="main"&&value!=="helper
 export const validWording=(value:unknown):value is string=>typeof value==="string"&&!!value.trim()&&value.length<=4000;
 export function readPersonal(value:unknown,warn:(s:string)=>void=()=>{}):PersonalSettings {
  const out=emptyPersonal();if(!isRecord(value))return out;
+ out.autoStartNewChats=value.autoStartNewChats===true;out.autoStartSince=typeof value.autoStartSince==="number"&&Number.isFinite(value.autoStartSince)?Math.max(0,value.autoStartSince):0;
  out.revision=Number.isSafeInteger(value.revision)&&Number(value.revision)>=0?Number(value.revision):0;
  if(Array.isArray(value.presets))for(const p of value.presets.slice(0,20))try {if(!isRecord(p)||typeof p.id!=="string"||["default","minimal"].includes(p.id)||out.presets.some(x=>x.id===p.id))throw Error();out.presets.push({id:p.id,name:name(p.name),settings:validatePreset(p.settings)});}catch{warn("Lumi Phone Tracker: invalid saved preset ignored.");}
  for(const t of ["main","helper"] as const) {
@@ -47,6 +52,8 @@ export class PersonalStore {
   const p=readPersonal(await this.io.read(user),this.io.warn);if(p.revision!==revision&&!(isRecord(change)&&change.kind==="wording_select"&&change.id==="default"))throw Error("Your saved choices changed. Reopen this section.");
   if(!isRecord(change))throw Error("Invalid change");
   if(change.kind==="preset_save") {if(!snapshot)throw Error("Open a chat first.");if(p.presets.length>=20)throw Error("You can save up to 20 presets.");const title=name(change.name);if([...builtInPresets(),...p.presets].some(x=>x.name.toLowerCase()===title.toLowerCase()))throw Error("Choose a different name.");p.presets.push({id:crypto.randomUUID(),name:title,settings:presetSnapshot(snapshot)});}
+  else if(change.kind==="auto_start"){if(typeof change.value!=="boolean")throw Error("Invalid change");if(change.value&&!p.autoStartNewChats)p.autoStartSince=Math.floor(Date.now()/1000);p.autoStartNewChats=change.value;}
+  else if(change.kind==="preset_update"){if(!snapshot)throw Error("Open a chat first.");const item=p.presets.find(x=>x.id===change.id);if(!item)throw Error("Built-in presets are read-only.");item.settings=presetSnapshot(snapshot);}
   else if(change.kind==="preset_rename"||change.kind==="preset_delete") {const i=p.presets.findIndex(x=>x.id===change.id);if(i<0)throw Error("Built-in presets are read-only.");if(change.kind==="preset_delete")p.presets.splice(i,1);else{const title=name(change.name);if([...builtInPresets(),...p.presets].some(x=>x.id!==change.id&&x.name.toLowerCase()===title.toLowerCase()))throw Error("Choose a different name.");p.presets[i].name=title;}}
   else if(change.kind==="wording_select") {const t=target(change.target);if(change.id!=="default"&&!p.wordings[t].some(w=>w.id===change.id))throw Error("Wording not found.");p.selected[t]=String(change.id);}
   else if(change.kind==="wording_save") {const t=target(change.target);if(!validWording(change.text)){this.io.warn("Lumi Phone Tracker: invalid prompt wording; using Default.");p.selected[t]="default";}else{const title=name(change.name);const old=p.wordings[t].find(w=>w.id===change.id);if(change.id==="default")throw Error("Default wording is read-only. Copy it first.");if(p.wordings[t].some(w=>w.id!==change.id&&w.name.toLowerCase()===title.toLowerCase())||title.toLowerCase()==="default")throw Error("Choose a different name.");if(old){old.name=title;old.text=change.text;}else{if(p.wordings.main.length+p.wordings.helper.length>=10)throw Error("You can save up to 10 custom wordings.");const w={id:crypto.randomUUID(),name:title,text:change.text};p.wordings[t].push(w);p.selected[t]=w.id;}}}
@@ -57,3 +64,14 @@ export class PersonalStore {
 }
 
 export interface PersonalReply {personal:PersonalSettings;templates:Record<WordingTarget,string>;preview?:{text:string;characters:number;tokenEstimate:number;warning:string};snapshot?:import("./ui-snapshot").PhoneSnapshot}
+
+export function profileChanges(current:Settings,profile:PresetSettings):string[]{
+ const changes:string[]=[];
+ for(const app of ALL_APPS)if(current.apps[app]!==profile.apps[app])changes.push(`${profile.apps[app]?"Adds":"Hides"} ${app}`);
+ const labels:Record<string,string>={present:"Who is present",physical:"Physical status",position:"Position",roles:"Roles",attire:"Attire",thoughts:"Inner thoughts",items:"Key items",people:"People",misc:"Misc",keepTrackers:"Tracker retention",keepTexts:"Recent texts",notesPerSection:"Notes per section",logLines:"AI log lines"};
+ for(const key of SWITCHES)if(current.enabled[key]!==profile.enabled[key]){const [app,field]=key.split(".");changes.push(`${profile.enabled[key]?"Enables":"Disables"} ${labels[field??app]??((field??app).charAt(0).toUpperCase()+(field??app).slice(1))}${field?` (${app.charAt(0).toUpperCase()+app.slice(1)})`:""}`);}
+ for(const key of ["notesPerSection","logLines","keepTrackers","keepTexts"] as const)if(current[key]!==profile[key])changes.push(`${labels[key]}: ${profile[key]}`);
+ if(profile.aiPlayerTexts!==undefined&&current.aiPlayerTexts!==profile.aiPlayerTexts)changes.push(profile.aiPlayerTexts?"Allows AI-written texts, calls and emails for your character":"Stops AI writing for your character");
+ if(profile.allowAIUserEdits!==undefined&&current.allowAIUserEdits!==profile.allowAIUserEdits)changes.push(profile.allowAIUserEdits?"Allows AI changes to fields you edited":"Protects your edited fields");
+ return changes;
+}

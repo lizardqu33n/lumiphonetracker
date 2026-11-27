@@ -51,6 +51,7 @@ const messageReads = new MessageReads({
 });
 
 const store = new PhoneStore({
+  startNewChat:async(chat,user)=>{const p=await personal.read(user);if(!p.autoStartNewChats)return false;const c=await spindle.chats.get(chat,user);return !!c&&c.id===chat&&Number.isFinite(c.created_at)&&c.created_at>=p.autoStartSince;},
   names:(chat,user)=>atOperation("card.names",()=>cardNames(spindle,chat,user)),
   warn: text => warn(text),
   performance:sample=>{try{spindle.log.info(performanceLine(sample));}catch{}},
@@ -136,7 +137,7 @@ spindle.onFrontendMessage((payload, userId) => {
         snapshot=await store.update(userId,doc.chatId,Number(payload.chatRevision),{settings:preset.settings});
         doc=snapshot as typeof doc;
       } else if(change!==undefined&&(!isRecord(change)||change.kind!=="preview")) {
-        if(isRecord(change)&&change.kind==="preset_save"&&(!doc||doc.revision!==payload.chatRevision))throw Error("The chat changed. Reopen it first.");
+        if(isRecord(change)&&["preset_save","preset_update"].includes(String(change.kind))&&(!doc||doc.revision!==payload.chatRevision))throw Error("The chat changed. Reopen it first.");
         value=await personal.update(userId,Number(payload.revision),change,doc?.settings);
       }
       let preview:unknown;
@@ -150,7 +151,7 @@ spindle.onFrontendMessage((payload, userId) => {
         preview={text:output,characters:output.length,tokenEstimate:Math.ceil(output.length/4),warning:note};
       }
       const base=doc??emptyDocument("");
-      secondaryReply("phone_personal",{type:"phone_personal_result",requestId:payload.requestId,chatId,personal:value,templates:{main:defaultWordingTemplate(base),helper:""},snapshot:snapshot?phoneSnapshot(snapshot as import("./model").Document):undefined,preview},userId);
+      secondaryReply("phone_personal",{type:"phone_personal_result",requestId:payload.requestId,chatId,personal:value,templates:{main:defaultWordingTemplate(base),helper:""},snapshot:snapshot?phoneSnapshot(snapshot as import("./model").Document,userId):undefined,preview},userId);
     })().catch(error=>secondaryFailure("phone_personal","personal.request",error,{type:"phone_personal_error",requestId:payload.requestId,message:"Could not save. Check the name, limits and current chat; then try again."},userId));return;
   }
   if(isRecord(payload)&&payload.type==="phone_portraits"&&typeof payload.chatId==="string"&&payload.chatId.length<=256&&typeof payload.requestId==="string"&&payload.requestId.length<=100){
@@ -214,7 +215,7 @@ spindle.onFrontendMessage((payload, userId) => {
     if(isRecord(payload.settings)&&payload.settings.source==="helper")throw Error("Automatic connection tracking was removed.");
     stage=payload.type === "phone_update"?"tracker.update":"tracker.open";
     let snapshot = await store.update(userId, chatId,
-      typeof payload.revision === "number" ? payload.revision : -1, { trackingEnabled:payload.trackingEnabled, settings: payload.settings, edit: payload.edit, dismissNotice: payload.dismissNotice,portrait:payload.portrait,contactInfo:payload.contactInfo,fieldControl:payload.fieldControl,mergeContacts:payload.mergeContacts });
+      typeof payload.revision === "number" ? payload.revision : -1, { undo:payload.undo,trackingEnabled:payload.trackingEnabled, settings: payload.settings, edit: payload.edit, dismissNotice: payload.dismissNotice,portrait:payload.portrait,contactInfo:payload.contactInfo,fieldControl:payload.fieldControl,mergeContacts:payload.mergeContacts });
     committed=payload.type==="phone_update";
     if(payload.type==="phone_update") {
       if(payload.trackingEnabled===true)snapshot=await store.sync(userId,chatId);
@@ -224,7 +225,7 @@ spindle.onFrontendMessage((payload, userId) => {
     stage="chat.metadata";
     const chatName=(await spindle.chats.get(chatId,userId))?.name??"";
     stage="frontend.notify";
-    spindle.sendToFrontend({ type: "phone_snapshot", requestId, chatId, chatName, snapshot:phoneSnapshot(snapshot), reads:snapshotReads(reads,phoneSnapshot(snapshot)), helperBusy:false }, userId);
+    spindle.sendToFrontend({ type: "phone_snapshot", requestId, chatId, chatName, snapshot:phoneSnapshot(snapshot,userId), reads:snapshotReads(reads,phoneSnapshot(snapshot,userId)), helperBusy:false }, userId);
   })().catch(error => {
     const reason = error instanceof Error ? error.message : "";
     const known = ["Invalid contact details", "Reopen this contact.", "Outgoing player entries need", "This app is full.", "An account with that name", "The tracker changed.", "The story changed.", "This section is full.", "Contacts is full", "Locations is full", "A contact with that name", "A place with that name", "A note with that name"];

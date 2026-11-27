@@ -88,7 +88,7 @@ export class Sidebar {
             return;
         this.doc = doc;
         if (doc.settings.source === "main")
-        this.status.textContent = "Saved.";
+        this.status.textContent = "Settings saved.";
     }
     catch (error) {
         if (epoch === this.epoch) {
@@ -224,7 +224,7 @@ export class Sidebar {
             if(this.doc.settings.allowAIUserEdits)advanced.append(node("p","lpt-side-help lpt-edit-warning","Warning: AI updates can replace your edited fields. Use a field lock to keep a value fixed."));
             this.toggle(advanced, "inferMissing", "Let the AI fill in missing details", "Off by default. New inferred contact values are marked.", this.doc.settings.inferMissing, on => ({ inferMissing: on }));
         }
-        advanced.append(this.personal.wording);
+        advanced.append(this.personal.defaults,this.personal.wording);
         this.status.setAttribute("role", "status");
         this.status.setAttribute("aria-live", "polite");
         this.root.append(this.status);
