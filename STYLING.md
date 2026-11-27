@@ -1018,3 +1018,14 @@ Home artwork: `.lpt-home-image` is the embedded house image inside `.lpt-softkey
 | `.lpt-tx-avatar` | Transaction decorative badge. |
 | `.lpt-tx-hero` | Transaction description and amount. |
 | `.lpt-tx-time` | Stated transaction time. |
+
+### Usability controls
+
+| Class | Purpose |
+| --- | --- |
+| `.lpt-undo` | Compact last-change Undo row above scrolling app content. Uses existing spacing, card-background and radius variables. |
+| `.lpt-undo-button` | Undo action; follows existing button styling. |
+| `.lpt-personal-defaults` | Personal new-chat defaults inside Advanced. |
+| `.lpt-personal-auto-start` | Off-by-default checkbox for starting tracking in new chats. |
+
+Profile change summaries and permission states use the existing `.lpt-preset-confirm` and `.lpt-side-help` classes.

@@ -1572,6 +1572,23 @@ class PhoneView {
   app = "Home";
   openState = false;
   renderDirty = true;
+  positions = new Map;
+  lastApps = new Map;
+  rememberPosition() {
+    const key = this.content.dataset.viewKey;
+    if (key && this.openState && !this.frame.hidden) {
+      this.positions.delete(key);
+      this.positions.set(key, this.content.scrollTop);
+      while (this.positions.size > 256)
+        this.positions.delete(this.positions.keys().next().value);
+    }
+    if (this.doc) {
+      this.lastApps.delete(this.doc.chatId);
+      this.lastApps.set(this.doc.chatId, this.app);
+      while (this.lastApps.size > 32)
+        this.lastApps.delete(this.lastApps.keys().next().value);
+    }
+  }
   displayKey = "";
   editing = false;
   busy = false;
@@ -1646,7 +1663,7 @@ class PhoneView {
         this.receiveReads(reads);
       return;
     }
-    const key = JSON.stringify([doc?.chatId, doc?.trackingEnabled, doc?.settings, doc?.state, doc?.fieldLocks, doc?.contactInfo, doc?.portraits, doc?.currentPlayer, doc?.playerNames]);
+    const key = JSON.stringify([doc?.chatId, doc?.trackingEnabled, doc?.settings, doc?.state, doc?.fieldLocks, doc?.contactInfo, doc?.portraits, doc?.currentPlayer, doc?.playerNames, doc?.undo]);
     const displayChanged = key !== this.displayKey;
     this.displayKey = key;
     const changedChat = doc?.chatId !== this.doc?.chatId;
@@ -1659,6 +1676,8 @@ class PhoneView {
     const oldActivities = new Set([...this.doc?.state.calls ?? [], ...this.doc?.state.emails ?? []].map((e) => activityReceipt(e)));
     const previous = new Set(this.doc?.state.messages.filter((m) => m.direction === "incoming").map((m) => JSON.stringify([m.id, receipt(m)])) ?? []);
     const arrived = doc?.trackingEnabled !== false && !changedChat && this.doc && doc?.settings.apps.Messages && doc.settings.enabled.messages ? doc.state.messages.filter((m) => m.direction === "incoming" && !previous.has(JSON.stringify([m.id, receipt(m)]))) : [];
+    if (changedChat)
+      this.rememberPosition();
     this.doc = doc;
     if (doc?.trackingEnabled === false)
       this.app = "Home";
@@ -1682,7 +1701,9 @@ class PhoneView {
       this.manualDrafts.clear();
       this.clearTextNotice();
       this.editing = false;
-      this.app = "Home";
+      this.app = doc ? this.lastApps.get(doc.chatId) ?? "Home" : "Home";
+      if (this.app !== "Home" && (!doc?.settings.apps[this.app] || doc.trackingEnabled === false))
+        this.app = "Home";
       this.selectedText = null;
     } else if (reads && reads.revision >= this.reads.revision)
       this.reads = reads;
@@ -1820,6 +1841,7 @@ class PhoneView {
     this.back.hidden ? this.frame.querySelector(".lpt-app-button, .lpt-close")?.focus() : this.back.focus();
   }
   close() {
+    this.rememberPosition();
     this.setOpen(false);
     this.launcher.focus();
   }
@@ -1860,6 +1882,7 @@ class PhoneView {
     this.actions.size(Math.max(48, width), Math.max(48, this.openState ? height : closedHeight), this.openState);
   }
   navigate(app) {
+    this.rememberPosition();
     if (app === "Home") {
       this.selectedContact = null;
       this.locationOrigin = null;
@@ -1867,12 +1890,16 @@ class PhoneView {
     this.app = app !== "Home" && !this.doc?.settings.apps[app] ? "Home" : app;
     this.editing = false;
     this.render();
-    this.content.scrollTop = 0;
     if (app === "Contacts" || app === "Messages")
       this.actions.portraits?.();
     this.markVisibleActivity();
   }
   render() {
+    const viewKey = JSON.stringify([this.doc?.chatId, this.app, this.selectedContact, this.selectedText]);
+    if (this.content.dataset.viewKey === viewKey)
+      this.rememberPosition();
+    const restoreTop = this.positions.get(viewKey) ?? 0;
+    this.content.dataset.viewKey = viewKey;
     this.renderDirty = false;
     if (this.app === "Contacts" && this.selectedContact === null && this.content.querySelector(".lpt-contact-row"))
       this.contactScroll = this.content.scrollTop;
@@ -2043,6 +2070,14 @@ class PhoneView {
         }));
         this.content.append(notice);
       }
+    this.frame.querySelector(".lpt-undo")?.remove();
+    if (this.doc?.undo && this.doc.undo.revision === this.doc.revision) {
+      const undo = el("div", "lpt-undo");
+      undo.append(el("span", "lpt-help", this.doc.undo.label), button("Undo", "lpt-button lpt-undo-button", () => {
+        this.change({ undo: true });
+      }));
+      this.frame.insertBefore(undo, this.content);
+    }
     this.error.setAttribute("role", "alert");
     this.status.setAttribute("aria-live", "polite");
     this.content.append(this.error, this.status);
@@ -2057,6 +2092,8 @@ class PhoneView {
     }
     this.pendingThreadScroll = this.app === "Messages" && this.selectedText !== null && (!oldScroll || oldScroll.key !== this.selectedText || oldScroll.bottom);
     requestAnimationFrame(() => {
+      if (this.content.dataset.viewKey === viewKey)
+        this.content.scrollTop = restoreTop;
       const list = this.content.querySelector(".lpt-text-list");
       if (list)
         list.scrollTop = oldScroll?.key === this.selectedText && !oldScroll.bottom ? oldScroll.top : list.scrollHeight;
@@ -2097,7 +2134,7 @@ class PhoneView {
       this.receive(doc);
       if (this.renderDirty && this.openState)
         this.render();
-      this.setStatus("Saved.");
+      this.setStatus(change.undo ? "Last change undone." : change.mergeContacts ? "Contacts merged." : change.edit ? `${{ scene: "Scene", weather: "Weather", contact: "Contact", location: "Location", note: "Note", call: "Call", email: "Email", bank: "Account", transaction: "Transaction" }[change.edit.target ?? ""] ?? "Tracker"} ${change.edit.remove ? "deleted" : "updated"}.` : change.contactInfo || change.portrait ? "Contact updated." : change.fieldControl ? "Field protection updated." : change.settings ? "Settings saved." : "Tracker updated.");
       return "saved";
     } catch (e) {
       this.setStatus("");
@@ -2235,7 +2272,7 @@ class PhoneView {
         b.append(emptyBtn);
       }
     } else {
-      let text = valueText(cell) || "Not established yet. Tap to add.";
+      let text = valueText(cell) || "Not established in the story. Tap to add.";
       if (key === "roles" && Array.isArray(cell?.value))
         text = cell.value.join(" / ") || "No roles listed.";
       b.append(el("span", "lpt-field-value", text));
@@ -2383,7 +2420,7 @@ class PhoneView {
         renderEmojiText(label, condition.label);
         edit.append(icon, label);
       } else
-        edit.append(el("span", "lpt-weather-condition-label", "Add condition"));
+        edit.append(el("span", "lpt-weather-condition-label", "Condition not established"));
       const marker = marked(doc.state.weather);
       if (marker)
         edit.append(el("span", "lpt-marker", marker));
@@ -6419,6 +6456,9 @@ var styles_default = `/* =======================================================
 .lpt-root { --lpt-home-icon-size: 32px; }
 .lpt-root .lpt-softkey-home { padding: 0; min-width: 44px; min-height: 44px; display: inline-grid; place-items: center; }
 .lpt-root .lpt-home-image { width: var(--lpt-home-icon-size); height: var(--lpt-home-icon-size); object-fit: contain; flex: none; }
+
+/* Last manual change: compact undo within app content. */
+.lpt-undo {display:flex;align-items:center;justify-content:space-between;gap:var(--lpt-space);padding:var(--lpt-space);background:var(--lpt-card-bg);border-radius:var(--lpt-radius);}
 `;
 
 // src/message-reads.ts
@@ -6732,15 +6772,20 @@ class SetupView {
 
 // src/personal-settings.ts
 var SYNTAX_TOKEN = "[[phone_syntax]]";
-var emptyPersonal = () => ({ revision: 0, presets: [], wordings: { main: [], helper: [] }, selected: { main: "default", helper: "default" } });
-var presetSnapshot = (s) => ({ apps: { ...s.apps }, enabled: { ...s.enabled }, notesPerSection: s.notesPerSection, logLines: s.logLines, keepTrackers: s.keepTrackers, keepTexts: s.keepTexts });
+var emptyPersonal = () => ({ autoStartNewChats: false, autoStartSince: 0, revision: 0, presets: [], wordings: { main: [], helper: [] }, selected: { main: "default", helper: "default" } });
+var presetSnapshot = (s) => ({ apps: { ...s.apps }, enabled: { ...s.enabled }, notesPerSection: s.notesPerSection, logLines: s.logLines, keepTrackers: s.keepTrackers, keepTexts: s.keepTexts, aiPlayerTexts: s.aiPlayerTexts, allowAIUserEdits: s.allowAIUserEdits });
 function validatePreset(value) {
-  if (!isRecord(value) || Object.keys(value).sort().join() !== ["apps", "enabled", "notesPerSection", "logLines", "keepTrackers", "keepTexts"].sort().join())
+  const required = ["apps", "enabled", "notesPerSection", "logLines", "keepTrackers", "keepTexts"], optional = ["aiPlayerTexts", "allowAIUserEdits"];
+  if (!isRecord(value) || required.some((k) => !Object.hasOwn(value, k)) || Object.keys(value).some((k) => ![...required, ...optional].includes(k)) || optional.some((k) => Object.hasOwn(value, k) && typeof value[k] !== "boolean"))
     throw Error("Invalid preset");
   const { apps, enabled } = value;
   if (!isRecord(apps) || ALL_APPS.some((k) => typeof apps[k] !== "boolean") || !isRecord(enabled) || SWITCHES.some((k) => typeof enabled[k] !== "boolean" && !(enabled[k] === undefined && [...WEATHER_EXTRAS, "weather.temperature"].includes(k))))
     throw Error("Invalid preset");
-  return presetSnapshot(readSettings(value));
+  const settings = presetSnapshot(readSettings(value));
+  for (const key of ["aiPlayerTexts", "allowAIUserEdits"])
+    if (!Object.hasOwn(value, key))
+      delete settings[key];
+  return settings;
 }
 function builtInPresets() {
   const minimal = defaults();
@@ -6758,6 +6803,8 @@ function readPersonal(value, warn = () => {}) {
   const out = emptyPersonal();
   if (!isRecord(value))
     return out;
+  out.autoStartNewChats = value.autoStartNewChats === true;
+  out.autoStartSince = typeof value.autoStartSince === "number" && Number.isFinite(value.autoStartSince) ? Math.max(0, value.autoStartSince) : 0;
   out.revision = Number.isSafeInteger(value.revision) && Number(value.revision) >= 0 ? Number(value.revision) : 0;
   if (Array.isArray(value.presets))
     for (const p of value.presets.slice(0, 20))
@@ -6789,6 +6836,26 @@ function readPersonal(value, warn = () => {}) {
   }
   return out;
 }
+function profileChanges(current, profile) {
+  const changes = [];
+  for (const app of ALL_APPS)
+    if (current.apps[app] !== profile.apps[app])
+      changes.push(`${profile.apps[app] ? "Adds" : "Hides"} ${app}`);
+  const labels = { present: "Who is present", physical: "Physical status", position: "Position", roles: "Roles", attire: "Attire", thoughts: "Inner thoughts", items: "Key items", people: "People", misc: "Misc", keepTrackers: "Tracker retention", keepTexts: "Recent texts", notesPerSection: "Notes per section", logLines: "AI log lines" };
+  for (const key of SWITCHES)
+    if (current.enabled[key] !== profile.enabled[key]) {
+      const [app, field] = key.split(".");
+      changes.push(`${profile.enabled[key] ? "Enables" : "Disables"} ${labels[field ?? app] ?? (field ?? app).charAt(0).toUpperCase() + (field ?? app).slice(1)}${field ? ` (${app.charAt(0).toUpperCase() + app.slice(1)})` : ""}`);
+    }
+  for (const key of ["notesPerSection", "logLines", "keepTrackers", "keepTexts"])
+    if (current[key] !== profile[key])
+      changes.push(`${labels[key]}: ${profile[key]}`);
+  if (profile.aiPlayerTexts !== undefined && current.aiPlayerTexts !== profile.aiPlayerTexts)
+    changes.push(profile.aiPlayerTexts ? "Allows AI-written texts, calls and emails for your character" : "Stops AI writing for your character");
+  if (profile.allowAIUserEdits !== undefined && current.allowAIUserEdits !== profile.allowAIUserEdits)
+    changes.push(profile.allowAIUserEdits ? "Allows AI changes to fields you edited" : "Protects your edited fields");
+  return changes;
+}
 
 // src/personal-controls.ts
 var el3 = (tag, cls, text) => {
@@ -6801,6 +6868,7 @@ var el3 = (tag, cls, text) => {
 
 class PersonalControls {
   request;
+  defaults = el3("div", "lpt-personal-defaults");
   presets = el3("div", "lpt-personal-presets");
   wording = el3("details", "lpt-wording");
   p = emptyPersonal();
@@ -6888,11 +6956,23 @@ class PersonalControls {
         this.note = result.preview.warning;
       } else {
         this.choose();
-        this.error = "Saved.";
+        this.error = "Saved choices updated.";
+        if (change.kind === "auto_start")
+          this.error = "New-chat preference saved.";
+        if (change.kind === "preset_update")
+          this.error = "Profile updated.";
+        if (change.kind === "preset_rename")
+          this.error = "Profile renamed.";
+        if (change.kind === "preset_delete")
+          this.error = "Profile deleted.";
+        if (change.kind === "wording_save")
+          this.error = "Wording saved.";
         if (change.kind === "preset_apply")
           this.error = "Applied to this chat.";
-        if (change.kind === "preset_save")
+        if (change.kind === "preset_save") {
           this.preset = this.p.presets.at(-1)?.id ?? "default";
+          this.error = "Profile saved.";
+        }
         if (change.kind === "wording_save" && !validWording(change.text))
           this.error = "Invalid wording. Default is in use.";
       }
@@ -6932,7 +7012,16 @@ class PersonalControls {
   render() {
     this.presets.replaceChildren();
     this.wording.replaceChildren();
-    this.presets.append(el3("p", "lpt-side-help", "Up to 20 settings profiles, saved for you. Applying a profile changes only this chat's switches and limits. Story data stays, including hidden apps."));
+    this.defaults.replaceChildren();
+    const autoLabel = el3("label", "lpt-personal-label", "Always start tracker in new chats · All my chats"), auto = el3("input", "lpt-personal-auto-start");
+    auto.type = "checkbox";
+    auto.checked = this.p.autoStartNewChats;
+    auto.disabled = this.pending || !this.loaded;
+    auto.setAttribute("aria-label", "Always start tracker in new chats");
+    auto.addEventListener("change", () => void this.run({ kind: "auto_start", value: auto.checked }));
+    autoLabel.prepend(auto);
+    this.defaults.append(autoLabel, el3("p", "lpt-side-help", "Off by default. Turning off one chat keeps it off; this preference still applies to future chats."));
+    this.presets.append(el3("p", "lpt-side-help", "Up to 20 settings profiles, saved for you. Applying a profile changes only this chat's switches, limits and saved AI permissions. Story data stays, including hidden apps."));
     const row = el3("div", "lpt-personal-row"), select = el3("select", "lpt-personal-select");
     select.setAttribute("aria-label", "Settings profile");
     for (const p of [...builtInPresets(), ...this.p.presets]) {
@@ -6960,6 +7049,15 @@ class PersonalControls {
     if (this.confirm) {
       const box = el3("div", "lpt-preset-confirm");
       box.append(el3("p", "lpt-side-help", "Apply this settings profile to the current chat? Story data will stay."));
+      const selected = [...builtInPresets(), ...this.p.presets].find((p) => p.id === this.preset);
+      if (selected) {
+        if (this.doc) {
+          const changes = profileChanges(this.doc.settings, selected.settings);
+          box.append(el3("p", "lpt-side-help", changes.length ? changes.slice(0, 6).join("; ") + (changes.length > 6 ? `; and ${changes.length - 6} other changes.` : ".") : "No setting changes."));
+        }
+        const state = (value) => value === undefined ? "unchanged" : value ? "on" : "off";
+        box.append(el3("p", "lpt-side-help", `AI writing texts, calls and emails for your character: ${state(selected.settings.aiPlayerTexts)}. AI changes to fields you edited: ${state(selected.settings.allowAIUserEdits)}. Field locks stay protected.`));
+      }
       this.button(box, "Apply to this chat", () => {
         this.confirm = false;
         this.run({ kind: "preset_apply", id: this.preset, confirm: true });
@@ -6973,6 +7071,7 @@ class PersonalControls {
     this.input(this.presets, "Profile name", this.presetName, (v) => this.presetName = v);
     const actions = el3("div", "lpt-personal-row");
     this.presets.append(actions);
+    this.button(actions, "Save changes", () => void this.run({ kind: "preset_update", id: this.preset }), !this.doc || ["default", "minimal"].includes(this.preset));
     this.button(actions, "Save current as...", () => void this.run({ kind: "preset_save", name: this.presetName }), !this.doc || this.p.presets.length >= 20);
     const builtin = ["default", "minimal"].includes(this.preset);
     this.button(actions, "Rename", () => void this.run({ kind: "preset_rename", id: this.preset, name: this.presetName }), builtin);
@@ -7199,7 +7298,7 @@ class Sidebar {
         return;
       this.doc = doc;
       if (doc.settings.source === "main")
-        this.status.textContent = "Saved.";
+        this.status.textContent = "Settings saved.";
     } catch (error) {
       if (epoch === this.epoch) {
         const conflict = typeof error === "object" && error !== null && error.conflict === true || error instanceof Error && /^The (tracker|story) changed\./.test(error.message);
@@ -7437,7 +7536,7 @@ class Sidebar {
         advanced.append(node("p", "lpt-side-help lpt-edit-warning", "Warning: AI updates can replace your edited fields. Use a field lock to keep a value fixed."));
       this.toggle(advanced, "inferMissing", "Let the AI fill in missing details", "Off by default. New inferred contact values are marked.", this.doc.settings.inferMissing, (on) => ({ inferMissing: on }));
     }
-    advanced.append(this.personal.wording);
+    advanced.append(this.personal.defaults, this.personal.wording);
     this.status.setAttribute("role", "status");
     this.status.setAttribute("aria-live", "polite");
     this.root.append(this.status);

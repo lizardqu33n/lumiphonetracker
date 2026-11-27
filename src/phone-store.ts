@@ -1,3 +1,4 @@
+import {makeUndo,readUndo,restoreUndo,changeLabel} from "./manual-undo";
 import {Buffer} from "node:buffer";
 import {fingerprint,jsonBytes,type PerformanceSample} from "./performance";
 import {phoneSnapshot,type PhoneSnapshot} from "./ui-snapshot";
@@ -20,6 +21,7 @@ import { SkipLogger } from "./diagnostics";
 
 export const DOCUMENT_KEY = "lpt_phone_v2";
 export interface PhoneIO {
+  startNewChat?(chatId:string,userId:string):Promise<boolean>;
   authorize(chatId: string, userId: string): Promise<boolean>;
   read(chatId: string): Promise<string>;
   write(chatId: string, data: string): Promise<void>;
@@ -51,6 +53,7 @@ export function readDocument(raw: string, chatId: string): Document {
   if(value.userEditAdmissions!==undefined){if(!Array.isArray(value.userEditAdmissions)||value.userEditAdmissions.some(x=>typeof x!=="string"))throw Error("Invalid edit admissions");doc.userEditAdmissions=value.userEditAdmissions;}
   if(value.fieldLocks!==undefined){if(!isRecord(value.fieldLocks))throw Error("Invalid field locks");doc.fieldLocks={};for(const [key,on]of Object.entries(value.fieldLocks)){if(typeof on!=="boolean")throw Error("Invalid field lock");const [target,name,section,field]=JSON.parse(key);const r=readFieldRef({target,name:name||undefined,section,field});doc.fieldLocks[fieldKey(r)]=on;}}
   if(value.contactMerges!==undefined){if(!isRecord(value.contactMerges)||Object.keys(value.contactMerges).length>100)throw Error("Invalid merged contacts");doc.contactMerges={};for(const [key,m]of Object.entries(value.contactMerges)){if(!isRecord(m)||typeof m.from!=="string"||typeof m.into!=="string"||normalize(m.from)!==key||normalize(m.from)===normalize(m.into)||!(m.after===null||typeof m.after==="string")||!Number.isInteger(m.index))throw Error("Invalid merged contacts");doc.contactMerges[key]=m as unknown as NonNullable<Document["contactMerges"]>[string];}}if(value.mergeArchive!==undefined){if(!Array.isArray(value.mergeArchive)||value.mergeArchive.length>100)throw Error("Invalid merge history");doc.mergeArchive=value.mergeArchive;}
+  doc.manualUndo=readUndo(value.manualUndo);
   doc.settings = readSettings(value.settings); doc.legacy = value.legacy;
   if (value.helperOwner !== undefined && (typeof value.helperOwner !== "string" || !value.helperOwner)) throw new Error("Invalid helper owner");
   doc.helperOwner = value.helperOwner as string | undefined;
@@ -165,6 +168,7 @@ export class PhoneStore {
     if (!chatId || chatId.length > 256) throw new Error("Missing chat");
     check();const raw = await this.io.read(chatId);check();
     const legacy=!raw&&this.io.legacy?await this.io.legacy(userId,chatPath(chatId)):null;
+    check();if(!raw&&!legacy&&await this.io.startNewChat?.(chatId,userId)){const seed=emptyDocument(chatId);seed.trackingEnabled=true;await this.io.write(chatId,JSON.stringify(seed));return this.build(chatId,userId,check,readOnly);}
     check();if((!raw&&!legacy)||(raw&&JSON.parse(raw).trackingEnabled===false)){const value=raw?JSON.parse(raw):null;const doc=emptyDocument(chatId);if(value){if(value.schema!==2||value.chatId!==chatId||!Number.isSafeInteger(value.revision)||value.revision<0)throw Error("Invalid saved data");doc.revision=value.revision;doc.settings=readSettings(value.settings);}doc.trackingEnabled=false;return {doc,rows:[]};}
     const rows = await this.io.history(chatId);check();
     const player = await this.io.player(chatId, userId);check();
@@ -214,13 +218,14 @@ export class PhoneStore {
   /** Read-only preview with a trusted user and an authorized chat. Never writes. */
   preview(chatId:string,userId:string):Promise<Document>{return this.readOperation("preview",userId,chatId);}
   sync(userId:string,chatId:string):Promise<Document>{return this.readOperation("sync",userId,chatId);}
-  previewSnapshot(chatId:string,userId:string):Promise<PhoneSnapshot>{return this.readOperation("preview",userId,chatId,doc=>structuredClone(phoneSnapshot(doc)));}
-  syncSnapshot(userId:string,chatId:string):Promise<PhoneSnapshot>{return this.readOperation("sync",userId,chatId,doc=>structuredClone(phoneSnapshot(doc)));}
+  previewSnapshot(chatId:string,userId:string):Promise<PhoneSnapshot>{return this.readOperation("preview",userId,chatId,doc=>structuredClone(phoneSnapshot(doc,userId)));}
+  syncSnapshot(userId:string,chatId:string):Promise<PhoneSnapshot>{return this.readOperation("sync",userId,chatId,doc=>structuredClone(phoneSnapshot(doc,userId)));}
   syncEffect(userId:string,chatId:string):Promise<void>{return this.readOperation("sync",userId,chatId,()=>undefined);}
-  openSnapshot(chatId:string,userId:string):Promise<PhoneSnapshot>{return this.readOperation(this.ready.has(chatId)?"open":"sync",userId,chatId,doc=>structuredClone(phoneSnapshot(doc)));}
+  openSnapshot(chatId:string,userId:string):Promise<PhoneSnapshot>{return this.readOperation(this.ready.has(chatId)?"open":"sync",userId,chatId,doc=>structuredClone(phoneSnapshot(doc,userId)));}
   private async readSaved(chatId:string,userId:string,readOnly=false):Promise<Document>{
       const raw=await this.io.read(chatId),doc=materialized(raw,chatId);
       if(!doc){this.ready.delete(chatId);return (await this.build(chatId,userId,()=>{},readOnly)).doc;}
+      if(doc.trackingEnabled===false)return doc;
       doc.settings.source="main";
       const player=await this.io.player(chatId,userId);doc.currentPlayer=player??undefined;
       if(player&&!doc.playerNames.some(n=>normalize(n)===normalize(player)))doc.playerNames.push(player);
@@ -270,7 +275,7 @@ export class PhoneStore {
     })().finally(()=>this.perf("settings",started));
   }
   /** Step 4's controls will use this same validated, chat-authorized operation. */
-  update(userId: string, chatId: string, expectedRevision: number, update: { trackingEnabled?:unknown; settings?: unknown; edit?: unknown; dismissNotice?: unknown;portrait?:unknown;contactInfo?:unknown;fieldControl?:unknown;mergeContacts?:unknown }): Promise<Document> {
+  update(userId: string, chatId: string, expectedRevision: number, update: { undo?:unknown;trackingEnabled?:unknown; settings?: unknown; edit?: unknown; dismissNotice?: unknown;portrait?:unknown;contactInfo?:unknown;fieldControl?:unknown;mergeContacts?:unknown }): Promise<Document> {
     return this.serial(chatId, async () => {
       if (!userId || !(await this.io.authorize(chatId, userId))) throw new Error("Chat unavailable");
       const raw = await this.io.read(chatId); const saved = readDocument(raw, chatId);
@@ -282,6 +287,12 @@ export class PhoneStore {
       let { doc, rows } = await this.build(chatId, userId);
       if(doc.trackingEnabled===false)throw Error("Turn on the tracker for this chat first.");
       if (raw && !sameAccepted(doc.accepted,saved.accepted)) { this.ready.delete(chatId); throw new Error("The story changed. Reopen the tracker and try again."); }
+      if(update.undo!==undefined){
+        if(update.undo!==true||Object.keys(update).some(k=>k!=="undo"&&update[k as keyof typeof update]!==undefined))throw Error("Invalid undo request");
+        const record=doc.manualUndo;if(!record||record.userId!==userId||record.revision!==expectedRevision)throw Error("The tracker changed. Undo is no longer available.");
+        if(record.history!==this.fingerprint(rows)){this.ready.delete(chatId);throw Error("The story changed. Undo is no longer available.");}
+        restoreUndo(doc,record);doc=replay(doc,rows,doc.playerNames);projectContacts(doc,await this.io.names?.(chatId,userId)??[]);doc.revision=saved.revision+1;await this.io.write(chatId,JSON.stringify(doc));this.replayCache=undefined;return doc;
+      }
       if (update.settings !== undefined) {
         if (!isRecord(update.settings)) throw new Error("Invalid settings");
         if(update.settings.apps!==undefined&&!isRecord(update.settings.apps))throw new Error("Invalid apps");
@@ -326,7 +337,8 @@ export class PhoneStore {
       if(isRecord(update.edit)&&update.edit.target==="contact"&&typeof update.edit.name==="string"&&doc.portraits){const key=portraitKey(update.edit.name);if(update.edit.remove)delete doc.portraits[key];else if(typeof update.edit.rename==="string"&&portraitKey(update.edit.rename)!==key&&doc.portraits[key]){doc.portraits[portraitKey(update.edit.rename)]=doc.portraits[key];delete doc.portraits[key];}}
       doc = replay(doc, rows, doc.playerNames);
       doc.revision = saved.revision + 1;
-      await this.io.write(chatId, JSON.stringify(doc)); return doc;
+      doc.manualUndo=makeUndo(saved,doc,userId,this.fingerprint(rows),changeLabel(update),v=>this.fingerprint(v));
+      await this.io.write(chatId, JSON.stringify(doc));this.replayCache=undefined; return doc;
     });
   }
   setupApply(userId:string,chatId:string,revision:number,input:SetupData,names:string[],decisions?:unknown):Promise<Document>{

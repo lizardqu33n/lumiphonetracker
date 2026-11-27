@@ -856,3 +856,13 @@ Focused local browser checks cover Here now keyboard navigation and editing, con
 New backend tests cover bounded fingerprints and JSON byte counting, edits/deletions/order/swipes, a settings read completing during a blocked rebuild, duplicate snapshots during an active follow-up, a mutation forcing fresh validation, queued edit barriers, revoked users, failed-batch cleanup, isolated small UI projections, safe counters and logger failure. An actual compiled no-macros backend is loaded against a host mock: native macros and template interceptors never register, including after permission changes; saved-tag processing, prompt cleanup and frontend handling still register.
 
 Unverified without a real multi-user Lumiverse install: prompt-worker selection with other installed extensions, host main-process RAM, long-running failed-generation behavior, live disconnections and operator replacement/reload of the alternate package. The docs do not guarantee prompt-process routing; the inspected local host source supplies that implementation detail. No claim is made that these changes fix all server lag.
+
+## 0.21.2 profiles
+
+Tests cover both AI permissions on/off through profile persistence, per-user separation, legacy profile migration, malformed values, application to the pinned chat, and unchanged story data. The confirmation lists both states before applying. Real Lumiverse multi-user persistence remains unverified.
+
+## 0.21.2 usability additions
+
+Profile tests cover in-place Save changes, read-only built-ins, per-user storage and a concrete Apply summary. Undo tests cover deleted notes, merged contacts, settings, editor-only availability and rejection after story changes. Auto-start tests cover Off defaults, personal storage, exclusion from profiles, future-chat activation and an explicit chat Off winning without clearing the preference; phone_format returns empty afterward. Browser checks cover profile update/summary, specific save feedback, Undo, retained app/contact/scroll on reopening, and the new checkbox. Undo backups contain changed manual metadata only, not story journals, and are capped at 256 KiB.
+
+Real Lumiverse mobile keyboard behavior, live multi-user auto-start races, actual creation timestamps and long-session Undo behavior remain unverified. New-chat initialization uses documented chats.get(..., userId) metadata; CHAT_CREATED is not documented in the current extension event list. Browser tests run a host simulator, not a real server.

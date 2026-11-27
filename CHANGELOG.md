@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.21.2 - Settings profiles and everyday usability
+
+- Added Save changes for existing profiles, an Apply change summary, specific save feedback and clearer not-established text.
+- Added one-level editor-scoped Undo for manual edits, deletes, merges and settings, protected by chat revision and current-history validation.
+- Kept app/page and scroll positions when reopening during the browser session, with bounded local memory.
+- Added personal Always start tracker in new chats, Off by default. Explicit per-chat Off continues to stop tracker macro output without clearing the new-chat preference.
+- Kept this work at 0.21.2; documented the rule to reuse an unpublished version until release.
+
+- Settings profiles now remember AI writing for the player and AI changes to user-edited fields, including explicit off values. Apply confirmation lists both permissions.
+- Older profiles preserve current permission values because those profiles never stored them. Default and Minimal keep both off. Inference, connection, appearance and story data remain outside profiles.
+
+
 ## 0.21.1 - Lightweight tracking
 
 - Added an operator-selected no-prompt-macros package that skips both native macro and template-interceptor registration at startup.

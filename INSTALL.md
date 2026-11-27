@@ -26,7 +26,7 @@ Open the existing **Phone** sidebar tab. Open phone, Refresh tracker and Reset a
 
 **App Store** adds/removes built-in apps. Removing one hides it and stops its AI instructions/continuity while keeping its data. **What to track** controls individual fields. **Appearance** accepts your own styles.css and sidebar.css files, up to 256 KB each. Reset appearance clears both and still works if custom CSS hides the phone.
 
-**Settings profiles** save app/field choices and limits for you. **Advanced** keeps retention/size limits, the two safety exceptions and editable tracker prompt wording. There is no Tracker source / Connections section or Helper message-count setting now.
+**Settings profiles** save app/field choices, limits, and the two permissions for AI writing as your character and changing your edited fields. Applying shows their on/off state before confirmation. Older profiles leave these permissions unchanged; save a new profile to record them. **Advanced** keeps retention/size limits, the two safety exceptions and editable tracker prompt wording. There is no Tracker source / Connections section or Helper message-count setting now.
 
 Story data, app switches and tracker settings are shared by everyone in that chat. Read/unread state, arrival notices, appearance, profiles, prompt wording and dismissed hints remain personal. Every server action uses the authenticated user and checks chat access.
 
@@ -63,3 +63,16 @@ Keep {{phone_format}} alone for the simplest setup. To separate context from wri
 The normal `main` branch keeps phone macros. For the no-macros version, use the same GitHub repository and select the **testing** branch in Lumiverse's branch selector. The server operator makes this choice for the extension installation, so it applies to all its users. Reload or disable/re-enable the extension after changing builds; do not uninstall, because uninstall removes storage. Keep the selected branch on `testing` when updating if you want this mode.
 
 The phone and saved-tag tracking remain available, but remove phone macros from presets and use literal writing instructions instead. The built package named `-no-prompt-macros.tar.gz` is also available for operator-managed local installation. See [performance and mode details](docs/PERFORMANCE.md). Other extensions can still affect which Lumiverse prompt path runs.
+
+## Everyday controls
+
+- Settings profiles: select one of your saved profiles and use **Save changes** to update it in place. Default and Minimal stay read-only. Apply shows a short change summary and both AI permissions before confirmation.
+- **Undo** restores the last manual change you made in this chat, including a deleted note, merged contacts or changed settings. It is available only while that change is still the latest revision and the saved story is unchanged. Another user's changes or newer story messages make it unavailable. One backup is kept, capped at 256 KiB of changed manual metadata; large changes may have no Undo. Story history is never copied into it. Setup wizard saves and personal profile/library changes are not included.
+- Closing and reopening keeps the last app/page and scroll position during this browser session. Up to 32 chat/app choices and 256 scroll positions are kept in the page, not on the server or in prompts.
+- Empty fields say when information is not established; disabled tracking has a separate off explanation. Save results name the affected item.
+
+## Start new chats automatically
+
+In Advanced, **Always start tracker in new chats · All my chats** is a personal preference, Off by default. It applies when the tracker first accesses a chat created after you enabled it, using the host's chat creation time. It does not turn on older chats. A saved per-chat Off state always wins: turning off one chat stops phone macro output and saved-tag updates there, without clearing the preference for future chats. Existing shared-chat state is respected; everyone sees the same stored On/Off choice. Settings profiles do not include this preference.
+
+There is no documented extension CHAT_CREATED event in the current developer docs, so this uses documented chat reads rather than guessing an event API. Creation timestamps have one-second resolution in the inspected host. In the no-prompt-macros testing build, phone macros remain unavailable; literal instructions that you independently pasted into a preset remain under your control.

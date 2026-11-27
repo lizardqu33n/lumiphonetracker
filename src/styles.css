@@ -2991,3 +2991,6 @@
 .lpt-root { --lpt-home-icon-size: 32px; }
 .lpt-root .lpt-softkey-home { padding: 0; min-width: 44px; min-height: 44px; display: inline-grid; place-items: center; }
 .lpt-root .lpt-home-image { width: var(--lpt-home-icon-size); height: var(--lpt-home-icon-size); object-fit: contain; flex: none; }
+
+/* Last manual change: compact undo within app content. */
+.lpt-undo {display:flex;align-items:center;justify-content:space-between;gap:var(--lpt-space);padding:var(--lpt-space);background:var(--lpt-card-bg);border-radius:var(--lpt-radius);}

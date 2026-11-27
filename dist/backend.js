@@ -785,10 +785,10 @@ function createPhoneInterceptor(io, budgetMs = 1500) {
 }
 
 // src/ui-snapshot.ts
-function phoneSnapshot(doc) {
+function phoneSnapshot(doc, userId) {
   const { schema, trackingEnabled, chatId, revision, settings, state, playerNames, currentPlayer, fieldLocks, contactInfo, portraits } = doc;
   const contactRenames = doc.edits.filter((e) => e.target === "contact" && e.rename).map(({ target, name, rename }) => ({ target, name, rename }));
-  return { contactRenames, schema, trackingEnabled, chatId, revision, settings: { ...settings, source: "main" }, state, playerNames, currentPlayer, fieldLocks, contactInfo, portraits };
+  return { ...userId && doc.manualUndo?.userId === userId && doc.manualUndo.revision === doc.revision ? { undo: { revision: doc.revision, label: doc.manualUndo.label } } : {}, contactRenames, schema, trackingEnabled, chatId, revision, settings: { ...settings, source: "main" }, state, playerNames, currentPlayer, fieldLocks, contactInfo, portraits };
 }
 function snapshotReads(reads, doc) {
   const active = new Set([...doc.state.messages, ...doc.state.calls, ...doc.state.emails].map((m) => m.id));
@@ -1891,15 +1891,20 @@ class SetupWizard {
 
 // src/personal-settings.ts
 var SYNTAX_TOKEN = "[[phone_syntax]]";
-var emptyPersonal = () => ({ revision: 0, presets: [], wordings: { main: [], helper: [] }, selected: { main: "default", helper: "default" } });
-var presetSnapshot = (s) => ({ apps: { ...s.apps }, enabled: { ...s.enabled }, notesPerSection: s.notesPerSection, logLines: s.logLines, keepTrackers: s.keepTrackers, keepTexts: s.keepTexts });
+var emptyPersonal = () => ({ autoStartNewChats: false, autoStartSince: 0, revision: 0, presets: [], wordings: { main: [], helper: [] }, selected: { main: "default", helper: "default" } });
+var presetSnapshot = (s) => ({ apps: { ...s.apps }, enabled: { ...s.enabled }, notesPerSection: s.notesPerSection, logLines: s.logLines, keepTrackers: s.keepTrackers, keepTexts: s.keepTexts, aiPlayerTexts: s.aiPlayerTexts, allowAIUserEdits: s.allowAIUserEdits });
 function validatePreset(value) {
-  if (!isRecord(value) || Object.keys(value).sort().join() !== ["apps", "enabled", "notesPerSection", "logLines", "keepTrackers", "keepTexts"].sort().join())
+  const required = ["apps", "enabled", "notesPerSection", "logLines", "keepTrackers", "keepTexts"], optional = ["aiPlayerTexts", "allowAIUserEdits"];
+  if (!isRecord(value) || required.some((k) => !Object.hasOwn(value, k)) || Object.keys(value).some((k) => ![...required, ...optional].includes(k)) || optional.some((k) => Object.hasOwn(value, k) && typeof value[k] !== "boolean"))
     throw Error("Invalid preset");
   const { apps, enabled } = value;
   if (!isRecord(apps) || ALL_APPS.some((k) => typeof apps[k] !== "boolean") || !isRecord(enabled) || SWITCHES.some((k) => typeof enabled[k] !== "boolean" && !(enabled[k] === undefined && [...WEATHER_EXTRAS, "weather.temperature"].includes(k))))
     throw Error("Invalid preset");
-  return presetSnapshot(readSettings(value));
+  const settings = presetSnapshot(readSettings(value));
+  for (const key of ["aiPlayerTexts", "allowAIUserEdits"])
+    if (!Object.hasOwn(value, key))
+      delete settings[key];
+  return settings;
 }
 function builtInPresets() {
   const minimal = defaults();
@@ -1922,6 +1927,8 @@ function readPersonal(value, warn = () => {}) {
   const out = emptyPersonal();
   if (!isRecord(value))
     return out;
+  out.autoStartNewChats = value.autoStartNewChats === true;
+  out.autoStartSince = typeof value.autoStartSince === "number" && Number.isFinite(value.autoStartSince) ? Math.max(0, value.autoStartSince) : 0;
   out.revision = Number.isSafeInteger(value.revision) && Number(value.revision) >= 0 ? Number(value.revision) : 0;
   if (Array.isArray(value.presets))
     for (const p of value.presets.slice(0, 20))
@@ -1994,6 +2001,19 @@ class PersonalStore {
         if ([...builtInPresets(), ...p.presets].some((x) => x.name.toLowerCase() === title.toLowerCase()))
           throw Error("Choose a different name.");
         p.presets.push({ id: crypto.randomUUID(), name: title, settings: presetSnapshot(snapshot) });
+      } else if (change.kind === "auto_start") {
+        if (typeof change.value !== "boolean")
+          throw Error("Invalid change");
+        if (change.value && !p.autoStartNewChats)
+          p.autoStartSince = Math.floor(Date.now() / 1000);
+        p.autoStartNewChats = change.value;
+      } else if (change.kind === "preset_update") {
+        if (!snapshot)
+          throw Error("Open a chat first.");
+        const item = p.presets.find((x) => x.id === change.id);
+        if (!item)
+          throw Error("Built-in presets are read-only.");
+        item.settings = presetSnapshot(snapshot);
       } else if (change.kind === "preset_rename" || change.kind === "preset_delete") {
         const i = p.presets.findIndex((x) => x.id === change.id);
         if (i < 0)
@@ -2985,6 +3005,54 @@ async function loadPortraitSources(api, chatId, userId, player, onFailure) {
       onFailure?.("portraits.persona", error);
     }
   return result;
+}
+
+// src/manual-undo.ts
+var KEYS = ["settings", "edits", "fieldLocks", "userEditAdmissions", "contactMerges", "mergeArchive", "contactInfo", "portraits", "rejected", "callAdmissions", "notices"];
+var LIMIT = 256 * 1024;
+function makeUndo(before, after, userId, history, label, hash = fingerprint) {
+  const record = { userId, revision: after.revision, history, label, values: {}, missing: [] };
+  for (const key of KEYS)
+    if (hash(before[key]) !== hash(after[key])) {
+      if (before[key] === undefined)
+        record.missing.push(key);
+      else
+        record.values[key] = before[key];
+    }
+  if (!Object.keys(record.values).length && !record.missing.length)
+    return;
+  if (jsonBytes(record, LIMIT) > LIMIT)
+    return;
+  return structuredClone(record);
+}
+function readUndo(v) {
+  if (v === undefined)
+    return;
+  if (!isRecord(v) || typeof v.userId !== "string" || !Number.isSafeInteger(v.revision) || typeof v.history !== "string" || v.history.length > 65536 || typeof v.label !== "string" || v.label.length > 100 || !isRecord(v.values) || !Array.isArray(v.missing) || v.missing.some((k) => !KEYS.includes(k)) || Object.keys(v.values).some((k) => !KEYS.includes(k)) || jsonBytes(v, LIMIT) > LIMIT)
+    throw Error("Invalid undo record");
+  return v;
+}
+function restoreUndo(doc, record) {
+  for (const [key, value] of Object.entries(record.values))
+    doc[key] = structuredClone(value);
+  for (const key of record.missing)
+    delete doc[key];
+  delete doc.manualUndo;
+}
+function changeLabel(change) {
+  if (change.mergeContacts)
+    return "Contacts merged";
+  if (change.edit && isRecord(change.edit)) {
+    const names = { scene: "Scene", weather: "Weather", contact: "Contact", location: "Location", note: "Note", call: "Call", email: "Email", bank: "Account", transaction: "Transaction" };
+    return `${names[String(change.edit.target)] ?? "Tracker"} ${change.edit.remove ? "deleted" : "updated"}`;
+  }
+  if (change.portrait || change.contactInfo)
+    return "Contact updated";
+  if (change.fieldControl)
+    return "Field protection updated";
+  if (change.settings)
+    return "Settings saved";
+  return "Tracker updated";
 }
 
 // src/phone-store.ts
@@ -4154,6 +4222,7 @@ function readDocument(raw, chatId) {
       throw Error("Invalid merge history");
     doc.mergeArchive = value.mergeArchive;
   }
+  doc.manualUndo = readUndo(value.manualUndo);
   doc.settings = readSettings(value.settings);
   doc.legacy = value.legacy;
   if (value.helperOwner !== undefined && (typeof value.helperOwner !== "string" || !value.helperOwner))
@@ -4379,6 +4448,13 @@ class PhoneStore {
     check();
     const legacy = !raw && this.io.legacy ? await this.io.legacy(userId, chatPath(chatId)) : null;
     check();
+    if (!raw && !legacy && await this.io.startNewChat?.(chatId, userId)) {
+      const seed = emptyDocument(chatId);
+      seed.trackingEnabled = true;
+      await this.io.write(chatId, JSON.stringify(seed));
+      return this.build(chatId, userId, check, readOnly);
+    }
+    check();
     if (!raw && !legacy || raw && JSON.parse(raw).trackingEnabled === false) {
       const value = raw ? JSON.parse(raw) : null;
       const doc = emptyDocument(chatId);
@@ -4468,10 +4544,10 @@ class PhoneStore {
     return this.readOperation("sync", userId, chatId);
   }
   previewSnapshot(chatId, userId) {
-    return this.readOperation("preview", userId, chatId, (doc) => structuredClone(phoneSnapshot(doc)));
+    return this.readOperation("preview", userId, chatId, (doc) => structuredClone(phoneSnapshot(doc, userId)));
   }
   syncSnapshot(userId, chatId) {
-    return this.readOperation("sync", userId, chatId, (doc) => structuredClone(phoneSnapshot(doc)));
+    return this.readOperation("sync", userId, chatId, (doc) => structuredClone(phoneSnapshot(doc, userId)));
   }
   syncEffect(userId, chatId) {
     return this.readOperation("sync", userId, chatId, () => {
@@ -4479,7 +4555,7 @@ class PhoneStore {
     });
   }
   openSnapshot(chatId, userId) {
-    return this.readOperation(this.ready.has(chatId) ? "open" : "sync", userId, chatId, (doc) => structuredClone(phoneSnapshot(doc)));
+    return this.readOperation(this.ready.has(chatId) ? "open" : "sync", userId, chatId, (doc) => structuredClone(phoneSnapshot(doc, userId)));
   }
   async readSaved(chatId, userId, readOnly = false) {
     const raw = await this.io.read(chatId), doc = materialized(raw, chatId);
@@ -4487,6 +4563,8 @@ class PhoneStore {
       this.ready.delete(chatId);
       return (await this.build(chatId, userId, () => {}, readOnly)).doc;
     }
+    if (doc.trackingEnabled === false)
+      return doc;
     doc.settings.source = "main";
     const player = await this.io.player(chatId, userId);
     doc.currentPlayer = player ?? undefined;
@@ -4608,6 +4686,24 @@ class PhoneStore {
       if (raw && !sameAccepted(doc.accepted, saved.accepted)) {
         this.ready.delete(chatId);
         throw new Error("The story changed. Reopen the tracker and try again.");
+      }
+      if (update.undo !== undefined) {
+        if (update.undo !== true || Object.keys(update).some((k) => k !== "undo" && update[k] !== undefined))
+          throw Error("Invalid undo request");
+        const record = doc.manualUndo;
+        if (!record || record.userId !== userId || record.revision !== expectedRevision)
+          throw Error("The tracker changed. Undo is no longer available.");
+        if (record.history !== this.fingerprint(rows)) {
+          this.ready.delete(chatId);
+          throw Error("The story changed. Undo is no longer available.");
+        }
+        restoreUndo(doc, record);
+        doc = replay(doc, rows, doc.playerNames);
+        projectContacts(doc, await this.io.names?.(chatId, userId) ?? []);
+        doc.revision = saved.revision + 1;
+        await this.io.write(chatId, JSON.stringify(doc));
+        this.replayCache = undefined;
+        return doc;
       }
       if (update.settings !== undefined) {
         if (!isRecord(update.settings))
@@ -4735,7 +4831,9 @@ class PhoneStore {
       }
       doc = replay(doc, rows, doc.playerNames);
       doc.revision = saved.revision + 1;
+      doc.manualUndo = makeUndo(saved, doc, userId, this.fingerprint(rows), changeLabel(update), (v) => this.fingerprint(v));
       await this.io.write(chatId, JSON.stringify(doc));
+      this.replayCache = undefined;
       return doc;
     });
   }
@@ -5051,6 +5149,13 @@ var messageReads = new MessageReads({
   write: (userId, chatId, value) => atOperation("receipts.write", () => spindle.userStorage.setJson(`message-reads/${chatPath(chatId)}`, value, { userId }))
 });
 var store = new PhoneStore({
+  startNewChat: async (chat, user) => {
+    const p = await personal.read(user);
+    if (!p.autoStartNewChats)
+      return false;
+    const c = await spindle.chats.get(chat, user);
+    return !!c && c.id === chat && Number.isFinite(c.created_at) && c.created_at >= p.autoStartSince;
+  },
   names: (chat, user) => atOperation("card.names", () => cardNames(spindle, chat, user)),
   warn: (text) => warn(text),
   performance: (sample) => {
@@ -5181,7 +5286,7 @@ spindle.onFrontendMessage((payload, userId) => {
         snapshot = await store.update(userId, doc.chatId, Number(payload.chatRevision), { settings: preset.settings });
         doc = snapshot;
       } else if (change !== undefined && (!isRecord(change) || change.kind !== "preview")) {
-        if (isRecord(change) && change.kind === "preset_save" && (!doc || doc.revision !== payload.chatRevision))
+        if (isRecord(change) && ["preset_save", "preset_update"].includes(String(change.kind)) && (!doc || doc.revision !== payload.chatRevision))
           throw Error("The chat changed. Reopen it first.");
         value = await personal.update(userId, Number(payload.revision), change, doc?.settings);
       }
@@ -5202,7 +5307,7 @@ spindle.onFrontendMessage((payload, userId) => {
         preview = { text: output, characters: output.length, tokenEstimate: Math.ceil(output.length / 4), warning: note };
       }
       const base = doc ?? emptyDocument("");
-      secondaryReply("phone_personal", { type: "phone_personal_result", requestId: payload.requestId, chatId, personal: value, templates: { main: defaultWordingTemplate(base), helper: "" }, snapshot: snapshot ? phoneSnapshot(snapshot) : undefined, preview }, userId);
+      secondaryReply("phone_personal", { type: "phone_personal_result", requestId: payload.requestId, chatId, personal: value, templates: { main: defaultWordingTemplate(base), helper: "" }, snapshot: snapshot ? phoneSnapshot(snapshot, userId) : undefined, preview }, userId);
     })().catch((error) => secondaryFailure("phone_personal", "personal.request", error, { type: "phone_personal_error", requestId: payload.requestId, message: "Could not save. Check the name, limits and current chat; then try again." }, userId));
     return;
   }
@@ -5286,7 +5391,7 @@ spindle.onFrontendMessage((payload, userId) => {
     if (isRecord(payload.settings) && payload.settings.source === "helper")
       throw Error("Automatic connection tracking was removed.");
     stage = payload.type === "phone_update" ? "tracker.update" : "tracker.open";
-    let snapshot = await store.update(userId, chatId, typeof payload.revision === "number" ? payload.revision : -1, { trackingEnabled: payload.trackingEnabled, settings: payload.settings, edit: payload.edit, dismissNotice: payload.dismissNotice, portrait: payload.portrait, contactInfo: payload.contactInfo, fieldControl: payload.fieldControl, mergeContacts: payload.mergeContacts });
+    let snapshot = await store.update(userId, chatId, typeof payload.revision === "number" ? payload.revision : -1, { undo: payload.undo, trackingEnabled: payload.trackingEnabled, settings: payload.settings, edit: payload.edit, dismissNotice: payload.dismissNotice, portrait: payload.portrait, contactInfo: payload.contactInfo, fieldControl: payload.fieldControl, mergeContacts: payload.mergeContacts });
     committed = payload.type === "phone_update";
     if (payload.type === "phone_update") {
       if (payload.trackingEnabled === true)
@@ -5297,7 +5402,7 @@ spindle.onFrontendMessage((payload, userId) => {
     stage = "chat.metadata";
     const chatName = (await spindle.chats.get(chatId, userId))?.name ?? "";
     stage = "frontend.notify";
-    spindle.sendToFrontend({ type: "phone_snapshot", requestId, chatId, chatName, snapshot: phoneSnapshot(snapshot), reads: snapshotReads(reads, phoneSnapshot(snapshot)), helperBusy: false }, userId);
+    spindle.sendToFrontend({ type: "phone_snapshot", requestId, chatId, chatName, snapshot: phoneSnapshot(snapshot, userId), reads: snapshotReads(reads, phoneSnapshot(snapshot, userId)), helperBusy: false }, userId);
   })().catch((error) => {
     const reason = error instanceof Error ? error.message : "";
     const known = ["Invalid contact details", "Reopen this contact.", "Outgoing player entries need", "This app is full.", "An account with that name", "The tracker changed.", "The story changed.", "This section is full.", "Contacts is full", "Locations is full", "A contact with that name", "A place with that name", "A note with that name"];
