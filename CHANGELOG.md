@@ -1,5 +1,8 @@
 # Changelog
 
+Testing branch: 0.21.1 defaults to no prompt macros. Both compiled and source startup skip native/template macro registration; normal macro behavior is tested with an explicit test-only opt-in.
+
+
 ## 0.21.1 - Lightweight tracking
 
 - Added an operator-selected no-prompt-macros package that skips both native macro and template-interceptor registration at startup.

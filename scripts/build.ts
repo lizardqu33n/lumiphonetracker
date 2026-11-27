@@ -10,7 +10,7 @@ for (const [entry, target] of [
 ] as const) {
   const result = await Bun.build({
     entrypoints: [`src/${entry=== "backend-no-macros"?"backend":entry}.ts`],
-    define: { LPT_NO_PROMPT_MACROS: entry==="backend-no-macros"?"true":"false" },
+    define: { LPT_NO_PROMPT_MACROS: entry!=="frontend"?"true":"false" },
     target,
     minify: false,
     sourcemap: "none",

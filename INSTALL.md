@@ -1,3 +1,5 @@
+> This is the **testing** branch. It starts without phone prompt macros. In the instructions below, `{{phone_format}}` and other phone macros apply only to `main`; use literal instructions in your presets on this branch.
+
 # Install and use Lumi Phone Tracker
 
 Version 0.21.1 adds lighter rebuilds, combined refreshes, performance counters and an optional no-macros build. It keeps compact Calls cards, trimmed icons and Back/Home soft keys. The Tracking: On/Off control on Home toggles this chat. The sidebar retains its protected Open phone, Refresh tracker and Reset appearance toolbar.

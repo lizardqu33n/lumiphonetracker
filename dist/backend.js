@@ -5023,7 +5023,7 @@ class MessageReads {
 }
 
 // src/backend.ts
-var promptMacrosEnabled = true;
+var promptMacrosEnabled = false;
 var warn = (text) => {
   try {
     spindle.log.warn(text);

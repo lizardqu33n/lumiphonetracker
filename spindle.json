@@ -5,19 +5,18 @@
   "author": "lizardqu33n",
   "github": "https://github.com/lizardqu33n/lumiphonetracker",
   "homepage": "https://github.com/lizardqu33n/lumiphonetracker#readme",
-  "description": "A small story phone with Scene, Weather, Locations, Notes, Contacts and Messages. Normal tracking reads saved tags. A saved AI connection is used only for the optional setup wizard.",
+  "description": "A small story phone with Scene, Weather, Locations, Notes, Contacts and Messages. Normal tracking reads saved tags. A saved AI connection is used only for the optional setup wizard. Testing branch: phone prompt macros are disabled.",
   "permissions": [
     "chats",
     "chat_mutation",
     "interceptor",
     "ui_panels",
     "generation",
-    "macro_interceptor",
     "characters",
     "personas",
     "world_books",
     "images"
   ],
-  "entry_backend": "dist/backend.js",
+  "entry_backend": "dist/backend-no-macros.js",
   "entry_frontend": "dist/frontend.js"
 }

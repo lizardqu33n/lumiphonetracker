@@ -49,6 +49,9 @@ test("actual backend: render/prompt hooks, scoped receipts, saved-message safety
     log: { info: () => {}, warn: (text:string) => {warnings.push(text);} },
   };
   let interceptorHistoryReads=0;const originalHistory=fake.chat.getMessages;fake.chat.getMessages=async chat=>{interceptorHistoryReads++;return originalHistory(chat);};
+  // Exercise normal macro functionality explicitly; this branch defaults to no macros.
+  const priorMode=(globalThis as any).LPT_NO_PROMPT_MACROS;
+  (globalThis as any).LPT_NO_PROMPT_MACROS=false;
   const prior = (globalThis as unknown as { spindle?: unknown }).spindle;
   (globalThis as unknown as { spindle: unknown }).spindle = fake;
   try {
@@ -292,7 +295,7 @@ test("actual backend: render/prompt hooks, scoped receipts, saved-message safety
     failNotifications=false;failPersonal=false;failAppearance=false;failReceipts=false;
     expect((await request({type:"phone_preferences"},"u")).type).toBe("phone_preferences_result");
     expect(JSON.stringify(warnings)).not.toContain("PRIVATE");
-  } finally { (globalThis as unknown as { spindle?: unknown }).spindle = prior; }
+  } finally { (globalThis as unknown as { spindle?: unknown }).spindle = prior; if(priorMode===undefined)delete (globalThis as any).LPT_NO_PROMPT_MACROS;else (globalThis as any).LPT_NO_PROMPT_MACROS=priorMode; }
 });
 
 // Frontend wiring and real DOM interactions are verified by scripts/test-ui.ts.

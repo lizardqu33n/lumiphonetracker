@@ -25,7 +25,7 @@ import { failureCategory } from "./helper-status";
 declare const spindle: SpindleAPI;
 // Build-time operator choice: neither macro hook is ever registered in the alternate build.
 declare const LPT_NO_PROMPT_MACROS:boolean;
-const promptMacrosEnabled=typeof LPT_NO_PROMPT_MACROS === "undefined" || !LPT_NO_PROMPT_MACROS;
+const promptMacrosEnabled=typeof LPT_NO_PROMPT_MACROS !== "undefined" && !LPT_NO_PROMPT_MACROS;
 const warn = (text: string): void => { try { spindle.log.warn(text); } catch { /* Logging cannot block generation. */ } };
 
 // Keep secondary request diagnostics visible without allowing disconnected clients

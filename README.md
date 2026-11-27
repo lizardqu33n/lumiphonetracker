@@ -1,3 +1,5 @@
+> **Testing branch:** phone prompt macros are disabled by default. The phone UI and saved-tag tracking remain active. Remove phone macros from your presets and use literal writing instructions. Use `main` for normal macros.
+
 # Lumi Phone Tracker
 
 A floating story phone for [Lumiverse](https://docs.lumiverse.chat/) that tracks **Scene**, **Weather**, **Locations**, **Notes**, **Contacts**, and **Messages**—plus optional **Calls**, **Email**, and **Bank** apps.
